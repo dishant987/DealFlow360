@@ -5,10 +5,10 @@ import {
   verifyPassword,
   signToken,
   verifyToken,
-  requireRole,
   generateResetToken,
   hashResetToken,
-} from './auth.js'
+} from './utils/token.js'
+import { requireRole } from './middlewares/auth.middleware.js'
 
 describe('auth', () => {
   it('hashes and verifies a password', async () => {

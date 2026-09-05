@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
@@ -21,6 +21,11 @@ export default function Dashboard() {
       <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
         <span className="font-semibold">DealFlow360</span>
         <div className="flex items-center gap-3 text-sm">
+          {user?.role === 'admin' && (
+            <Button size="sm" variant="secondary" asChild>
+              <Link to="/admin">Backend Config</Link>
+            </Button>
+          )}
           <span>
             {user?.name} · <span className="uppercase opacity-80">{user?.role}</span>
           </span>

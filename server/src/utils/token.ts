@@ -1,9 +1,9 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
-import type { Request, Response, NextFunction } from 'express'
 
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
+
 export const cookieName = 'token'
 export const cookieOpts = {
   httpOnly: true,
@@ -32,33 +32,4 @@ export const hashResetToken = (token: string) =>
 export function generateResetToken() {
   const token = crypto.randomBytes(32).toString('hex')
   return { token, hash: hashResetToken(token), expiresAt: new Date(Date.now() + resetTokenTtlMs) }
-}
-
-// make req.user available across handlers
-declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
-  namespace Express {
-    interface Request {
-      user?: JwtUser
-    }
-  }
-}
-
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const token = req.cookies?.[cookieName]
-  if (!token) return res.status(401).json({ error: 'unauthenticated' })
-  try {
-    req.user = verifyToken(token)
-    next()
-  } catch {
-    res.status(401).json({ error: 'invalid token' })
-  }
-}
-
-export function requireRole(...roles: Role[]) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.user) return res.status(401).json({ error: 'unauthenticated' })
-    if (!roles.includes(req.user.role)) return res.status(403).json({ error: 'forbidden' })
-    next()
-  }
 }

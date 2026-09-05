@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import bcrypt from 'bcryptjs'
-import { db, pool } from './db.js'
-import * as s from './schema.js'
+import { db, pool } from './config/db.js'
+import * as s from './models/schema.js'
 
 // Reseed: wipe in FK-safe order, then insert sample data.
 async function wipe() {

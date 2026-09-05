@@ -1,36 +1,32 @@
-import { Router } from 'express'
+import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { and, eq, gt } from 'drizzle-orm'
-import { db } from '../db.js'
-import { users } from '../schema.js'
+import { db } from '../config/db.js'
+import { users } from '../models/schema.js'
 import {
   hashPassword,
   verifyPassword,
   signToken,
   cookieName,
   cookieOpts,
-  requireAuth,
   generateResetToken,
   hashResetToken,
-} from '../auth.js'
-import { sendPasswordReset } from '../mailer.js'
+} from '../utils/token.js'
+import { sendPasswordReset } from '../utils/mailer.js'
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 
-const router = Router()
-
-// self-signup is always a rep; other roles are created by an admin (Phase 3)
+// self-signup is always a rep; other roles are created by an admin
 const signupSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
 })
-const loginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-})
+const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) })
+const forgotSchema = z.object({ email: z.string().email() })
+const resetSchema = z.object({ token: z.string().min(1), password: z.string().min(6) })
 
-router.post('/signup', async (req, res) => {
+export async function signup(req: Request, res: Response) {
   const parsed = signupSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
   const { name, email, password } = parsed.data
@@ -43,15 +39,13 @@ router.post('/signup', async (req, res) => {
     .values({ name, email, passwordHash: await hashPassword(password), role: 'rep' })
     .returning()
   const token = signToken({ id: u.id, role: u.role, email: u.email })
-  res.cookie(cookieName, token, cookieOpts).status(201).json({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-  })
-})
+  res
+    .cookie(cookieName, token, cookieOpts)
+    .status(201)
+    .json({ id: u.id, name: u.name, email: u.email, role: u.role })
+}
 
-router.post('/login', async (req, res) => {
+export async function login(req: Request, res: Response) {
   const parsed = loginSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
   const { email, password } = parsed.data
@@ -61,27 +55,21 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'invalid credentials' })
 
   const token = signToken({ id: u.id, role: u.role, email: u.email })
-  res.cookie(cookieName, token, cookieOpts).json({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-  })
-})
+  res
+    .cookie(cookieName, token, cookieOpts)
+    .json({ id: u.id, name: u.name, email: u.email, role: u.role })
+}
 
-router.post('/logout', (_req, res) => {
+export function logout(_req: Request, res: Response) {
   res.clearCookie(cookieName).json({ ok: true })
-})
+}
 
-const forgotSchema = z.object({ email: z.string().email() })
-const resetSchema = z.object({ token: z.string().min(1), password: z.string().min(6) })
-
-router.post('/forgot-password', async (req, res) => {
+export async function forgotPassword(req: Request, res: Response) {
   const parsed = forgotSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
 
   const [u] = await db.select().from(users).where(eq(users.email, parsed.data.email))
-  // only act if the user exists, but always return the same response (no user enumeration)
+  // act only if the user exists, but always return the same response (no user enumeration)
   if (u) {
     const { token, hash, expiresAt } = generateResetToken()
     await db
@@ -91,9 +79,9 @@ router.post('/forgot-password', async (req, res) => {
     await sendPasswordReset(u.email, `${CLIENT_URL}/reset-password?token=${token}`)
   }
   res.json({ ok: true, message: 'If that email exists, a reset link has been sent.' })
-})
+}
 
-router.post('/reset-password', async (req, res) => {
+export async function resetPassword(req: Request, res: Response) {
   const parsed = resetSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
 
@@ -117,15 +105,13 @@ router.post('/reset-password', async (req, res) => {
     })
     .where(eq(users.id, u.id))
   res.json({ ok: true })
-})
+}
 
-router.get('/me', requireAuth, async (req, res) => {
+export async function me(req: Request, res: Response) {
   const [u] = await db
     .select({ id: users.id, name: users.name, email: users.email, role: users.role })
     .from(users)
     .where(eq(users.id, req.user!.id))
   if (!u) return res.status(404).json({ error: 'not found' })
   res.json(u)
-})
-
-export default router
+}

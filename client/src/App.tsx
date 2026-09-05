@@ -4,6 +4,7 @@ import Signup from '@/pages/Signup'
 import ForgotPassword from '@/pages/ForgotPassword'
 import ResetPassword from '@/pages/ResetPassword'
 import Dashboard from '@/pages/Dashboard'
+import Admin from '@/pages/Admin'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
 export default function App() {
@@ -15,6 +16,9 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Dashboard />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={['admin']} />}>
+        <Route path="/admin" element={<Admin />} />
       </Route>
     </Routes>
   )
