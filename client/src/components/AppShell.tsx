@@ -1,13 +1,35 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { Menu, RefreshCw, PanelsTopLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import ConfirmButton from '@/components/ConfirmButton'
+import UserMenu from '@/components/UserMenu'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
 export type Crumb = { label: string; to?: string }
+
+type NavEntry = { to: string; label: string }
+
+function navFor(role: string | undefined): NavEntry[] {
+  const isMgr = !!role && ['manager', 'finance', 'admin'].includes(role)
+  return [
+    { to: '/', label: 'Workspace' },
+    { to: '/quotations', label: 'Quotations' },
+    ...(isMgr
+      ? [
+          { to: '/approvals', label: 'Approvals' },
+          { to: '/fulfillment', label: 'Fulfillment' },
+          { to: '/invoices', label: 'Invoices' },
+          { to: '/subscriptions', label: 'Subscriptions' },
+          { to: '/deal-health', label: 'Deal Health' },
+          { to: '/reports', label: 'Reports' },
+        ]
+      : []),
+    ...(role === 'admin' || role === 'manager' ? [{ to: '/admin', label: 'Config' }] : []),
+  ]
+}
 
 function NavItem({ to, children }: { to: string; children: ReactNode }) {
   return (
@@ -15,8 +37,8 @@ function NavItem({ to, children }: { to: string; children: ReactNode }) {
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `px-2.5 py-1 rounded text-sm transition-colors ${
-          isActive ? 'bg-white/20' : 'hover:bg-white/10'
+        `whitespace-nowrap rounded px-2.5 py-1 text-sm transition-colors ${
+          isActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10'
         }`
       }
     >
@@ -37,13 +59,8 @@ export default function AppShell({
   const { user } = useAuth()
   const qc = useQueryClient()
   const nav = useNavigate()
-  const isMgr = !!user && ['manager', 'finance', 'admin'].includes(user.role)
-
-  const logout = async () => {
-    await api.post('/auth/logout')
-    qc.setQueryData(['me'], null)
-    nav('/login', { replace: true })
-  }
+  const [menuOpen, setMenuOpen] = useState(false)
+  const entries = navFor(user?.role)
 
   // B1: pull fresh pricing / stock / approval data from the backend
   const reloadData = async () => {
@@ -59,69 +76,115 @@ export default function AppShell({
 
   return (
     <div className="min-h-svh bg-muted/20">
-      {/* Odoo-style purple top bar with primary nav */}
+      {/* Odoo-style purple top bar. Single row that never wraps: the nav collapses
+          into a sheet below lg, and the workspace actions shed their labels first. */}
       <header className="bg-primary text-primary-foreground">
-        <div className="px-6 py-2.5 flex items-center gap-4">
-          <Link to="/" className="font-semibold tracking-tight">
+        <div className="flex h-12 items-center gap-3 px-4 sm:px-6">
+          <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+            <SheetTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="-ml-1 shrink-0 px-2 text-primary-foreground hover:bg-white/10 lg:hidden"
+                aria-label="Open menu"
+              >
+                <Menu className="size-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-72 p-0">
+              <SheetHeader className="border-b px-5 py-4">
+                <SheetTitle className="text-primary">DealFlow360</SheetTitle>
+                {user && (
+                  <p className="text-xs text-muted-foreground">
+                    {user.name} · <span className="uppercase">{user.role}</span>
+                  </p>
+                )}
+              </SheetHeader>
+              <nav className="flex flex-col gap-0.5 px-3">
+                {entries.map((e) => (
+                  <NavLink
+                    key={e.to}
+                    to={e.to}
+                    end={e.to === '/'}
+                    onClick={() => setMenuOpen(false)}
+                    className={({ isActive }) =>
+                      `rounded-md px-3 py-2 text-sm transition-colors ${
+                        isActive
+                          ? 'bg-primary/10 font-medium text-primary'
+                          : 'text-foreground hover:bg-muted'
+                      }`
+                    }
+                  >
+                    {e.label}
+                  </NavLink>
+                ))}
+              </nav>
+              <div className="mt-auto space-y-1 border-t px-3 py-3">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    reloadData()
+                  }}
+                >
+                  <RefreshCw className="size-4" /> Reload data
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    closeWorkspace()
+                  }}
+                >
+                  <PanelsTopLeft className="size-4" /> Close workspace
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
+
+          <Link to="/" className="shrink-0 font-semibold tracking-tight whitespace-nowrap">
             DealFlow360
           </Link>
-          <nav className="hidden md:flex items-center gap-1">
-            <NavItem to="/">Workspace</NavItem>
-            <NavItem to="/quotations">Quotations</NavItem>
-            {isMgr && (
-              <>
-                <NavItem to="/approvals">Approvals</NavItem>
-                <NavItem to="/fulfillment">Fulfillment</NavItem>
-                <NavItem to="/invoices">Invoices</NavItem>
-                <NavItem to="/subscriptions">Subscriptions</NavItem>
-                <NavItem to="/deal-health">Deal Health</NavItem>
-                <NavItem to="/reports">Reports</NavItem>
-              </>
-            )}
-            {(user?.role === 'admin' || user?.role === 'manager') && (
-              <NavItem to="/admin">Config</NavItem>
-            )}
+
+          <nav className="hidden min-w-0 items-center gap-0.5 lg:flex">
+            {entries.map((e) => (
+              <NavItem key={e.to} to={e.to}>
+                {e.label}
+              </NavItem>
+            ))}
           </nav>
-          <div className="ml-auto flex items-center gap-2 text-sm">
-            <span className="hidden lg:inline opacity-90 mr-1">
-              {user?.name} · <span className="uppercase opacity-70">{user?.role}</span>
-            </span>
+
+          <div className="ml-auto flex shrink-0 items-center gap-1 text-sm">
             <Button
               size="sm"
               variant="ghost"
-              className="text-primary-foreground hover:bg-white/10"
+              className="hidden px-2 text-primary-foreground hover:bg-white/10 sm:inline-flex"
               onClick={reloadData}
               title="Refresh pricing, stock and approval data"
             >
-              Reload Data
+              <RefreshCw className="size-4" />
+              <span className="sr-only 2xl:not-sr-only">Reload Data</span>
             </Button>
             <Button
               size="sm"
               variant="ghost"
-              className="text-primary-foreground hover:bg-white/10"
+              className="hidden px-2 text-primary-foreground hover:bg-white/10 sm:inline-flex"
               onClick={closeWorkspace}
               title="End the current working session view"
             >
-              Close Workspace
+              <PanelsTopLeft className="size-4" />
+              <span className="sr-only 2xl:not-sr-only">Close Workspace</span>
             </Button>
-            <ConfirmButton
-              size="sm"
-              variant="secondary"
-              title="Log out of DealFlow360?"
-              description="You'll need to sign in again to return to your workspace. Any unsaved edits on this screen will be lost."
-              confirmLabel="Log out"
-              destructive={false}
-              onConfirm={logout}
-            >
-              Logout
-            </ConfirmButton>
+            <UserMenu onReloadData={reloadData} onCloseWorkspace={closeWorkspace} />
           </div>
         </div>
       </header>
 
       {/* breadcrumb bar */}
-      <div className="border-b bg-background px-6 py-2 flex items-center justify-between min-h-[41px]">
-        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <div className="flex min-h-[41px] flex-wrap items-center justify-between gap-2 border-b bg-background px-4 py-2 sm:px-6">
+        <nav className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
           {crumbs.map((c, i) => (
             <span key={i} className="flex items-center gap-1.5">
               {i > 0 && <span className="opacity-40">/</span>}
@@ -130,7 +193,7 @@ export default function AppShell({
                   {c.label}
                 </Link>
               ) : (
-                <span className="text-foreground font-medium">{c.label}</span>
+                <span className="font-medium text-foreground">{c.label}</span>
               )}
             </span>
           ))}
@@ -138,7 +201,7 @@ export default function AppShell({
         {actions && <div className="flex items-center gap-2">{actions}</div>}
       </div>
 
-      <main className="p-6">{children}</main>
+      <main className="p-4 sm:p-6">{children}</main>
     </div>
   )
 }

@@ -14,6 +14,7 @@ import InvoiceDetail from '@/pages/InvoiceDetail'
 import FulfillmentQueue from '@/pages/FulfillmentQueue'
 import Subscriptions from '@/pages/Subscriptions'
 import Portal from '@/pages/Portal'
+import Profile from '@/pages/Profile'
 import Approvals from '@/pages/Approvals'
 import ApprovalDetail from '@/pages/ApprovalDetail'
 import DealHealth from '@/pages/DealHealth'
@@ -33,6 +34,7 @@ export default function App() {
       <Route path="/portal/:token" element={<Portal />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/quotations" element={<Quotations />} />
         <Route path="/quotations/:id" element={<QuotationBuilder />} />
         <Route path="/quotations/:id/fulfillment" element={<Fulfillment />} />

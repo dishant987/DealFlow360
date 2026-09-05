@@ -2,15 +2,26 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { errText } from '@/lib/errors'
+import AuthLayout from '@/components/AuthLayout'
+import FormField from '@/components/FormField'
+import PasswordInput from '@/components/PasswordInput'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
-const schema = z.object({ password: z.string().min(6, 'At least 6 characters') })
+const schema = z
+  .object({
+    password: z.string().min(6, 'At least 6 characters'),
+    confirm: z.string().min(1, 'Re-enter the password'),
+  })
+  // catching a typo here is the whole point — the token is single use, so a
+  // mistyped password means requesting another link
+  .refine((v) => v.password === v.confirm, {
+    path: ['confirm'],
+    message: 'Passwords do not match',
+  })
 type Form = z.infer<typeof schema>
 
 export default function ResetPassword() {
@@ -26,45 +37,63 @@ export default function ResetPassword() {
   const onSubmit = async (data: Form) => {
     try {
       await api.post('/auth/reset-password', { token, password: data.password })
-      toast.success('Password reset — please sign in.')
-      nav('/login')
+      toast.success('Password updated — please sign in.')
+      nav('/login', { replace: true })
     } catch (e) {
       toast.error(errText(e, 'Reset failed'))
     }
   }
 
-  return (
-    <div className="min-h-svh flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-primary text-xl">Set a new password</CardTitle>
-          <CardDescription>Choose a new password for your account</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!token ? (
-            <p className="text-sm text-destructive">
-              Missing or invalid reset link.{' '}
-              <Link to="/forgot-password" className="text-primary hover:underline">
-                Request a new one
-              </Link>
-              .
+  if (!token)
+    return (
+      <AuthLayout title="Link not valid" description="This reset link is missing its token.">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 rounded-lg bg-destructive/10 p-3">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
+            <p className="text-sm text-muted-foreground">
+              Reset links expire after an hour and can only be used once. Request a fresh one and
+              open it from the newest email.
             </p>
-          ) : (
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="password">New password</Label>
-                <Input id="password" type="password" {...register('password')} />
-                {errors.password && (
-                  <p className="text-xs text-destructive">{errors.password.message}</p>
-                )}
-              </div>
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving…' : 'Reset password'}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          </div>
+          <Button className="w-full" asChild>
+            <Link to="/forgot-password">Request a new link</Link>
+          </Button>
+        </div>
+      </AuthLayout>
+    )
+
+  return (
+    <AuthLayout title="Set a new password" description="Choose something you haven't used before.">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <FormField id="password" label="New password" error={errors.password?.message}>
+          <PasswordInput
+            id="password"
+            autoComplete="new-password"
+            autoFocus
+            aria-invalid={!!errors.password}
+            {...register('password')}
+          />
+        </FormField>
+
+        <FormField id="confirm" label="Confirm password" error={errors.confirm?.message}>
+          <PasswordInput
+            id="confirm"
+            autoComplete="new-password"
+            aria-invalid={!!errors.confirm}
+            {...register('confirm')}
+          />
+        </FormField>
+
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving…' : 'Reset password'}
+        </Button>
+
+        <p className="text-center text-sm text-muted-foreground">
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            Back to sign in
+          </Link>
+        </p>
+      </form>
+    </AuthLayout>
   )
 }

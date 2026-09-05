@@ -6,10 +6,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { errText } from '@/lib/errors'
+import AuthLayout from '@/components/AuthLayout'
+import FormField from '@/components/FormField'
+import PasswordInput from '@/components/PasswordInput'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 const schema = z.object({
   email: z.string().email('Enter a valid email'),
@@ -17,10 +18,21 @@ const schema = z.object({
 })
 type Form = z.infer<typeof schema>
 
+// The seeded roles, so a reviewer can switch personas without hunting through
+// the docs for credentials. They all share the seed password.
+const DEMO_ROLES = [
+  { label: 'Rep', email: 'rep@dealflow.com' },
+  { label: 'Manager', email: 'manager@dealflow.com' },
+  { label: 'Finance', email: 'finance@dealflow.com' },
+  { label: 'Admin', email: 'admin@dealflow.com' },
+]
+const DEMO_PASSWORD = 'password123'
+
 export default function Login() {
   const {
     register,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<Form>({ resolver: zodResolver(schema) })
   const nav = useNavigate()
@@ -39,41 +51,84 @@ export default function Login() {
     }
   }
 
+  const fillDemo = (email: string) => {
+    setValue('email', email, { shouldValidate: true })
+    setValue('password', DEMO_PASSWORD, { shouldValidate: true })
+  }
+
   return (
-    <div className="min-h-svh flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-primary text-xl">DealFlow360</CardTitle>
-          <CardDescription>Sign in to your sales workspace</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="rep@dealflow.com" {...register('email')} />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" {...register('password')} />
-              {errors.password && (
-                <p className="text-xs text-destructive">{errors.password.message}</p>
-              )}
-            </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Signing in…' : 'Sign in'}
-            </Button>
-            <div className="flex items-center justify-between text-sm">
-              <Link to="/signup" className="text-primary hover:underline">
-                Create account
-              </Link>
-              <Link to="/forgot-password" className="text-muted-foreground hover:underline">
-                Forgot password?
-              </Link>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthLayout
+      title="Sign in"
+      description="Pick up your sales workspace where you left it."
+      footer={
+        <div className="rounded-lg border border-dashed bg-background/60 p-3">
+          <p className="text-xs font-medium text-muted-foreground">Demo accounts</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {DEMO_ROLES.map((r) => (
+              <Button
+                key={r.email}
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => fillDemo(r.email)}
+              >
+                {r.label}
+              </Button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Fills the form with that role. Password is{' '}
+            <code className="rounded bg-muted px-1">{DEMO_PASSWORD}</code>.
+          </p>
+        </div>
+      }
+    >
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <FormField id="email" label="Email" error={errors.email?.message}>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="username"
+            autoFocus
+            placeholder="you@company.com"
+            aria-invalid={!!errors.email}
+            {...register('email')}
+          />
+        </FormField>
+
+        <FormField
+          id="password"
+          label="Password"
+          error={errors.password?.message}
+          action={
+            <Link
+              to="/forgot-password"
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Forgot?
+            </Link>
+          }
+        >
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            aria-invalid={!!errors.password}
+            {...register('password')}
+          />
+        </FormField>
+
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? 'Signing in…' : 'Sign in'}
+        </Button>
+
+        <p className="text-center text-sm text-muted-foreground">
+          New here?{' '}
+          <Link to="/signup" className="font-medium text-primary hover:underline">
+            Create an account
+          </Link>
+        </p>
+      </form>
+    </AuthLayout>
   )
 }

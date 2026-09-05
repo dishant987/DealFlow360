@@ -6,10 +6,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { errText } from '@/lib/errors'
+import AuthLayout from '@/components/AuthLayout'
+import FormField from '@/components/FormField'
+import PasswordInput from '@/components/PasswordInput'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -38,43 +39,61 @@ export default function Signup() {
   }
 
   return (
-    <div className="min-h-svh flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-primary text-xl">Create your account</CardTitle>
-          <CardDescription>Sign up to DealFlow360</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input id="name" {...register('name')} />
-              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" {...register('email')} />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" {...register('password')} />
-              {errors.password && (
-                <p className="text-xs text-destructive">{errors.password.message}</p>
-              )}
-            </div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? 'Creating…' : 'Sign up'}
-            </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Already have an account?{' '}
-              <Link to="/login" className="text-primary hover:underline">
-                Sign in
-              </Link>
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthLayout
+      title="Create your account"
+      description="Start building quotations in a couple of minutes."
+    >
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <FormField id="name" label="Name" error={errors.name?.message}>
+          <Input
+            id="name"
+            autoComplete="name"
+            autoFocus
+            placeholder="Riya Rep"
+            aria-invalid={!!errors.name}
+            {...register('name')}
+          />
+        </FormField>
+
+        <FormField id="email" label="Work email" error={errors.email?.message}>
+          <Input
+            id="email"
+            type="email"
+            autoComplete="username"
+            placeholder="you@company.com"
+            aria-invalid={!!errors.email}
+            {...register('email')}
+          />
+        </FormField>
+
+        <FormField id="password" label="Password" error={errors.password?.message}>
+          <PasswordInput
+            id="password"
+            autoComplete="new-password"
+            aria-invalid={!!errors.password}
+            {...register('password')}
+          />
+          {!errors.password && (
+            <p className="text-xs text-muted-foreground">At least 6 characters.</p>
+          )}
+        </FormField>
+
+        <Button type="submit" className="w-full" disabled={isSubmitting}>
+          {isSubmitting ? 'Creating account…' : 'Create account'}
+        </Button>
+
+        <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+          Signing up creates a <strong className="font-medium text-foreground">sales rep</strong>{' '}
+          account. Manager, finance and admin roles are granted by an administrator.
+        </p>
+
+        <p className="text-center text-sm text-muted-foreground">
+          Already have an account?{' '}
+          <Link to="/login" className="font-medium text-primary hover:underline">
+            Sign in
+          </Link>
+        </p>
+      </form>
+    </AuthLayout>
   )
 }
