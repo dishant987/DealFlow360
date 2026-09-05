@@ -1,0 +1,198 @@
+import type { Request, Response } from 'express'
+import { z } from 'zod'
+import { and, eq, inArray } from 'drizzle-orm'
+import { db } from '../config/db.js'
+import {
+  quotations,
+  quoteLines,
+  customers,
+  products,
+  priceListItems,
+} from '../models/schema.js'
+import { computeQuoteTotals } from '../services/pricing.js'
+
+/* ---- list: quote + customer name + computed total ---- */
+export async function listQuotations(_req: Request, res: Response) {
+  const quotes = await db
+    .select({
+      id: quotations.id,
+      status: quotations.status,
+      customerId: quotations.customerId,
+      customer: customers.name,
+      orderDiscountPct: quotations.orderDiscountPct,
+      riskScore: quotations.riskScore,
+      updatedAt: quotations.updatedAt,
+    })
+    .from(quotations)
+    .innerJoin(customers, eq(quotations.customerId, customers.id))
+
+  const ids = quotes.map((q) => q.id)
+  const lines = ids.length
+    ? await db.select().from(quoteLines).where(inArray(quoteLines.quotationId, ids))
+    : []
+
+  const byQuote = new Map<string, typeof lines>()
+  for (const l of lines) {
+    const arr = byQuote.get(l.quotationId) ?? []
+    arr.push(l)
+    byQuote.set(l.quotationId, arr)
+  }
+
+  res.json(
+    quotes.map((q) => ({
+      ...q,
+      amount: computeQuoteTotals(byQuote.get(q.id) ?? [], q.orderDiscountPct).total,
+    })),
+  )
+}
+
+/* ---- detail: quote + customer + lines + totals ---- */
+export async function getQuotation(req: Request<{ id: string }>, res: Response) {
+  const [quote] = await db
+    .select({
+      id: quotations.id,
+      status: quotations.status,
+      customerId: quotations.customerId,
+      customer: customers.name,
+      customerTier: customers.tier,
+      repId: quotations.repId,
+      orderDiscountPct: quotations.orderDiscountPct,
+      riskScore: quotations.riskScore,
+      requiresManager: quotations.requiresManager,
+      requiresFinance: quotations.requiresFinance,
+      createdAt: quotations.createdAt,
+      updatedAt: quotations.updatedAt,
+    })
+    .from(quotations)
+    .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .where(eq(quotations.id, req.params.id))
+  if (!quote) return res.status(404).json({ error: 'not found' })
+
+  const lines = await db
+    .select({
+      id: quoteLines.id,
+      productId: quoteLines.productId,
+      product: products.name,
+      quantity: quoteLines.quantity,
+      unitPrice: quoteLines.unitPrice,
+      unitCost: quoteLines.unitCost,
+      discountPct: quoteLines.discountPct,
+      lineType: quoteLines.lineType,
+      subscriptionPlanId: quoteLines.subscriptionPlanId,
+    })
+    .from(quoteLines)
+    .innerJoin(products, eq(quoteLines.productId, products.id))
+    .where(eq(quoteLines.quotationId, req.params.id))
+
+  res.json({ ...quote, lines, totals: computeQuoteTotals(lines, quote.orderDiscountPct) })
+}
+
+/* ---- create draft ---- */
+export async function createQuotation(req: Request, res: Response) {
+  const p = z.object({ customerId: z.string().uuid() }).safeParse(req.body)
+  if (!p.success) return res.status(400).json({ error: p.error.issues })
+  const [q] = await db
+    .insert(quotations)
+    .values({ customerId: p.data.customerId, repId: req.user!.id })
+    .returning()
+  res.status(201).json(q)
+}
+
+async function touch(quotationId: string) {
+  await db
+    .update(quotations)
+    .set({ updatedAt: new Date(), lastActivityAt: new Date() })
+    .where(eq(quotations.id, quotationId))
+}
+
+/* ---- add a line (snapshots tier price + cost) ---- */
+export async function addLine(req: Request<{ id: string }>, res: Response) {
+  const p = z
+    .object({
+      productId: z.string().uuid(),
+      quantity: z.number().int().positive().optional(),
+      discountPct: z.union([z.number(), z.string()]).optional(),
+    })
+    .safeParse(req.body)
+  if (!p.success) return res.status(400).json({ error: p.error.issues })
+
+  const [quote] = await db
+    .select({ id: quotations.id, tier: customers.tier })
+    .from(quotations)
+    .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .where(eq(quotations.id, req.params.id))
+  if (!quote) return res.status(404).json({ error: 'quotation not found' })
+
+  const [product] = await db.select().from(products).where(eq(products.id, p.data.productId))
+  if (!product) return res.status(400).json({ error: 'product not found' })
+
+  // tier price override if present, else base price
+  const [tierPrice] = await db
+    .select()
+    .from(priceListItems)
+    .where(and(eq(priceListItems.productId, product.id), eq(priceListItems.tier, quote.tier)))
+  const unitPrice = tierPrice?.unitPrice ?? product.unitPrice
+
+  const [line] = await db
+    .insert(quoteLines)
+    .values({
+      quotationId: quote.id,
+      productId: product.id,
+      quantity: p.data.quantity ?? 1,
+      unitPrice,
+      unitCost: product.unitCost,
+      discountPct: p.data.discountPct != null ? String(p.data.discountPct) : '0',
+      lineType: product.type,
+      subscriptionPlanId: product.subscriptionPlanId,
+    })
+    .returning()
+  await touch(quote.id)
+  res.status(201).json(line)
+}
+
+/* ---- update a line ---- */
+export async function updateLine(req: Request<{ id: string; lineId: string }>, res: Response) {
+  const p = z
+    .object({
+      quantity: z.number().int().positive(),
+      discountPct: z.union([z.number(), z.string()]).transform(String),
+    })
+    .partial()
+    .safeParse(req.body)
+  if (!p.success) return res.status(400).json({ error: p.error.issues })
+  const [line] = await db
+    .update(quoteLines)
+    .set(p.data)
+    .where(and(eq(quoteLines.id, req.params.lineId), eq(quoteLines.quotationId, req.params.id)))
+    .returning()
+  if (!line) return res.status(404).json({ error: 'not found' })
+  await touch(req.params.id)
+  res.json(line)
+}
+
+/* ---- delete a line ---- */
+export async function deleteLine(req: Request<{ id: string; lineId: string }>, res: Response) {
+  const [line] = await db
+    .delete(quoteLines)
+    .where(and(eq(quoteLines.id, req.params.lineId), eq(quoteLines.quotationId, req.params.id)))
+    .returning()
+  if (!line) return res.status(404).json({ error: 'not found' })
+  await touch(req.params.id)
+  res.json({ ok: true })
+}
+
+/* ---- update quote (order-level discount) ---- */
+export async function updateQuotation(req: Request<{ id: string }>, res: Response) {
+  const p = z
+    .object({ orderDiscountPct: z.union([z.number(), z.string()]).transform(String) })
+    .partial()
+    .safeParse(req.body)
+  if (!p.success) return res.status(400).json({ error: p.error.issues })
+  const [q] = await db
+    .update(quotations)
+    .set({ ...p.data, updatedAt: new Date(), lastActivityAt: new Date() })
+    .where(eq(quotations.id, req.params.id))
+    .returning()
+  if (!q) return res.status(404).json({ error: 'not found' })
+  res.json(q)
+}

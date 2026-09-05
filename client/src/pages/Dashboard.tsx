@@ -35,11 +35,14 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="p-8">
+      <main className="p-8 space-y-4">
         <h1 className="text-xl font-semibold">Welcome, {user?.name}</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          You're signed in as <b>{user?.role}</b>. Workspace modules land in the next phases.
+        <p className="text-muted-foreground text-sm">
+          You're signed in as <b>{user?.role}</b>.
         </p>
+        <Button asChild>
+          <Link to="/quotations">Open Quotations</Link>
+        </Button>
       </main>
     </div>
   )

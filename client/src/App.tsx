@@ -5,6 +5,8 @@ import ForgotPassword from '@/pages/ForgotPassword'
 import ResetPassword from '@/pages/ResetPassword'
 import Dashboard from '@/pages/Dashboard'
 import Admin from '@/pages/Admin'
+import Quotations from '@/pages/Quotations'
+import QuotationBuilder from '@/pages/QuotationBuilder'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
 export default function App() {
@@ -16,6 +18,8 @@ export default function App() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/quotations" element={<Quotations />} />
+        <Route path="/quotations/:id" element={<QuotationBuilder />} />
       </Route>
       <Route element={<ProtectedRoute roles={['admin']} />}>
         <Route path="/admin" element={<Admin />} />

@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import { pool } from './config/db.js'
 import authRouter from './routes/auth.routes.js'
 import configRouter from './routes/config.routes.js'
+import quotationRouter from './routes/quotation.routes.js'
 
 export const app = express()
 app.use(helmet())
@@ -23,3 +24,4 @@ app.get('/api/health', async (_req, res) => {
 
 app.use('/api/auth', authRouter)
 app.use('/api/config', configRouter)
+app.use('/api', quotationRouter)
