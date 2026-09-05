@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { db } from '../config/db.js'
 import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
 import { crud, num, tier } from '../utils/crud.js'
 import {
@@ -25,13 +26,18 @@ import {
 } from '../controllers/config.controller.js'
 
 const router = Router()
-router.use(requireAuth, requireRole('admin'))
+router.use(requireAuth)
 
-/* ---- flat resources (A2–A6) via generic CRUD ---- */
-router.use('/categories', crud(categories, z.object({ name: z.string().min(1) })))
+const adminOnly = requireRole('admin')
+// brief: the Sales Manager configures discount tiers & approval chains
+const managerConfig = requireRole('manager', 'admin')
+
+/* ---- catalog / infrastructure: admin only ---- */
+router.use('/categories', adminOnly, crud(categories, z.object({ name: z.string().min(1) })))
 
 router.use(
   '/products',
+  adminOnly,
   crud(
     products,
     z.object({
@@ -51,22 +57,13 @@ router.use(
   ),
 )
 
-router.use('/price-list', crud(priceListItems, z.object({ productId: z.string().uuid(), tier, unitPrice: num })))
+router.use('/price-list', adminOnly, crud(priceListItems, z.object({ productId: z.string().uuid(), tier, unitPrice: num })))
 
-router.use('/discount-tiers', crud(discountTiers, z.object({ tier, maxDiscountPct: num })))
-
-router.use(
-  '/category-ceilings',
-  crud(categoryDiscountCeilings, z.object({ categoryId: z.string().uuid(), maxDiscountPct: num })),
-)
-
-router.use(
-  '/warehouses',
-  crud(warehouses, z.object({ name: z.string().min(1), shippingCostWeight: num.optional() })),
-)
+router.use('/warehouses', adminOnly, crud(warehouses, z.object({ name: z.string().min(1), shippingCostWeight: num.optional() })))
 
 router.use(
   '/subscription-plans',
+  adminOnly,
   crud(
     subscriptionPlans,
     z.object({
@@ -80,6 +77,7 @@ router.use(
 
 router.use(
   '/pairings',
+  adminOnly,
   crud(
     productPairings,
     z.object({
@@ -90,17 +88,34 @@ router.use(
   ),
 )
 
-/* ---- special resources via controllers ---- */
-router.get('/stock', listStock)
-router.post('/stock', upsertStock)
-router.delete('/stock/:id', deleteStock)
+router.get('/stock', adminOnly, listStock)
+router.post('/stock', adminOnly, upsertStock)
+router.delete('/stock/:id', adminOnly, deleteStock)
 
-router.get('/settings', getSettings)
-router.patch('/settings', updateSettings)
+router.use('/users', adminOnly, (() => {
+  const r = Router()
+  r.get('/', listUsers)
+  r.post('/', createUser)
+  r.patch('/:id', updateUser)
+  r.delete('/:id', deleteUser)
+  return r
+})())
 
-router.get('/users', listUsers)
-router.post('/users', createUser)
-router.patch('/users/:id', updateUser)
-router.delete('/users/:id', deleteUser)
+/* ---- discount governance & approval chain: Sales Manager (and admin) ---- */
+router.use('/discount-tiers', managerConfig, crud(discountTiers, z.object({ tier, maxDiscountPct: num })))
+
+router.use(
+  '/category-ceilings',
+  managerConfig,
+  crud(categoryDiscountCeilings, z.object({ categoryId: z.string().uuid(), maxDiscountPct: num })),
+)
+
+// categories list is needed to pick a category when setting a ceiling → allow manager to read
+router.get('/categories-list', managerConfig, async (_req, res) => {
+  res.json(await db.select().from(categories))
+})
+
+router.get('/settings', managerConfig, getSettings)
+router.patch('/settings', managerConfig, updateSettings)
 
 export default router

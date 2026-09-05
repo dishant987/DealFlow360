@@ -1,21 +1,17 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import AppShell from '@/components/AppShell'
+import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 
+type Stalled = { id: string; customer: string; rep: string; status: string; daysInactive: number }
+type Anomaly = { id: string; customer: string; rep: string; riskScore: number; repAvg: number }
 type Health = {
   stalledDays: number
-  stalled: { id: string; customer: string; rep: string; status: string; daysInactive: number }[]
-  anomalies: { id: string; customer: string; rep: string; riskScore: number; repAvg: number }[]
+  stalled: Stalled[]
+  anomalies: Anomaly[]
   slippage: { id: string; customer: string }[]
 }
 
@@ -38,99 +34,91 @@ export default function DealHealth() {
   }
 
   const h = health.data
-  const card = 'rounded-lg border p-4'
+
+  const stalledCols: Column<Stalled>[] = [
+    { key: 'customer', label: 'Customer' },
+    { key: 'rep', label: 'Rep' },
+    { key: 'status', label: 'Status', render: (r) => r.status.replace(/_/g, ' ') },
+    {
+      key: 'daysInactive',
+      label: 'Idle',
+      align: 'right',
+      render: (r) => <span className="text-amber-600">{r.daysInactive}d</span>,
+    },
+    {
+      key: '__act',
+      label: '',
+      sortable: false,
+      render: (r) => (
+        <div className="flex gap-1">
+          <Button size="sm" variant="ghost" onClick={() => nav(`/quotations/${r.id}`)}>
+            Open
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(e) => {
+              e.stopPropagation()
+              nudge(r.id)
+            }}
+          >
+            Nudge
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
+  const anomalyCols: Column<Anomaly>[] = [
+    { key: 'customer', label: 'Customer' },
+    { key: 'rep', label: 'Rep' },
+    {
+      key: 'riskScore',
+      label: 'Risk score',
+      align: 'right',
+      render: (r) => <span className="text-red-600 font-medium">{r.riskScore.toFixed(1)}</span>,
+    },
+    {
+      key: 'repAvg',
+      label: 'Rep avg',
+      align: 'right',
+      render: (r) => <span className="text-muted-foreground">{r.repAvg.toFixed(1)}</span>,
+    },
+  ]
+
+  const card = 'rounded-lg border bg-background p-4'
 
   return (
-    <div className="min-h-svh">
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">DealFlow360 · Deal Health</span>
-        <Button size="sm" variant="secondary" asChild>
-          <Link to="/">Workspace</Link>
-        </Button>
-      </header>
-
-      <main className="p-6 space-y-8">
+    <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Deal Health' }]}>
+      <div className="space-y-8">
         <section className={card}>
-          <h2 className="font-semibold mb-2">
-            Stalled deals <span className="text-muted-foreground text-sm">(&gt; {h?.stalledDays}d inactive)</span>
+          <h2 className="font-semibold mb-3">
+            Stalled deals{' '}
+            <span className="text-muted-foreground text-sm font-normal">
+              (&gt; {h?.stalledDays ?? '…'}d inactive)
+            </span>
           </h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Rep</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Idle</TableHead>
-                <TableHead className="w-40" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(h?.stalled ?? []).map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell>{s.customer}</TableCell>
-                  <TableCell>{s.rep}</TableCell>
-                  <TableCell>{s.status.replace(/_/g, ' ')}</TableCell>
-                  <TableCell className="text-amber-600">{s.daysInactive}d</TableCell>
-                  <TableCell className="flex gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => nav(`/quotations/${s.id}`)}>
-                      Open
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => nudge(s.id)}>
-                      Nudge
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {h?.stalled.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground text-sm">
-                    No stalled deals.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            rows={h?.stalled ?? []}
+            columns={stalledCols}
+            loading={health.isLoading}
+            pageSize={8}
+            searchPlaceholder="Search customer or rep…"
+            emptyMessage="No stalled deals."
+          />
         </section>
 
         <section className={card}>
-          <h2 className="font-semibold mb-2">Discount anomalies</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Customer</TableHead>
-                <TableHead>Rep</TableHead>
-                <TableHead className="text-right">Risk score</TableHead>
-                <TableHead className="text-right">Rep avg</TableHead>
-                <TableHead className="w-24" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(h?.anomalies ?? []).map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell>{a.customer}</TableCell>
-                  <TableCell>{a.rep}</TableCell>
-                  <TableCell className="text-right text-red-600 font-medium">
-                    {a.riskScore.toFixed(1)}
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground">
-                    {a.repAvg.toFixed(1)}
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="ghost" onClick={() => nav(`/quotations/${a.id}`)}>
-                      Open
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {h?.anomalies.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-muted-foreground text-sm">
-                    No anomalies.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+          <h2 className="font-semibold mb-3">Discount anomalies</h2>
+          <DataTable
+            rows={h?.anomalies ?? []}
+            columns={anomalyCols}
+            loading={health.isLoading}
+            pageSize={8}
+            onRowClick={(r) => nav(`/quotations/${r.id}`)}
+            searchPlaceholder="Search customer or rep…"
+            emptyMessage="No anomalies."
+          />
         </section>
 
         <section className={card}>
@@ -150,7 +138,7 @@ export default function DealHealth() {
             </ul>
           )}
         </section>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

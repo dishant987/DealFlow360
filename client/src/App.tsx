@@ -15,8 +15,10 @@ import ApprovalDetail from '@/pages/ApprovalDetail'
 import DealHealth from '@/pages/DealHealth'
 import Reports from '@/pages/Reports'
 import ProtectedRoute from '@/components/ProtectedRoute'
+import { useLiveUpdates } from '@/hooks/useLiveUpdates'
 
 export default function App() {
+  useLiveUpdates()
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -38,7 +40,7 @@ export default function App() {
         <Route path="/deal-health" element={<DealHealth />} />
         <Route path="/reports" element={<Reports />} />
       </Route>
-      <Route element={<ProtectedRoute roles={['admin']} />}>
+      <Route element={<ProtectedRoute roles={['manager', 'admin']} />}>
         <Route path="/admin" element={<Admin />} />
       </Route>
     </Routes>

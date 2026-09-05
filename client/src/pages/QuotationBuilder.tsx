@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import AppShell from '@/components/AppShell'
+import PageSkeleton from '@/components/PageSkeleton'
 import { lineMargin, quoteTotals } from '@/lib/pricing'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +39,7 @@ type Upsell = {
   productId: string
   name: string
   unitPrice: string
+  unitCost: string
   marginPct: number
   isPromoted: boolean
   reason: string
@@ -85,13 +88,18 @@ export default function QuotationBuilder() {
   })
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
+  // Seed the editable cart ONCE — live refetches (socket updates) must never
+  // clobber in-progress edits. Status/risk stay live so approvals show up instantly.
+  const seeded = useRef(false)
   useEffect(() => {
-    if (quote.data) {
+    if (!quote.data) return
+    if (!seeded.current) {
+      seeded.current = true
       setLines(quote.data.lines)
       setOrderDiscount(String(quote.data.orderDiscountPct))
-      setRisk(quote.data.risk)
-      setStatus(quote.data.status)
     }
+    setRisk(quote.data.risk)
+    setStatus(quote.data.status)
   }, [quote.data])
 
   const submit = async () => {
@@ -113,6 +121,15 @@ export default function QuotationBuilder() {
   }
 
   const totals = quoteTotals(lines, orderDiscount)
+
+  // true impact on the ORDER margin if this suggestion were added (percentage points)
+  const marginDelta = (s: Upsell) => {
+    const next = quoteTotals(
+      [...lines, { quantity: 1, unitPrice: s.unitPrice, unitCost: s.unitCost, discountPct: 0 }],
+      orderDiscount,
+    )
+    return Math.round((next.marginPct - totals.marginPct) * 10) / 10
+  }
 
   const addLine = async () => {
     if (!pick) return
@@ -184,25 +201,28 @@ export default function QuotationBuilder() {
     }
   }
 
-  if (quote.isLoading) return <div className="p-8 text-muted-foreground">Loading…</div>
+  if (quote.isLoading)
+    return (
+      <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Quotations', to: '/quotations' }, { label: 'Loading…' }]}>
+        <PageSkeleton />
+      </AppShell>
+    )
   if (!quote.data) return <div className="p-8 text-destructive">Quotation not found.</div>
 
   return (
-    <div className="min-h-svh">
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">
-          Quotation · {quote.data.customer}{' '}
-          <span className="opacity-80 text-xs uppercase">({quote.data.customerTier})</span>
-          <span className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs">
-            {status.replace(/_/g, ' ')}
-          </span>
+    <AppShell
+      crumbs={[
+        { label: 'Workspace', to: '/' },
+        { label: 'Quotations', to: '/quotations' },
+        { label: `${quote.data.customer} (${quote.data.customerTier})` },
+      ]}
+      actions={
+        <span className="rounded bg-primary/10 text-primary px-2 py-0.5 text-xs uppercase">
+          {status.replace(/_/g, ' ')}
         </span>
-        <Button size="sm" variant="secondary" asChild>
-          <Link to="/quotations">Back to list</Link>
-        </Button>
-      </header>
-
-      <main className="p-6 grid gap-6 lg:grid-cols-[1fr_20rem]">
+      }
+    >
+      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         {/* cart */}
         <section className="space-y-4">
           <div className="flex items-center gap-2">
@@ -312,6 +332,19 @@ export default function QuotationBuilder() {
                     ${Number(s.unitPrice).toFixed(2)} ·{' '}
                     <span className={marginColor(s.marginPct)}>{s.marginPct}% margin</span>
                   </div>
+                  {(() => {
+                    const d = marginDelta(s)
+                    return (
+                      <div className="text-xs">
+                        Order margin{' '}
+                        <span className={d >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                          {d >= 0 ? '+' : ''}
+                          {d.toFixed(1)} pts
+                        </span>{' '}
+                        if added
+                      </div>
+                    )
+                  })()}
                   <div className="flex gap-1">
                     <Button size="sm" onClick={() => addUpsell(s)}>
                       Add to Quote
@@ -408,7 +441,7 @@ export default function QuotationBuilder() {
           </div>
         </div>
         </aside>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

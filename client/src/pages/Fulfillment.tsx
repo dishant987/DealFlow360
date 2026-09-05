@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
+import AppShell from '@/components/AppShell'
+import PageSkeleton from '@/components/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -24,6 +27,8 @@ type Alloc = {
 
 export default function Fulfillment() {
   const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
+  const canAct = !!user && ['finance', 'admin'].includes(user.role)
   const qc = useQueryClient()
   // qty[lineId][warehouseId]
   const [qty, setQty] = useState<Record<string, Record<string, number>>>({})
@@ -94,20 +99,31 @@ export default function Fulfillment() {
     }
   }
 
-  if (suggestion.isLoading) return <div className="p-8 text-muted-foreground">Loading…</div>
+  if (suggestion.isLoading)
+    return (
+      <AppShell
+        crumbs={[
+          { label: 'Workspace', to: '/' },
+          { label: 'Quotations', to: '/quotations' },
+          { label: 'Fulfillment' },
+        ]}
+      >
+        <PageSkeleton />
+      </AppShell>
+    )
   const s = suggestion.data
   const hasBackorder = (allocations.data ?? []).some((a) => a.backordered && a.quantity > 0)
 
   return (
-    <div className="min-h-svh">
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">Fulfillment · Warehouse Split</span>
-        <Button size="sm" variant="secondary" asChild>
-          <Link to={`/quotations/${id}`}>Back to quote</Link>
-        </Button>
-      </header>
-
-      <main className="p-6 grid gap-6 lg:grid-cols-[1fr_18rem]">
+    <AppShell
+      crumbs={[
+        { label: 'Workspace', to: '/' },
+        { label: 'Quotations', to: '/quotations' },
+        { label: 'Quote', to: `/quotations/${id}` },
+        { label: 'Fulfillment' },
+      ]}
+    >
+      <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
         <section className="space-y-6">
           {s?.lines.length === 0 && (
             <p className="text-muted-foreground text-sm">No physical (stock-tracked) lines to fulfill.</p>
@@ -158,12 +174,20 @@ export default function Fulfillment() {
             <span>Est. shipping</span>
             <span>{s?.estimatedShippingCost.toFixed(2)}</span>
           </div>
-          <Button className="w-full" onClick={accept} disabled={busy || !s?.lines.length}>
-            Accept Split
-          </Button>
-          <p className="text-[11px] text-muted-foreground">
-            Edit the quantities above to manually override, then Accept.
-          </p>
+          {canAct ? (
+            <>
+              <Button className="w-full" onClick={accept} disabled={busy || !s?.lines.length}>
+                Accept Split
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Edit the quantities above to manually override, then Accept.
+              </p>
+            </>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              View only — fulfillment decisions are made by Finance/Operations.
+            </p>
+          )}
 
           {(allocations.data?.length ?? 0) > 0 && (
             <div className="border-t pt-3 space-y-1">
@@ -176,7 +200,7 @@ export default function Fulfillment() {
                   <span>{a.quantity}</span>
                 </div>
               ))}
-              {hasBackorder && (
+              {hasBackorder && canAct && (
                 <Button
                   className="w-full mt-2"
                   size="sm"
@@ -190,7 +214,7 @@ export default function Fulfillment() {
             </div>
           )}
         </aside>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

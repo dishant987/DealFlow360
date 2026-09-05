@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import AppShell from '@/components/AppShell'
+import PageSkeleton from '@/components/PageSkeleton'
 import { Button } from '@/components/ui/button'
 
 type Detail = {
@@ -65,23 +67,24 @@ export default function ApprovalDetail() {
     }
   }
 
-  if (detail.isLoading) return <div className="p-8 text-muted-foreground">Loading…</div>
+  if (detail.isLoading)
+    return (
+      <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Approvals', to: '/approvals' }, { label: 'Loading…' }]}>
+        <PageSkeleton />
+      </AppShell>
+    )
   if (!detail.data) return <div className="p-8 text-destructive">Not found.</div>
   const d = detail.data
 
   return (
-    <div className="min-h-svh">
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">
-          Approval · {d.customer}{' '}
-          <span className="opacity-80 text-xs uppercase">({d.customerTier})</span>
-        </span>
-        <Button size="sm" variant="secondary" asChild>
-          <Link to="/approvals">Back</Link>
-        </Button>
-      </header>
-
-      <main className="p-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
+    <AppShell
+      crumbs={[
+        { label: 'Workspace', to: '/' },
+        { label: 'Approvals', to: '/approvals' },
+        { label: `${d.customer} (${d.customerTier})` },
+      ]}
+    >
+      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <section className="space-y-6">
           {/* risk */}
           <div className="rounded-lg border p-4">
@@ -183,7 +186,7 @@ export default function ApprovalDetail() {
             </>
           )}
         </aside>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

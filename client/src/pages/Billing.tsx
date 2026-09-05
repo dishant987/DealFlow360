@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
+import AppShell from '@/components/AppShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -31,6 +33,8 @@ type Billing = { invoices: Invoice[]; schedules: Schedule[]; creditNotes: Credit
 
 export default function Billing() {
   const { id } = useParams<{ id: string }>()
+  const { user } = useAuth()
+  const canAct = !!user && ['finance', 'admin'].includes(user.role)
   const qc = useQueryClient()
   const [qtys, setQtys] = useState<Record<string, number>>({})
 
@@ -54,18 +58,24 @@ export default function Billing() {
   const isEmpty = b && b.invoices.length === 0 && b.schedules.length === 0
 
   return (
-    <div className="min-h-svh">
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">Billing · One-time & Recurring</span>
-        <Button size="sm" variant="secondary" asChild>
-          <Link to={`/quotations/${id}`}>Back to quote</Link>
-        </Button>
-      </header>
-
-      <main className="p-6 space-y-8 max-w-4xl">
-        <Button onClick={() => run(() => api.post(`/quotations/${id}/billing/generate`), 'Billing generated')}>
-          {isEmpty ? 'Generate Billing' : 'Regenerate Billing'}
-        </Button>
+    <AppShell
+      crumbs={[
+        { label: 'Workspace', to: '/' },
+        { label: 'Quotations', to: '/quotations' },
+        { label: 'Quote', to: `/quotations/${id}` },
+        { label: 'Billing' },
+      ]}
+    >
+      <div className="space-y-8 max-w-4xl">
+        {canAct ? (
+          <Button onClick={() => run(() => api.post(`/quotations/${id}/billing/generate`), 'Billing generated')}>
+            {isEmpty ? 'Generate Billing' : 'Regenerate Billing'}
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            View only — billing is reconciled by Finance/Operations.
+          </p>
+        )}
 
         {/* one-time invoices */}
         <section>
@@ -96,7 +106,7 @@ export default function Billing() {
                   </TableCell>
                   <TableCell className="text-right">${Number(inv.amount).toFixed(2)}</TableCell>
                   <TableCell>
-                    {inv.status !== 'paid' && (
+                    {inv.status !== 'paid' && canAct && (
                       <Button
                         size="sm"
                         onClick={() => run(() => api.post(`/invoices/${inv.id}/pay`), 'Payment recorded')}
@@ -146,7 +156,7 @@ export default function Billing() {
                   <TableCell className="text-right">${Number(s.amount).toFixed(2)}</TableCell>
                   <TableCell>{s.quantity}</TableCell>
                   <TableCell>
-                    {s.status !== 'cancelled' && (
+                    {s.status !== 'cancelled' && canAct && (
                       <div className="flex items-center gap-1">
                         <Input
                           type="number"
@@ -216,7 +226,7 @@ export default function Billing() {
             </ul>
           </section>
         )}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

@@ -1,64 +1,52 @@
-import { Link, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
-import { api } from '@/lib/api'
+import AppShell from '@/components/AppShell'
 import { Button } from '@/components/ui/button'
 
 export default function Dashboard() {
   const { user } = useAuth()
-  const qc = useQueryClient()
-  const nav = useNavigate()
+  const isMgr = !!user && ['manager', 'finance', 'admin'].includes(user.role)
 
-  const logout = async () => {
-    await api.post('/auth/logout')
-    await qc.invalidateQueries({ queryKey: ['me'] })
-    nav('/login')
-  }
+  const tiles: { title: string; desc: string; to: string; show: boolean }[] = [
+    { title: 'Quotations', desc: 'Build and track deals', to: '/quotations', show: true },
+    { title: 'Approvals', desc: 'Review flagged discounts', to: '/approvals', show: isMgr },
+    { title: 'Deal Health', desc: 'Stalled deals & anomalies', to: '/deal-health', show: isMgr },
+    { title: 'Reports', desc: 'Performance & exports', to: '/reports', show: isMgr },
+    {
+      title: user?.role === 'admin' ? 'Backend Config' : 'Discount Config',
+      desc: user?.role === 'admin' ? 'Products, tiers, warehouses' : 'Discount tiers & approval chain',
+      to: '/admin',
+      show: user?.role === 'admin' || user?.role === 'manager',
+    },
+  ]
 
   return (
-    <div className="min-h-svh">
-      {/* Odoo-purple top bar */}
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">DealFlow360</span>
-        <div className="flex items-center gap-3 text-sm">
-          {user?.role === 'admin' && (
-            <Button size="sm" variant="secondary" asChild>
-              <Link to="/admin">Backend Config</Link>
-            </Button>
-          )}
-          <span>
-            {user?.name} · <span className="uppercase opacity-80">{user?.role}</span>
-          </span>
-          <Button size="sm" variant="secondary" onClick={logout}>
-            Logout
-          </Button>
+    <AppShell crumbs={[{ label: 'Workspace' }]}>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-xl font-semibold">Welcome, {user?.name}</h1>
+          <p className="text-muted-foreground text-sm">
+            Signed in as <b>{user?.role}</b>.
+          </p>
         </div>
-      </header>
-
-      <main className="p-8 space-y-4">
-        <h1 className="text-xl font-semibold">Welcome, {user?.name}</h1>
-        <p className="text-muted-foreground text-sm">
-          You're signed in as <b>{user?.role}</b>.
-        </p>
-        <div className="flex gap-3">
-          <Button asChild>
-            <Link to="/quotations">Open Quotations</Link>
-          </Button>
-          {(user?.role === 'manager' || user?.role === 'finance' || user?.role === 'admin') && (
-            <>
-              <Button variant="secondary" asChild>
-                <Link to="/approvals">Approvals</Link>
-              </Button>
-              <Button variant="secondary" asChild>
-                <Link to="/deal-health">Deal Health</Link>
-              </Button>
-              <Button variant="secondary" asChild>
-                <Link to="/reports">Reports</Link>
-              </Button>
-            </>
-          )}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {tiles
+            .filter((t) => t.show)
+            .map((t) => (
+              <Link
+                key={t.to}
+                to={t.to}
+                className="rounded-lg border bg-background p-5 hover:border-primary hover:shadow-sm transition"
+              >
+                <div className="font-medium text-primary">{t.title}</div>
+                <div className="text-sm text-muted-foreground mt-1">{t.desc}</div>
+              </Link>
+            ))}
         </div>
-      </main>
-    </div>
+        <Button asChild>
+          <Link to="/quotations">Open Quotations</Link>
+        </Button>
+      </div>
+    </AppShell>
   )
 }

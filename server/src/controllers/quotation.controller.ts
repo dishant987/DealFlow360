@@ -313,6 +313,7 @@ export async function getUpsell(req: Request<{ id: string }>, res: Response) {
         productId: p.id,
         name: p.name,
         unitPrice: p.unitPrice,
+        unitCost: p.unitCost, // lets the client compute the true order-margin delta
         marginPct,
         isPromoted: p.isPromoted,
         paired,

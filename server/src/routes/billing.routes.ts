@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth } from '../middlewares/auth.middleware.js'
+import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
 import {
   generateBilling,
   getBilling,
@@ -11,10 +11,13 @@ import {
 const router = Router()
 router.use(requireAuth)
 
+// reps can view; finance/ops (and admin) reconcile billing, proration, refunds, payments
+const ops = requireRole('finance', 'admin')
+
 router.get('/quotations/:id/billing', getBilling)
-router.post('/quotations/:id/billing/generate', generateBilling)
-router.post('/quotations/:id/billing/subscriptions/:lineId/change', changeSubscription)
-router.post('/quotations/:id/billing/subscriptions/:lineId/cancel', cancelSubscription)
-router.post('/invoices/:invoiceId/pay', payInvoice)
+router.post('/quotations/:id/billing/generate', ops, generateBilling)
+router.post('/quotations/:id/billing/subscriptions/:lineId/change', ops, changeSubscription)
+router.post('/quotations/:id/billing/subscriptions/:lineId/cancel', ops, cancelSubscription)
+router.post('/invoices/:invoiceId/pay', ops, payInvoice)
 
 export default router

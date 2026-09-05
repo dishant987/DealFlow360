@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
+import AppShell from '@/components/AppShell'
 import ResourceManager, { type Field } from '@/components/ResourceManager'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -91,31 +92,31 @@ const productFields: Field[] = [
 ]
 
 export default function Admin() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   return (
-    <div className="min-h-svh">
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">DealFlow360 · Backend Config</span>
-        <Button size="sm" variant="secondary" asChild>
-          <Link to="/">Back to workspace</Link>
-        </Button>
-      </header>
-
-      <main className="p-6">
-        <Tabs defaultValue="products">
+    <AppShell
+      crumbs={[
+        { label: 'Workspace', to: '/' },
+        { label: isAdmin ? 'Backend Config' : 'Discount Config' },
+      ]}
+    >
+      <div>
+        <Tabs defaultValue={isAdmin ? 'products' : 'tiers'}>
           <TabsList className="flex-wrap h-auto">
-            <TabsTrigger value="products">Products</TabsTrigger>
-            <TabsTrigger value="categories">Categories</TabsTrigger>
+            {isAdmin && <TabsTrigger value="products">Products</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="categories">Categories</TabsTrigger>}
             <TabsTrigger value="tiers">Discount Tiers</TabsTrigger>
             <TabsTrigger value="ceilings">Category Ceilings</TabsTrigger>
-            <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
-            <TabsTrigger value="stock">Stock</TabsTrigger>
-            <TabsTrigger value="plans">Subscription Plans</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
+            {isAdmin && <TabsTrigger value="warehouses">Warehouses</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="stock">Stock</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="plans">Subscription Plans</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
           <div className="mt-6">
-            <TabsContent value="products">
+            {isAdmin && <TabsContent value="products">
               <ResourceManager
                 title="Product"
                 endpoint="/config/products"
@@ -128,16 +129,16 @@ export default function Admin() {
                 ]}
                 fields={productFields}
               />
-            </TabsContent>
+            </TabsContent>}
 
-            <TabsContent value="categories">
+            {isAdmin && <TabsContent value="categories">
               <ResourceManager
                 title="Category"
                 endpoint="/config/categories"
                 columns={[{ key: 'name', label: 'Name' }]}
                 fields={[{ name: 'name', label: 'Name' }]}
               />
-            </TabsContent>
+            </TabsContent>}
 
             <TabsContent value="tiers">
               <ResourceManager
@@ -167,14 +168,14 @@ export default function Admin() {
                     name: 'categoryId',
                     label: 'Category',
                     type: 'select',
-                    optionsFrom: '/config/categories',
+                    optionsFrom: '/config/categories-list',
                   },
                   { name: 'maxDiscountPct', label: 'Max Discount %', type: 'number' },
                 ]}
               />
             </TabsContent>
 
-            <TabsContent value="warehouses">
+            {isAdmin && <TabsContent value="warehouses">
               <ResourceManager
                 title="Warehouse"
                 endpoint="/config/warehouses"
@@ -187,9 +188,9 @@ export default function Admin() {
                   { name: 'shippingCostWeight', label: 'Shipping Weight', type: 'number' },
                 ]}
               />
-            </TabsContent>
+            </TabsContent>}
 
-            <TabsContent value="stock">
+            {isAdmin && <TabsContent value="stock">
               <ResourceManager
                 title="Stock"
                 endpoint="/config/stock"
@@ -216,9 +217,9 @@ export default function Admin() {
                   { name: 'reorderLevel', label: 'Reorder', type: 'number' },
                 ]}
               />
-            </TabsContent>
+            </TabsContent>}
 
-            <TabsContent value="plans">
+            {isAdmin && <TabsContent value="plans">
               <ResourceManager
                 title="Plan"
                 endpoint="/config/subscription-plans"
@@ -243,9 +244,9 @@ export default function Admin() {
                   { name: 'cancellationRefundPct', label: 'Refund %', type: 'number' },
                 ]}
               />
-            </TabsContent>
+            </TabsContent>}
 
-            <TabsContent value="users">
+            {isAdmin && <TabsContent value="users">
               <ResourceManager
                 title="User"
                 endpoint="/config/users"
@@ -272,14 +273,14 @@ export default function Admin() {
                   },
                 ]}
               />
-            </TabsContent>
+            </TabsContent>}
 
             <TabsContent value="settings">
               <SettingsForm />
             </TabsContent>
           </div>
         </Tabs>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   )
 }

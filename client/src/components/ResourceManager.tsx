@@ -3,16 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { AxiosError } from 'axios'
 import { api } from '@/lib/api'
+import DataTable, { type Column as DTColumn } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 
 export type Field = {
   name: string
@@ -138,39 +131,30 @@ export default function ResourceManager({
     onError: (e) => toast.error(errMsg(e, 'Delete failed')),
   })
 
+  const dtColumns: DTColumn<any>[] = [
+    ...columns.map((c) => ({ key: c.key, label: c.label })),
+    {
+      key: '__actions',
+      label: '',
+      sortable: false,
+      render: (row: any) => (
+        <Button size="sm" variant="ghost" onClick={() => remove.mutate(row.id)}>
+          Delete
+        </Button>
+      ),
+    },
+  ]
+
   return (
     <div className="space-y-4">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((c) => (
-              <TableHead key={c.key}>{c.label}</TableHead>
-            ))}
-            <TableHead className="w-16" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {(list.data ?? []).map((row) => (
-            <TableRow key={row.id}>
-              {columns.map((c) => (
-                <TableCell key={c.key}>{String(row[c.key] ?? '')}</TableCell>
-              ))}
-              <TableCell>
-                <Button size="sm" variant="ghost" onClick={() => remove.mutate(row.id)}>
-                  Delete
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
-          {list.data?.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={columns.length + 1} className="text-muted-foreground text-sm">
-                No records yet.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+      <DataTable
+        rows={list.data ?? []}
+        columns={dtColumns}
+        loading={list.isLoading}
+        pageSize={8}
+        searchPlaceholder={`Search ${title.toLowerCase()}…`}
+        emptyMessage="No records yet."
+      />
 
       <div className="flex flex-wrap items-center gap-2 border-t pt-4">
         {fields.map((f) => (

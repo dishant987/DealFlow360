@@ -1,19 +1,12 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import AppShell from '@/components/AppShell'
+import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 
 type Filters = { from?: string; to?: string; status?: string; repId?: string; categoryId?: string }
 type Row = { id: string; customer: string; rep: string; status: string; riskScore: number; amount: number }
@@ -65,15 +58,8 @@ export default function Reports() {
   }))
 
   return (
-    <div className="min-h-svh">
-      <header className="bg-primary text-primary-foreground px-6 py-3 flex items-center justify-between">
-        <span className="font-semibold">DealFlow360 · Reports</span>
-        <Button size="sm" variant="secondary" asChild>
-          <Link to="/">Workspace</Link>
-        </Button>
-      </header>
-
-      <main className="p-6 space-y-6">
+    <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Reports' }]}>
+      <div className="space-y-6">
         {/* filters */}
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-sm">
@@ -163,29 +149,22 @@ export default function Reports() {
         )}
 
         {/* table */}
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Customer</TableHead>
-              <TableHead>Rep</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Risk</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(report.data?.rows ?? []).map((r) => (
-              <TableRow key={r.id}>
-                <TableCell>{r.customer}</TableCell>
-                <TableCell>{r.rep}</TableCell>
-                <TableCell>{r.status.replace(/_/g, ' ')}</TableCell>
-                <TableCell className="text-right">{r.riskScore.toFixed(1)}</TableCell>
-                <TableCell className="text-right">${r.amount.toFixed(2)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </main>
-    </div>
+        <DataTable
+          rows={report.data?.rows ?? []}
+          columns={reportColumns}
+          loading={report.isLoading}
+          searchPlaceholder="Search customer, rep or status…"
+          emptyMessage="No quotations match these filters."
+        />
+      </div>
+    </AppShell>
   )
 }
+
+const reportColumns: Column<Row>[] = [
+  { key: 'customer', label: 'Customer' },
+  { key: 'rep', label: 'Rep' },
+  { key: 'status', label: 'Status', render: (r) => r.status.replace(/_/g, ' ') },
+  { key: 'riskScore', label: 'Risk', align: 'right', render: (r) => r.riskScore.toFixed(1) },
+  { key: 'amount', label: 'Amount', align: 'right', render: (r) => `$${r.amount.toFixed(2)}` },
+]

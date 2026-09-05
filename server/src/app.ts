@@ -3,6 +3,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { pool } from './config/db.js'
+import { emitChange } from './config/socket.js'
 import authRouter from './routes/auth.routes.js'
 import configRouter from './routes/config.routes.js'
 import quotationRouter from './routes/quotation.routes.js'
@@ -18,6 +19,16 @@ app.use(helmet())
 app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
+
+// broadcast every successful mutation so other sessions can refetch (live updates)
+app.use((req, res, next) => {
+  if (req.method !== 'GET') {
+    res.on('finish', () => {
+      if (res.statusCode < 400) emitChange({ path: req.originalUrl, method: req.method })
+    })
+  }
+  next()
+})
 
 app.get('/api/health', async (_req, res) => {
   try {
