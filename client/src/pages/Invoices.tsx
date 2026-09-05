@@ -7,7 +7,9 @@ import StatusBadge from '@/components/StatusBadge'
 import { errText } from '@/lib/errors'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
+import StatCard from '@/components/StatCard'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 
 type Invoice = {
   id: string
@@ -123,18 +125,27 @@ export default function Invoices() {
   return (
     <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Invoices' }]}>
       <div className="space-y-6">
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: 'Invoices', value: s?.count ?? 0 },
-            { label: 'Outstanding', value: `$${(s?.outstanding ?? 0).toFixed(2)}` },
-            { label: 'Paid', value: `$${(s?.paid ?? 0).toFixed(2)}` },
-            { label: 'Overdue', value: s?.overdue ?? 0 },
-          ].map((k) => (
-            <div key={k.label} className="rounded-lg border bg-background p-4">
-              <div className="text-xs text-muted-foreground">{k.label}</div>
-              <div className="text-2xl font-semibold">{k.value}</div>
-            </div>
-          ))}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Invoices" value={s?.count ?? 0} loading={q.isLoading} />
+          <StatCard
+            label="Outstanding"
+            value={`$${(s?.outstanding ?? 0).toFixed(2)}`}
+            hint="not yet settled"
+            loading={q.isLoading}
+          />
+          <StatCard
+            label="Paid"
+            value={`$${(s?.paid ?? 0).toFixed(2)}`}
+            tone="success"
+            loading={q.isLoading}
+          />
+          <StatCard
+            label="Overdue"
+            value={s?.overdue ?? 0}
+            hint="past their due date"
+            tone={(s?.overdue ?? 0) > 0 ? 'danger' : 'default'}
+            loading={q.isLoading}
+          />
         </div>
 
         <DataTable
@@ -145,8 +156,7 @@ export default function Invoices() {
           searchPlaceholder="Search quote #, customer or status…"
           emptyMessage="No invoices yet."
           toolbar={
-            <select
-              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+            <Select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
@@ -155,7 +165,7 @@ export default function Invoices() {
               <option value="paid">Paid only</option>
               <option value="draft">Draft</option>
               <option value="void">Void</option>
-            </select>
+            </Select>
           }
         />
       </div>

@@ -4,6 +4,8 @@ import { api } from '@/lib/api'
 import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
+import StatCard from '@/components/StatCard'
+import Panel from '@/components/Panel'
 
 type Row = {
   id: string
@@ -106,25 +108,26 @@ export default function FulfillmentQueue() {
   return (
     <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Fulfillment' }]}>
       <div className="space-y-6">
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: 'Awaiting split', value: counts.awaiting },
-            { label: 'With backorder', value: counts.partial },
-            { label: 'Fulfilled', value: counts.complete },
-          ].map((k) => (
-            <div key={k.label} className="rounded-lg border bg-background p-4">
-              <div className="text-xs text-muted-foreground">{k.label}</div>
-              <div className="text-2xl font-semibold">{k.value}</div>
-            </div>
-          ))}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <StatCard label="Awaiting split" value={counts.awaiting} loading={q.isLoading} />
+          <StatCard
+            label="With backorder"
+            value={counts.partial}
+            tone={counts.partial > 0 ? 'warning' : 'default'}
+            loading={q.isLoading}
+          />
+          <StatCard
+            label="Fulfilled"
+            value={counts.complete}
+            tone="success"
+            loading={q.isLoading}
+          />
         </div>
 
-        <div>
-          <h2 className="font-semibold mb-2">Stock by warehouse</h2>
-          <p className="text-xs text-muted-foreground mb-2">
-            Available is what the split logic can draw on right now; reserved is already
-            committed to a fulfilled deal. ⚠ marks a line at or below its reorder level.
-          </p>
+        <Panel
+          title="Stock by warehouse"
+          description="Available is what the split logic can draw on right now; reserved is already committed to a fulfilled deal. ⚠ marks a line at or below its reorder level."
+        >
           <DataTable
             rows={stock}
             columns={stockColumns}
@@ -132,10 +135,9 @@ export default function FulfillmentQueue() {
             searchPlaceholder="Search warehouse or product…"
             emptyMessage="No stock records yet — add them in Config → Stock."
           />
-        </div>
+        </Panel>
 
-        <div>
-          <h2 className="font-semibold mb-2">Orders awaiting fulfillment</h2>
+        <Panel title="Orders awaiting fulfillment">
           <DataTable
             rows={rows}
             columns={columns}
@@ -144,7 +146,7 @@ export default function FulfillmentQueue() {
             searchPlaceholder="Search quote # or customer…"
             emptyMessage="Nothing approved is waiting on fulfillment."
           />
-        </div>
+        </Panel>
       </div>
     </AppShell>
   )

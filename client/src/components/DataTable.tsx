@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { SearchX } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -161,9 +162,20 @@ export default function DataTable<T extends Record<string, any>>({
             ))}
 
           {!loading && sorted.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="text-muted-foreground text-sm">
-                {emptyMessage}
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={columns.length}>
+                <div className="flex flex-col items-center gap-1 py-10 text-center">
+                  <SearchX className="size-6 text-muted-foreground/50" />
+                  <p className="text-sm text-muted-foreground">
+                    {/* distinguish "there is nothing" from "your filter hid it" */}
+                    {search ? `No matches for "${search}".` : emptyMessage}
+                  </p>
+                  {search && (
+                    <Button size="sm" variant="ghost" onClick={() => setRawSearch('')}>
+                      Clear search
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           )}

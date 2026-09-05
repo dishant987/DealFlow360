@@ -10,6 +10,7 @@ import { lineMargin, quoteTotals } from '@/lib/pricing'
 import { Button } from '@/components/ui/button'
 import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -312,8 +313,8 @@ export default function QuotationBuilder() {
         <section className="space-y-4">
           {canEdit && (
           <div className="flex items-center gap-2">
-            <select
-              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm min-w-64"
+            <Select
+              className="min-w-64"
               value={pick}
               onChange={(e) => {
                 setPick(e.target.value)
@@ -336,10 +337,9 @@ export default function QuotationBuilder() {
                   ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
             {pickedVariants.length > 0 && (
-              <select
-                className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+              <Select
                 value={pickVariant}
                 onChange={(e) => setPickVariant(e.target.value)}
               >
@@ -350,7 +350,7 @@ export default function QuotationBuilder() {
                     {Number(v.extraPrice) > 0 ? ` (+$${Number(v.extraPrice).toFixed(2)})` : ''}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
             <Button onClick={addLine} disabled={!pick}>
               Add

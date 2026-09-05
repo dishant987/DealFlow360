@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
+import StatCard from '@/components/StatCard'
 
 type Sub = {
   id: string
@@ -85,18 +86,23 @@ export default function Subscriptions() {
   return (
     <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Subscriptions' }]}>
       <div className="space-y-6">
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            { label: 'Active', value: s?.active ?? 0 },
-            { label: 'Paused', value: s?.paused ?? 0 },
-            { label: 'Cancelled', value: s?.cancelled ?? 0 },
-            { label: 'MRR (normalised)', value: `$${(s?.mrr ?? 0).toFixed(2)}` },
-          ].map((k) => (
-            <div key={k.label} className="rounded-lg border bg-background p-4">
-              <div className="text-xs text-muted-foreground">{k.label}</div>
-              <div className="text-2xl font-semibold">{k.value}</div>
-            </div>
-          ))}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Active" value={s?.active ?? 0} tone="success" loading={q.isLoading} />
+          <StatCard
+            label="Paused"
+            value={s?.paused ?? 0}
+            hint="billing suspended"
+            tone={(s?.paused ?? 0) > 0 ? 'warning' : 'default'}
+            loading={q.isLoading}
+          />
+          <StatCard label="Cancelled" value={s?.cancelled ?? 0} loading={q.isLoading} />
+          <StatCard
+            label="MRR"
+            value={`$${(s?.mrr ?? 0).toFixed(2)}`}
+            hint="normalised monthly, active plans only"
+            tone="primary"
+            loading={q.isLoading}
+          />
         </div>
 
         <DataTable

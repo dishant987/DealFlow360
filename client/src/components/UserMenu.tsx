@@ -78,10 +78,10 @@ export default function UserMenu({
           </DropdownMenuItem>
 
           {/* B1 workspace actions live here too, so the top bar stays uncluttered */}
-          <DropdownMenuItem onSelect={onReloadData} className="sm:hidden">
+          <DropdownMenuItem onSelect={onReloadData} className="xl:hidden">
             <RefreshCw /> Reload data
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onCloseWorkspace} className="sm:hidden">
+          <DropdownMenuItem onSelect={onCloseWorkspace} className="xl:hidden">
             <PanelsTopLeft /> Close workspace
           </DropdownMenuItem>
 

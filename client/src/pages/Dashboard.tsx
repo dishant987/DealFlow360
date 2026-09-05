@@ -1,10 +1,22 @@
+import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
+import {
+  Activity,
+  BadgeCheck,
+  BarChart3,
+  FileText,
+  Receipt,
+  RefreshCcw,
+  Settings2,
+  Truck,
+} from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
 import AppShell from '@/components/AppShell'
-import { Button } from '@/components/ui/button'
+import Panel from '@/components/Panel'
+import StatCard from '@/components/StatCard'
 import { Skeleton } from '@/components/ui/skeleton'
 
 type Summary = {
@@ -32,39 +44,65 @@ export default function Dashboard() {
   })
 
   const scope = summary.data?.scope === 'yours' ? 'yours' : 'across the team'
-  const kpis = [
-    {
-      label: 'Pending Approvals',
-      value: summary.data?.pendingApprovals,
-      note: `waiting on a decision ${scope}`,
-      to: isMgr ? '/approvals' : '/quotations',
-    },
-    {
-      label: 'Open Quotations',
-      value: summary.data?.openQuotations,
-      note: `active deals ${scope}`,
-      to: '/quotations',
-    },
-    {
-      label: 'At-Risk Deals',
-      value: summary.data?.atRisk,
-      note: 'stalled, anomalous or backordered',
-      to: isMgr ? '/deal-health' : '/quotations',
-    },
-  ]
 
-  const tiles: { title: string; desc: string; to: string; show: boolean }[] = [
-    { title: 'Quotations', desc: 'Build and track deals', to: '/quotations', show: true },
-    { title: 'Approvals', desc: 'Review flagged discounts', to: '/approvals', show: isMgr },
-    { title: 'Fulfillment', desc: 'Orders awaiting warehouse split', to: '/fulfillment', show: isMgr },
-    { title: 'Invoices', desc: 'Outstanding & paid invoices', to: '/invoices', show: isMgr },
-    { title: 'Subscriptions', desc: 'Recurring plans & renewals', to: '/subscriptions', show: isMgr },
-    { title: 'Deal Health', desc: 'Stalled deals & anomalies', to: '/deal-health', show: isMgr },
-    { title: 'Reports', desc: 'Performance & exports', to: '/reports', show: isMgr },
+  const tiles: { title: string; desc: string; to: string; icon: LucideIcon; show: boolean }[] = [
+    {
+      title: 'Quotations',
+      desc: 'Build and track deals',
+      to: '/quotations',
+      icon: FileText,
+      show: true,
+    },
+    {
+      title: 'Approvals',
+      desc: 'Review flagged discounts',
+      to: '/approvals',
+      icon: BadgeCheck,
+      show: isMgr,
+    },
+    {
+      title: 'Fulfillment',
+      desc: 'Orders awaiting warehouse split',
+      to: '/fulfillment',
+      icon: Truck,
+      show: isMgr,
+    },
+    {
+      title: 'Invoices',
+      desc: 'Outstanding & paid invoices',
+      to: '/invoices',
+      icon: Receipt,
+      show: isMgr,
+    },
+    {
+      title: 'Subscriptions',
+      desc: 'Recurring plans & renewals',
+      to: '/subscriptions',
+      icon: RefreshCcw,
+      show: isMgr,
+    },
+    {
+      title: 'Deal Health',
+      desc: 'Stalled deals & anomalies',
+      to: '/deal-health',
+      icon: Activity,
+      show: isMgr,
+    },
+    {
+      title: 'Reports',
+      desc: 'Performance & exports',
+      to: '/reports',
+      icon: BarChart3,
+      show: isMgr,
+    },
     {
       title: user?.role === 'admin' ? 'Backend Config' : 'Discount Config',
-      desc: user?.role === 'admin' ? 'Products, tiers, warehouses' : 'Discount tiers & approval chain',
+      desc:
+        user?.role === 'admin'
+          ? 'Products, tiers, warehouses'
+          : 'Discount tiers & approval chain',
       to: '/admin',
+      icon: Settings2,
       show: user?.role === 'admin' || user?.role === 'manager',
     },
   ]
@@ -73,60 +111,73 @@ export default function Dashboard() {
     <AppShell crumbs={[{ label: 'Workspace' }]}>
       <div className="space-y-6">
         <div>
-          <h1 className="text-xl font-semibold">Welcome, {user?.name}</h1>
-          <p className="text-muted-foreground text-sm">
-            Signed in as <b>{user?.role}</b>.
+          <h1 className="font-heading text-xl font-semibold">Welcome, {user?.name}</h1>
+          <p className="text-sm text-muted-foreground">
+            Signed in as <span className="font-medium text-foreground">{user?.role}</span>.
           </p>
         </div>
-        {/* KPI row */}
+
         <div className="grid gap-4 sm:grid-cols-3">
-          {kpis.map((k) => (
-            <Link
-              key={k.label}
-              to={k.to}
-              className="rounded-lg border bg-background p-5 hover:border-primary hover:shadow-sm transition"
-            >
-              <div className="text-sm text-muted-foreground">{k.label}</div>
-              {summary.isLoading ? (
-                <Skeleton className="h-8 w-12 mt-1" />
-              ) : (
-                <div className="text-3xl font-semibold text-primary mt-1">{k.value ?? 0}</div>
-              )}
-              <div className="text-xs text-muted-foreground mt-1">{k.note}</div>
-            </Link>
-          ))}
+          <StatCard
+            label="Pending Approvals"
+            value={summary.data?.pendingApprovals ?? 0}
+            hint={`waiting on a decision ${scope}`}
+            to={isMgr ? '/approvals' : '/quotations'}
+            tone="primary"
+            loading={summary.isLoading}
+          />
+          <StatCard
+            label="Open Quotations"
+            value={summary.data?.openQuotations ?? 0}
+            hint={`active deals ${scope}`}
+            to="/quotations"
+            tone="primary"
+            loading={summary.isLoading}
+          />
+          <StatCard
+            label="At-Risk Deals"
+            value={summary.data?.atRisk ?? 0}
+            hint="stalled, anomalous or backordered"
+            to={isMgr ? '/deal-health' : '/quotations'}
+            tone={summary.data && summary.data.atRisk > 0 ? 'warning' : 'primary'}
+            loading={summary.isLoading}
+          />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {tiles
             .filter((t) => t.show)
             .map((t) => (
               <Link
                 key={t.to}
                 to={t.to}
-                className="rounded-lg border bg-background p-5 hover:border-primary hover:shadow-sm transition"
+                className="group flex items-start gap-3 rounded-xl border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
               >
-                <div className="font-medium text-primary">{t.title}</div>
-                <div className="text-sm text-muted-foreground mt-1">{t.desc}</div>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <t.icon className="size-4.5" />
+                </span>
+                <div className="min-w-0">
+                  <div className="font-medium">{t.title}</div>
+                  <div className="mt-0.5 text-sm text-muted-foreground">{t.desc}</div>
+                </div>
               </Link>
             ))}
         </div>
-        <Button asChild>
-          <Link to="/quotations">Open Quotations</Link>
-        </Button>
 
         {/* recent activity — straight off the audit trail */}
-        <div className="rounded-lg border bg-background p-5">
-          <h2 className="font-semibold mb-3">Recent Activity</h2>
+        <Panel title="Recent Activity">
           {summary.isLoading ? (
             <Skeleton className="h-20 w-full" />
           ) : (summary.data?.activity ?? []).length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing has happened yet.</p>
           ) : (
-            <ul className="space-y-1.5 text-sm">
+            <ul className="divide-y text-sm">
               {(summary.data?.activity ?? []).map((a) => (
-                <li key={a.id} className="flex flex-wrap items-baseline gap-x-2 border-b pb-1.5 last:border-0">
-                  <Link to={`/quotations/${a.quotationId}`} className="font-medium text-primary hover:underline">
+                <li key={a.id} className="flex flex-wrap items-baseline gap-x-2 py-2 first:pt-0 last:pb-0">
+                  <Link
+                    to={`/quotations/${a.quotationId}`}
+                    className="font-mono text-xs font-medium text-primary hover:underline"
+                  >
                     {a.quoteNumber}
                   </Link>
                   <span>
@@ -139,7 +190,7 @@ export default function Dashboard() {
               ))}
             </ul>
           )}
-        </div>
+        </Panel>
       </div>
     </AppShell>
   )

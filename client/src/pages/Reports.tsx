@@ -5,9 +5,11 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import StatusBadge, { statusColor } from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
+import StatCard from '@/components/StatCard'
 import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 
 type Filters = { from?: string; to?: string; status?: string; repId?: string; categoryId?: string }
 type Row = { id: string; quoteNumber: string; customer: string; rep: string; status: string; riskScore: number; amount: number }
@@ -80,8 +82,7 @@ export default function Reports() {
             <div className="text-xs text-muted-foreground">To</div>
             <Input type="date" value={filters.to ?? ''} onChange={(e) => set('to', e.target.value)} />
           </label>
-          <select
-            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+          <Select
             value={filters.status ?? ''}
             onChange={(e) => set('status', e.target.value)}
           >
@@ -91,9 +92,8 @@ export default function Reports() {
                 {s.replace(/_/g, ' ')}
               </option>
             ))}
-          </select>
-          <select
-            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+          </Select>
+          <Select
             value={filters.repId ?? ''}
             onChange={(e) => set('repId', e.target.value)}
           >
@@ -103,9 +103,8 @@ export default function Reports() {
                 {r.name}
               </option>
             ))}
-          </select>
-          <select
-            className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+          </Select>
+          <Select
             value={filters.categoryId ?? ''}
             onChange={(e) => set('categoryId', e.target.value)}
           >
@@ -115,7 +114,7 @@ export default function Reports() {
                 {c.name}
               </option>
             ))}
-          </select>
+          </Select>
           <div className="ml-auto flex gap-2">
             <Button variant="outline" onClick={() => exportFile('xls')}>
               Export XLS
@@ -128,42 +127,46 @@ export default function Reports() {
 
         {/* summary */}
         <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Quotations</div>
-            <div className="text-2xl font-semibold">{report.data?.summary.count ?? 0}</div>
-          </div>
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Total value</div>
-            <div className="text-2xl font-semibold">
-              ${(report.data?.summary.totalValue ?? 0).toFixed(2)}
-            </div>
-          </div>
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Avg risk score</div>
-            <div className="text-2xl font-semibold">{(report.data?.summary.avgRisk ?? 0).toFixed(1)}</div>
-          </div>
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Avg approval time</div>
-            <div className="text-2xl font-semibold">
-              {report.data?.summary.avgApprovalHours == null
+          <StatCard
+            label="Quotations"
+            value={report.data?.summary.count ?? 0}
+            loading={report.isLoading}
+          />
+          <StatCard
+            label="Total value"
+            value={`$${(report.data?.summary.totalValue ?? 0).toFixed(2)}`}
+            tone="primary"
+            loading={report.isLoading}
+          />
+          <StatCard
+            label="Avg risk score"
+            value={(report.data?.summary.avgRisk ?? 0).toFixed(1)}
+            loading={report.isLoading}
+          />
+          <StatCard
+            label="Avg approval time"
+            value={
+              report.data?.summary.avgApprovalHours == null
                 ? '—'
-                : `${report.data.summary.avgApprovalHours}h`}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {report.data?.summary.approvalsMeasured ?? 0} decided
-            </div>
-          </div>
-          <div className="rounded-lg border p-4">
-            <div className="text-xs text-muted-foreground">Top upsold product</div>
-            <div className="text-lg font-semibold truncate">
-              {report.data?.summary.topUpsell?.product ?? '—'}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {report.data?.summary.topUpsell
+                : `${report.data.summary.avgApprovalHours}h`
+            }
+            hint={`${report.data?.summary.approvalsMeasured ?? 0} decided`}
+            loading={report.isLoading}
+          />
+          <StatCard
+            label="Top upsold product"
+            value={
+              <span className="block truncate text-lg">
+                {report.data?.summary.topUpsell?.product ?? '—'}
+              </span>
+            }
+            hint={
+              report.data?.summary.topUpsell
                 ? `${report.data.summary.topUpsell.count} added from suggestions`
-                : 'no suggestions accepted yet'}
-            </div>
-          </div>
+                : 'no suggestions accepted yet'
+            }
+            loading={report.isLoading}
+          />
         </div>
 
         {/* chart */}

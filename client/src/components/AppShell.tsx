@@ -1,16 +1,17 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Menu, RefreshCw, PanelsTopLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import UserMenu from '@/components/UserMenu'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
 export type Crumb = { label: string; to?: string }
 
-type NavEntry = { to: string; label: string }
+type NavEntry = { to: string; label: string; badgeKey?: 'pendingApprovals' }
 
 function navFor(role: string | undefined): NavEntry[] {
   const isMgr = !!role && ['manager', 'finance', 'admin'].includes(role)
@@ -19,7 +20,7 @@ function navFor(role: string | undefined): NavEntry[] {
     { to: '/quotations', label: 'Quotations' },
     ...(isMgr
       ? [
-          { to: '/approvals', label: 'Approvals' },
+          { to: '/approvals', label: 'Approvals', badgeKey: 'pendingApprovals' as const },
           { to: '/fulfillment', label: 'Fulfillment' },
           { to: '/invoices', label: 'Invoices' },
           { to: '/subscriptions', label: 'Subscriptions' },
@@ -31,18 +32,25 @@ function navFor(role: string | undefined): NavEntry[] {
   ]
 }
 
-function NavItem({ to, children }: { to: string; children: ReactNode }) {
+function NavItem({ to, badge, children }: { to: string; badge?: number; children: ReactNode }) {
   return (
     <NavLink
       to={to}
       end={to === '/'}
       className={({ isActive }) =>
-        `whitespace-nowrap rounded px-2.5 py-1 text-sm transition-colors ${
-          isActive ? 'bg-white/20 font-medium' : 'hover:bg-white/10'
+        `flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] whitespace-nowrap transition-colors ${
+          isActive
+            ? 'bg-white text-primary font-medium shadow-sm'
+            : 'text-primary-foreground/85 hover:bg-white/10 hover:text-primary-foreground'
         }`
       }
     >
       {children}
+      {!!badge && badge > 0 && (
+        <span className="rounded-full bg-amber-400 px-1.5 text-[10px] font-semibold text-amber-950 tabular-nums">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </NavLink>
   )
 }
@@ -61,6 +69,17 @@ export default function AppShell({
   const nav = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const entries = navFor(user?.role)
+
+  // shares its cache with the Workspace dashboard, so this costs nothing extra
+  // on most navigations; the badge just surfaces what is already waiting
+  const summary = useQuery({
+    queryKey: ['summary'],
+    queryFn: async () => (await api.get('/summary')).data as { pendingApprovals: number },
+    staleTime: 30_000,
+    enabled: !!user,
+  })
+  const badgeFor = (e: NavEntry) =>
+    e.badgeKey === 'pendingApprovals' ? summary.data?.pendingApprovals : undefined
 
   // B1: pull fresh pricing / stock / approval data from the backend
   const reloadData = async () => {
@@ -144,13 +163,16 @@ export default function AppShell({
             </SheetContent>
           </Sheet>
 
-          <Link to="/" className="shrink-0 font-semibold tracking-tight whitespace-nowrap">
+          <Link
+            to="/"
+            className="shrink-0 font-semibold tracking-tight whitespace-nowrap lg:border-r lg:border-white/20 lg:pr-4"
+          >
             DealFlow360
           </Link>
 
           <nav className="hidden min-w-0 items-center gap-0.5 lg:flex">
             {entries.map((e) => (
-              <NavItem key={e.to} to={e.to}>
+              <NavItem key={e.to} to={e.to} badge={badgeFor(e)}>
                 {e.label}
               </NavItem>
             ))}
@@ -160,7 +182,7 @@ export default function AppShell({
             <Button
               size="sm"
               variant="ghost"
-              className="hidden px-2 text-primary-foreground hover:bg-white/10 sm:inline-flex"
+              className="hidden px-2 text-primary-foreground hover:bg-white/10 xl:inline-flex"
               onClick={reloadData}
               title="Refresh pricing, stock and approval data"
             >
@@ -170,7 +192,7 @@ export default function AppShell({
             <Button
               size="sm"
               variant="ghost"
-              className="hidden px-2 text-primary-foreground hover:bg-white/10 sm:inline-flex"
+              className="hidden px-2 text-primary-foreground hover:bg-white/10 xl:inline-flex"
               onClick={closeWorkspace}
               title="End the current working session view"
             >

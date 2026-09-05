@@ -8,6 +8,7 @@ import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import KanbanBoard, { type Quote } from '@/components/KanbanBoard'
 import { Button } from '@/components/ui/button'
+import { Select } from '@/components/ui/select'
 
 type Customer = { id: string; name: string; tier: string }
 
@@ -98,8 +99,7 @@ export default function Quotations() {
 
   const newQuote = (
     <>
-      <select
-        className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+      <Select
         value={customerId}
         onChange={(e) => setCustomerId(e.target.value)}
       >
@@ -109,7 +109,7 @@ export default function Quotations() {
             {c.name} ({c.tier})
           </option>
         ))}
-      </select>
+      </Select>
       <Button disabled={!customerId || create.isPending} onClick={() => create.mutate()}>
         New Quotation
       </Button>

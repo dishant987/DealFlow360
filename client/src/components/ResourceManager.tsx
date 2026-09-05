@@ -7,6 +7,7 @@ import DataTable, { type Column as DTColumn } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
 
 export type Field = {
   name: string
@@ -58,8 +59,7 @@ function FieldInput({
 
   if (isSelect)
     return (
-      <select
-        className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+      <Select
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -69,7 +69,7 @@ function FieldInput({
             {o.label}
           </option>
         ))}
-      </select>
+      </Select>
     )
 
   return (
