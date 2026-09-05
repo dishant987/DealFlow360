@@ -8,6 +8,7 @@ import configRouter from './routes/config.routes.js'
 import quotationRouter from './routes/quotation.routes.js'
 import approvalRouter from './routes/approval.routes.js'
 import fulfillmentRouter from './routes/fulfillment.routes.js'
+import billingRouter from './routes/billing.routes.js'
 
 export const app = express()
 app.use(helmet())
@@ -29,3 +30,4 @@ app.use('/api/config', configRouter)
 app.use('/api', quotationRouter)
 app.use('/api/approvals', approvalRouter)
 app.use('/api/quotations', fulfillmentRouter)
+app.use('/api', billingRouter)

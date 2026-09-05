@@ -314,6 +314,11 @@ export default function QuotationBuilder() {
                 <Link to={`/quotations/${id}/fulfillment`}>Go to Fulfillment</Link>
               </Button>
             )}
+            {(status === 'fulfilled' || status === 'invoiced' || status === 'approved') && (
+              <Button className="w-full" variant="secondary" asChild>
+                <Link to={`/quotations/${id}/billing`}>Go to Billing</Link>
+              </Button>
+            )}
           </div>
         </aside>
       </main>
