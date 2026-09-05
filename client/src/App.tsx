@@ -1,22 +1,21 @@
-import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
-import { Button } from '@/components/ui/button'
+import { Routes, Route } from 'react-router-dom'
+import Login from '@/pages/Login'
+import Signup from '@/pages/Signup'
+import ForgotPassword from '@/pages/ForgotPassword'
+import ResetPassword from '@/pages/ResetPassword'
+import Dashboard from '@/pages/Dashboard'
+import ProtectedRoute from '@/components/ProtectedRoute'
 
 export default function App() {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['health'],
-    queryFn: async () => (await api.get('/health')).data as { status: string; db: string },
-  })
-
-  const label = isLoading ? 'checking...' : isError ? 'server down' : `${data?.status} / db ${data?.db}`
-
   return (
-    <div className="min-h-svh flex flex-col items-center justify-center gap-4">
-      <h1 className="text-2xl font-semibold text-primary">DealFlow360</h1>
-      <p className="text-muted-foreground text-sm">
-        server: <span className="font-mono">{label}</span>
-      </p>
-      <Button>Odoo-purple button</Button>
-    </div>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route element={<ProtectedRoute />}>
+        <Route path="/" element={<Dashboard />} />
+      </Route>
+    </Routes>
   )
 }
