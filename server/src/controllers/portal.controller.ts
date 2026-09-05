@@ -13,6 +13,14 @@ import {
 } from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { scoreQuotation } from './quotation.controller.js'
+import { quoteNumber } from '../services/quoteNumber.js'
+
+// the customer may only act while the quote is genuinely open to them
+const OPEN_TO_CUSTOMER = ['sent', 'under_negotiation']
+const closedMsg = (status: string) =>
+  status === 'confirmed'
+    ? 'You have already confirmed this quotation.'
+    : `This quotation is ${status.replace(/_/g, ' ')} and is no longer open for changes.`
 
 // Resolve a quote by its portal token. Returns null if not found.
 async function findByToken(token: string) {
@@ -47,6 +55,7 @@ export async function getPortalQuote(req: Request<{ token: string }>, res: Respo
     .where(eq(negotiationRequests.quotationId, q.id))
 
   res.json({
+    quoteNumber: quoteNumber(q.seqNo, q.createdAt),
     customer: customer?.name,
     status: q.status,
     orderDiscountPct: q.orderDiscountPct,
@@ -75,6 +84,8 @@ const negSchema = z.object({
 export async function submitNegotiation(req: Request<{ token: string }>, res: Response) {
   const q = await findByToken(req.params.token)
   if (!q) return res.status(404).json({ error: 'invalid link' })
+  if (!OPEN_TO_CUSTOMER.includes(q.status))
+    return res.status(400).json({ error: closedMsg(q.status) })
   const parsed = negSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
 
@@ -103,6 +114,9 @@ export async function submitNegotiation(req: Request<{ token: string }>, res: Re
 export async function confirmPortal(req: Request<{ token: string }>, res: Response) {
   const q = await findByToken(req.params.token)
   if (!q) return res.status(404).json({ error: 'invalid link' })
+
+  if (!OPEN_TO_CUSTOMER.includes(q.status))
+    return res.status(400).json({ error: closedMsg(q.status) })
 
   // apply the largest open counter-discount as the order discount
   const openCounters = await db

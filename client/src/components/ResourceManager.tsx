@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AxiosError } from 'axios'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import DataTable, { type Column as DTColumn } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
+import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
 
 export type Field = {
@@ -20,10 +21,7 @@ export type Field = {
 
 type Column = { key: string; label: string }
 
-function errMsg(e: unknown, fallback: string) {
-  const m = e instanceof AxiosError ? (e.response?.data?.error ?? fallback) : fallback
-  return typeof m === 'string' ? m : fallback
-}
+const errMsg = (e: unknown, fallback: string) => errText(e, fallback)
 
 function useOptions(field: Field) {
   const q = useQuery({
@@ -92,15 +90,30 @@ export default function ResourceManager({
   endpoint,
   columns,
   fields,
+  rowActions,
 }: {
   title: string
   endpoint: string
   columns: Column[]
   fields: Field[]
+  /** extra per-row buttons, rendered before Edit/Delete */
+  rowActions?: (row: any) => ReactNode
 }) {
   const qc = useQueryClient()
   const blank = () => Object.fromEntries(fields.map((f) => [f.name, f.default ?? '']))
   const [form, setForm] = useState<Record<string, any>>(blank)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  // load a row into the form below — reuses the same field rendering as "add"
+  const startEdit = (row: any) => {
+    setEditingId(row.id)
+    setForm(Object.fromEntries(fields.map((f) => [f.name, row[f.name] ?? ''])))
+    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+  }
+  const cancelEdit = () => {
+    setEditingId(null)
+    setForm(blank())
+  }
 
   const list = useQuery({
     queryKey: [endpoint],
@@ -122,6 +135,20 @@ export default function ResourceManager({
     onError: (e) => toast.error(errMsg(e, 'Create failed')),
   })
 
+  const update = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, any> = {}
+      for (const [k, v] of Object.entries(form)) if (v !== '' && v !== undefined) body[k] = v
+      return (await api.patch(`${endpoint}/${editingId}`, body)).data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [endpoint] })
+      cancelEdit()
+      toast.success(`${title} updated`)
+    },
+    onError: (e) => toast.error(errMsg(e, 'Update failed')),
+  })
+
   const remove = useMutation({
     mutationFn: async (id: string) => (await api.delete(`${endpoint}/${id}`)).data,
     onSuccess: () => {
@@ -138,9 +165,21 @@ export default function ResourceManager({
       label: '',
       sortable: false,
       render: (row: any) => (
-        <Button size="sm" variant="ghost" onClick={() => remove.mutate(row.id)}>
-          Delete
-        </Button>
+        <div className="flex gap-1">
+          {rowActions?.(row)}
+          <Button size="sm" variant="outline" onClick={() => startEdit(row)}>
+            Edit
+          </Button>
+          <ConfirmButton
+            size="sm"
+            variant="ghost"
+            title={`Delete this ${title.toLowerCase()}?`}
+            description="This cannot be undone."
+            onConfirm={() => remove.mutate(row.id)}
+          >
+            Delete
+          </ConfirmButton>
+        </div>
       ),
     },
   ]
@@ -157,6 +196,9 @@ export default function ResourceManager({
       />
 
       <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+        {editingId && (
+          <span className="w-full text-xs text-muted-foreground">Editing {title.toLowerCase()} — change the fields below and save.</span>
+        )}
         {fields.map((f) => (
           <FieldInput
             key={f.name}
@@ -165,9 +207,20 @@ export default function ResourceManager({
             onChange={(v) => setForm((s) => ({ ...s, [f.name]: v }))}
           />
         ))}
-        <Button onClick={() => create.mutate()} disabled={create.isPending}>
-          Add {title}
-        </Button>
+        {editingId ? (
+          <>
+            <Button onClick={() => update.mutate()} disabled={update.isPending}>
+              Save {title}
+            </Button>
+            <Button variant="ghost" onClick={cancelEdit}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <Button onClick={() => create.mutate()} disabled={create.isPending}>
+            Add {title}
+          </Button>
+        )}
       </div>
     </div>
   )

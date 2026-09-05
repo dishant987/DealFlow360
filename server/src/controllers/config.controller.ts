@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { hashPassword } from '../utils/token.js'
 import { num } from '../utils/crud.js'
@@ -12,7 +12,15 @@ import {
   users,
   productPairings,
   productVariants,
+  quoteLines,
+  fulfillmentAllocations,
+  categoryDiscountCeilings,
+  categories,
+  auditLog,
+  quotations,
+  customers,
 } from '../models/schema.js'
+import { quoteNumber } from '../services/quoteNumber.js'
 import { alias } from 'drizzle-orm/pg-core'
 
 /* ---- stock: joined list + upsert by (warehouse, product) ---- */
@@ -95,6 +103,174 @@ export async function listVariants(_req: Request, res: Response) {
   )
 }
 
+/* ---- products with category + stock rolled up per warehouse ---- */
+export async function listProductsAdmin(_req: Request, res: Response) {
+  const rows = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      sku: products.sku,
+      categoryId: products.categoryId,
+      category: categories.name,
+      type: products.type,
+      unitPrice: products.unitPrice,
+      unitCost: products.unitCost,
+      unit: products.unit,
+      taxRate: products.taxRate,
+      description: products.description,
+      subscriptionPlanId: products.subscriptionPlanId,
+      isPromoted: products.isPromoted,
+      active: products.active,
+    })
+    .from(products)
+    .innerJoin(categories, eq(products.categoryId, categories.id))
+
+  const stocks = await db
+    .select({
+      productId: stock.productId,
+      warehouse: warehouses.name,
+      quantity: stock.quantity,
+    })
+    .from(stock)
+    .innerJoin(warehouses, eq(stock.warehouseId, warehouses.id))
+
+  res.json(
+    rows.map((p) => {
+      const mine = stocks.filter((s) => s.productId === p.id)
+      return {
+        ...p,
+        stock: mine.length ? mine.reduce((n, s) => n + s.quantity, 0) : null,
+        stockByWarehouse: mine.length
+          ? mine.map((s) => `${s.warehouse} ${s.quantity}`).join(' · ')
+          : '—',
+      }
+    }),
+  )
+}
+
+/* ---- per-product stock detail: on hand, allocated, backordered + movement history ---- */
+export async function productStockDetail(req: Request<{ id: string }>, res: Response) {
+  const [product] = await db.select().from(products).where(eq(products.id, req.params.id))
+  if (!product) return res.status(404).json({ error: 'not found' })
+
+  const onHand = await db
+    .select({
+      warehouseId: stock.warehouseId,
+      warehouse: warehouses.name,
+      quantity: stock.quantity,
+      reorderLevel: stock.reorderLevel,
+    })
+    .from(stock)
+    .innerJoin(warehouses, eq(stock.warehouseId, warehouses.id))
+    .where(eq(stock.productId, req.params.id))
+
+  // every allocation ever made for this product = its outbound movement history
+  const history = await db
+    .select({
+      id: fulfillmentAllocations.id,
+      createdAt: fulfillmentAllocations.createdAt,
+      quantity: fulfillmentAllocations.quantity,
+      backordered: fulfillmentAllocations.backordered,
+      warehouse: warehouses.name,
+      warehouseId: fulfillmentAllocations.warehouseId,
+      quotationId: fulfillmentAllocations.quotationId,
+      seqNo: quotations.seqNo,
+      quoteCreatedAt: quotations.createdAt,
+      customer: customers.name,
+      status: quotations.status,
+    })
+    .from(fulfillmentAllocations)
+    .innerJoin(quoteLines, eq(fulfillmentAllocations.quoteLineId, quoteLines.id))
+    .innerJoin(quotations, eq(fulfillmentAllocations.quotationId, quotations.id))
+    .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .leftJoin(warehouses, eq(fulfillmentAllocations.warehouseId, warehouses.id))
+    .where(eq(quoteLines.productId, req.params.id))
+    .orderBy(desc(fulfillmentAllocations.createdAt))
+
+  const allocatedByWarehouse = new Map<string, number>()
+  let backordered = 0
+  for (const h of history) {
+    if (h.backordered) backordered += h.quantity
+    else if (h.warehouseId)
+      allocatedByWarehouse.set(
+        h.warehouseId,
+        (allocatedByWarehouse.get(h.warehouseId) ?? 0) + h.quantity,
+      )
+  }
+
+  res.json({
+    product: { id: product.id, name: product.name, sku: product.sku },
+    warehouses: onHand.map((w) => ({
+      ...w,
+      allocated: allocatedByWarehouse.get(w.warehouseId) ?? 0,
+      belowReorder: w.quantity <= w.reorderLevel,
+    })),
+    totals: {
+      onHand: onHand.reduce((n, w) => n + w.quantity, 0),
+      allocated: [...allocatedByWarehouse.values()].reduce((n, v) => n + v, 0),
+      backordered,
+    },
+    history: history.map((h) => ({
+      id: h.id,
+      createdAt: h.createdAt,
+      quantity: h.quantity,
+      backordered: h.backordered,
+      warehouse: h.warehouse ?? 'Backorder',
+      customer: h.customer,
+      status: h.status,
+      quotationId: h.quotationId,
+      quoteNumber: quoteNumber(h.seqNo, h.quoteCreatedAt),
+    })),
+  })
+}
+
+/* ---- category ceilings: joined so the UI shows the category name, not a uuid ---- */
+export async function listCeilings(_req: Request, res: Response) {
+  res.json(
+    await db
+      .select({
+        id: categoryDiscountCeilings.id,
+        categoryId: categoryDiscountCeilings.categoryId,
+        category: categories.name,
+        maxDiscountPct: categoryDiscountCeilings.maxDiscountPct,
+      })
+      .from(categoryDiscountCeilings)
+      .innerJoin(categories, eq(categoryDiscountCeilings.categoryId, categories.id)),
+  )
+}
+
+/* ---- audit trail (A3): who did what, when, and why ---- */
+export async function listAudit(_req: Request, res: Response) {
+  const rows = await db
+    .select({
+      id: auditLog.id,
+      createdAt: auditLog.createdAt,
+      action: auditLog.action,
+      user: users.name,
+      reason: auditLog.reason,
+      detail: auditLog.detail,
+      quotationId: auditLog.quotationId,
+      seqNo: quotations.seqNo,
+      quoteCreatedAt: quotations.createdAt,
+      customer: customers.name,
+    })
+    .from(auditLog)
+    .leftJoin(users, eq(auditLog.userId, users.id))
+    .leftJoin(quotations, eq(auditLog.quotationId, quotations.id))
+    .leftJoin(customers, eq(quotations.customerId, customers.id))
+    .orderBy(desc(auditLog.createdAt))
+    .limit(500)
+
+  res.json(
+    rows.map((r) => ({
+      ...r,
+      quoteNumber: r.seqNo ? quoteNumber(r.seqNo, r.quoteCreatedAt!) : '',
+      user: r.user ?? 'customer (portal)',
+      detail: r.detail ? JSON.stringify(r.detail) : '',
+    })),
+  )
+}
+
 /* ---- app settings (singleton row) ---- */
 export async function getSettings(_req: Request, res: Response) {
   const [row] = await db.select().from(appSettings).limit(1)
@@ -148,11 +324,21 @@ export async function createUser(req: Request, res: Response) {
   res.status(201).json(u)
 }
 export async function updateUser(req: Request<{ id: string }>, res: Response) {
-  const p = z.object({ role: roleEnum, name: z.string().min(1) }).partial().safeParse(req.body)
+  const p = z
+    .object({
+      role: roleEnum,
+      name: z.string().min(1),
+      email: z.string().email(),
+      password: z.string().min(6), // optional admin password reset
+    })
+    .partial()
+    .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
+  const { password, ...rest } = p.data
+  const patch = password ? { ...rest, passwordHash: await hashPassword(password) } : rest
   const [u] = await db
     .update(users)
-    .set(p.data)
+    .set(patch)
     .where(eq(users.id, req.params.id))
     .returning({ id: users.id, name: users.name, email: users.email, role: users.role })
   if (!u) return res.status(404).json({ error: 'not found' })

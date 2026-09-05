@@ -12,7 +12,11 @@ export function useLiveUpdates() {
     socket.on('data:changed', () => {
       // refetch only what's currently mounted; the builder seeds its local
       // state once so in-progress edits are never clobbered.
-      qc.invalidateQueries({ type: 'active' })
+      qc.invalidateQueries({
+        type: 'active',
+        // never refetch the session on a data change — that hammered /auth/me
+        predicate: (query) => query.queryKey[0] !== 'me',
+      })
     })
     return () => {
       socket.close()

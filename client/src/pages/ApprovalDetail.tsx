@@ -3,6 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import StatusBadge from '@/components/StatusBadge'
+import { errText } from '@/lib/errors'
 import AppShell from '@/components/AppShell'
 import PageSkeleton from '@/components/PageSkeleton'
 import { Button } from '@/components/ui/button'
@@ -61,7 +63,7 @@ export default function ApprovalDetail() {
       qc.invalidateQueries({ queryKey: ['approvals'] })
       nav('/approvals')
     } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? 'Action failed')
+      toast.error(errText(e, 'Action failed'))
     } finally {
       setBusy(false)
     }
@@ -148,8 +150,8 @@ export default function ApprovalDetail() {
             Decision {d.yourStep && <span className="text-muted-foreground text-sm">({d.yourStep})</span>}
           </h2>
           {d.status !== 'pending_approval' ? (
-            <p className="text-sm text-muted-foreground">
-              This quotation is <b>{d.status.replace(/_/g, ' ')}</b>.
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              This quotation is <StatusBadge status={d.status} />
             </p>
           ) : !d.yourStep ? (
             <p className="text-sm text-muted-foreground">

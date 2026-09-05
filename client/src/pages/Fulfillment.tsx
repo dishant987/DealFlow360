@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import { useAuth } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
 import PageSkeleton from '@/components/PageSkeleton'
@@ -80,7 +81,7 @@ export default function Fulfillment() {
       qc.invalidateQueries({ queryKey: ['allocations', id] })
       qc.invalidateQueries({ queryKey: ['fulfillment', id] })
     } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? 'Accept failed')
+      toast.error(errText(e, 'Accept failed'))
     } finally {
       setBusy(false)
     }
@@ -114,6 +115,8 @@ export default function Fulfillment() {
     )
   const s = suggestion.data
   const hasBackorder = (allocations.data ?? []).some((a) => a.backordered && a.quantity > 0)
+  // a split already exists → this becomes the manual-override path, not a first accept
+  const alreadyAccepted = (allocations.data ?? []).length > 0
 
   return (
     <AppShell
@@ -191,11 +194,19 @@ export default function Fulfillment() {
           </div>
           {canAct ? (
             <>
+              {alreadyAccepted && (
+                <p className="text-xs rounded bg-emerald-50 border border-emerald-200 text-emerald-900 px-2 py-1.5">
+                  Split accepted — stock is allocated. Adjust the quantities above and update to
+                  re-allocate.
+                </p>
+              )}
               <Button className="w-full" onClick={accept} disabled={busy || !s?.lines.length}>
-                Accept Split
+                {alreadyAccepted ? 'Update Split' : 'Accept Split'}
               </Button>
               <p className="text-[11px] text-muted-foreground">
-                Edit the quantities above to manually override, then Accept.
+                {alreadyAccepted
+                  ? 'Re-allocating returns the current stock first, then applies the new split.'
+                  : 'Edit the quantities above to manually override, then Accept.'}
               </p>
             </>
           ) : (

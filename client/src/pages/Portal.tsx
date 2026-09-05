@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import StatusBadge from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -23,6 +24,7 @@ type Line = {
   lineType: string
 }
 type PortalQuote = {
+  quoteNumber: string
   customer: string
   status: string
   orderDiscountPct: string
@@ -127,16 +129,14 @@ export default function Portal() {
       <header className="bg-primary text-primary-foreground px-6 py-4">
         <div className="max-w-3xl mx-auto">
           <div className="font-semibold text-lg">DealFlow360</div>
-          <div className="text-sm opacity-90">Your quotation · {q.customer}</div>
+          <div className="text-sm opacity-90">Quotation {q.quoteNumber} · {q.customer}</div>
         </div>
       </header>
 
       <main className="max-w-3xl mx-auto p-6 space-y-6">
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">Status:</span>
-          <span className="rounded bg-primary/10 text-primary px-2 py-0.5 text-xs uppercase">
-            {q.status.replace(/_/g, ' ')}
-          </span>
+          <StatusBadge status={q.status} />
         </div>
 
         <div className="rounded-lg border bg-background p-4">

@@ -4,8 +4,8 @@ import { z } from 'zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AxiosError } from 'axios'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,13 +28,14 @@ export default function Login() {
 
   const onSubmit = async (data: Form) => {
     try {
-      await api.post('/auth/login', data)
-      await qc.invalidateQueries({ queryKey: ['me'] })
-      nav('/')
+      // seed the cache from the login response so the protected route sees the
+      // user immediately — invalidate alone only starts a background refetch and
+      // the redirect would race it back to /login
+      const { data: user } = await api.post('/auth/login', data)
+      qc.setQueryData(['me'], user)
+      nav('/', { replace: true })
     } catch (e) {
-      const msg =
-        e instanceof AxiosError ? (e.response?.data?.error ?? 'Login failed') : 'Login failed'
-      toast.error(typeof msg === 'string' ? msg : 'Login failed')
+      toast.error(errText(e, 'Login failed'))
     }
   }
 

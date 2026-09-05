@@ -9,6 +9,10 @@ import Quotations from '@/pages/Quotations'
 import QuotationBuilder from '@/pages/QuotationBuilder'
 import Fulfillment from '@/pages/Fulfillment'
 import Billing from '@/pages/Billing'
+import Invoices from '@/pages/Invoices'
+import InvoiceDetail from '@/pages/InvoiceDetail'
+import FulfillmentQueue from '@/pages/FulfillmentQueue'
+import Subscriptions from '@/pages/Subscriptions'
 import Portal from '@/pages/Portal'
 import Approvals from '@/pages/Approvals'
 import ApprovalDetail from '@/pages/ApprovalDetail'
@@ -33,6 +37,10 @@ export default function App() {
         <Route path="/quotations/:id" element={<QuotationBuilder />} />
         <Route path="/quotations/:id/fulfillment" element={<Fulfillment />} />
         <Route path="/quotations/:id/billing" element={<Billing />} />
+        <Route path="/fulfillment" element={<FulfillmentQueue />} />
+        <Route path="/subscriptions" element={<Subscriptions />} />
+        <Route path="/invoices" element={<Invoices />} />
+        <Route path="/invoices/:id" element={<InvoiceDetail />} />
       </Route>
       <Route element={<ProtectedRoute roles={['manager', 'finance', 'admin']} />}>
         <Route path="/approvals" element={<Approvals />} />

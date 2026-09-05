@@ -3,8 +3,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { AxiosError } from 'axios'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,9 +29,7 @@ export default function ResetPassword() {
       toast.success('Password reset — please sign in.')
       nav('/login')
     } catch (e) {
-      const msg =
-        e instanceof AxiosError ? (e.response?.data?.error ?? 'Reset failed') : 'Reset failed'
-      toast.error(typeof msg === 'string' ? msg : 'Reset failed')
+      toast.error(errText(e, 'Reset failed'))
     }
   }
 

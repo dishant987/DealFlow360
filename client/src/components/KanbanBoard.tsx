@@ -3,10 +3,23 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import StatusBadge from '@/components/StatusBadge'
+import { errText } from '@/lib/errors'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export type Quote = {
   id: string
+  quoteNumber: string
   customer: string
   status: string
   amount: number
@@ -97,6 +110,20 @@ export default function KanbanBoard({ quotes, loading }: { quotes: Quote[]; load
   const [dragId, setDragId] = useState<string | null>(null)
   const [overStage, setOverStage] = useState<StageKey | null>(null)
   const [busy, setBusy] = useState(false)
+  // cancelling a deal is destructive — confirm before running it
+  const [pendingCancel, setPendingCancel] = useState<Quote | null>(null)
+
+  const runPlan = async (plan: { run: () => Promise<string> }) => {
+    setBusy(true)
+    try {
+      toast.success(await plan.run())
+      qc.invalidateQueries({ queryKey: ['quotations'] })
+    } catch (e: any) {
+      toast.error(errText(e, 'Could not move this deal'))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   const onDrop = async (to: StageKey) => {
     setOverStage(null)
@@ -109,19 +136,40 @@ export default function KanbanBoard({ quotes, loading }: { quotes: Quote[]; load
       if (plan !== 'no-op') toast.error(plan)
       return
     }
-
-    setBusy(true)
-    try {
-      toast.success(await plan.run())
-      qc.invalidateQueries({ queryKey: ['quotations'] })
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? 'Could not move this deal')
-    } finally {
-      setBusy(false)
-    }
+    if (to === 'rejected') return setPendingCancel(quote) // ask first
+    await runPlan(plan)
   }
 
   return (
+    <>
+    <AlertDialog open={!!pendingCancel} onOpenChange={(o) => !o && setPendingCancel(null)}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Cancel {pendingCancel?.quoteNumber} for {pendingCancel?.customer}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            The deal is marked cancelled and drops out of the active pipeline. This is recorded in
+            the audit trail.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Keep deal</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-white hover:bg-destructive/90"
+            onClick={() => {
+              const q = pendingCancel!
+              setPendingCancel(null)
+              const plan = planMove(q, 'rejected')
+              if (typeof plan !== 'string') runPlan(plan)
+            }}
+          >
+            Cancel deal
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
     <div className="flex gap-4 overflow-x-auto pb-4">
       {STAGES.map((stage) => {
         const cards = quotes.filter((q) => stage.statuses.includes(q.status))
@@ -171,12 +219,11 @@ export default function KanbanBoard({ quotes, loading }: { quotes: Quote[]; load
                       dragId === q.id ? 'opacity-40' : ''
                     }`}
                   >
+                    <div className="text-[10px] font-mono text-muted-foreground">{q.quoteNumber}</div>
                     <div className="font-medium text-sm">{q.customer}</div>
                     <div className="text-sm text-muted-foreground">${q.amount.toFixed(2)}</div>
                     <div className="flex items-center justify-between mt-1">
-                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                        {q.status.replace(/_/g, ' ')}
-                      </span>
+                      <StatusBadge status={q.status} className="text-[10px] px-1.5 py-0" />
                       {Number(q.riskScore) > 0 && (
                         <span className="text-[10px] rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">
                           risk {Number(q.riskScore).toFixed(1)}
@@ -194,5 +241,6 @@ export default function KanbanBoard({ quotes, loading }: { quotes: Quote[]; load
         )
       })}
     </div>
+    </>
   )
 }

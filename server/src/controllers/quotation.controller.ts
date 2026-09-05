@@ -21,6 +21,15 @@ import {
 import { sendPortalLink } from '../utils/mailer.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { computeBlendedRisk } from '../services/risk.js'
+import { quoteNumber } from '../services/quoteNumber.js'
+
+// A quote is only editable while it belongs to the rep. Once submitted, an
+// approver is reviewing a specific set of numbers — changing them underneath
+// would invalidate the risk score they were routed on. 'Return for revision'
+// puts it back to draft, which is the supported way to reopen it.
+const EDITABLE = ['draft', 'rejected']
+const notEditable = (status: string) =>
+  `This quotation is ${status.replace(/_/g, ' ')} — it can no longer be edited. Ask an approver to return it for revision.`
 
 // Resolve each line's effective ceiling (min of tier + category) and score the quote.
 export async function scoreQuotation(quotationId: string) {
@@ -68,6 +77,8 @@ export async function listQuotations(_req: Request, res: Response) {
   const quotes = await db
     .select({
       id: quotations.id,
+      seqNo: quotations.seqNo,
+      createdAt: quotations.createdAt,
       status: quotations.status,
       customerId: quotations.customerId,
       customer: customers.name,
@@ -93,6 +104,7 @@ export async function listQuotations(_req: Request, res: Response) {
   res.json(
     quotes.map((q) => ({
       ...q,
+      quoteNumber: quoteNumber(q.seqNo, q.createdAt),
       amount: computeQuoteTotals(byQuote.get(q.id) ?? [], q.orderDiscountPct).total,
     })),
   )
@@ -103,6 +115,7 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
   const [quote] = await db
     .select({
       id: quotations.id,
+      seqNo: quotations.seqNo,
       status: quotations.status,
       customerId: quotations.customerId,
       customer: customers.name,
@@ -140,7 +153,13 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
     .where(eq(quoteLines.quotationId, req.params.id))
 
   const risk = await scoreQuotation(req.params.id)
-  res.json({ ...quote, lines, totals: computeQuoteTotals(lines, quote.orderDiscountPct), risk })
+  res.json({
+    ...quote,
+    quoteNumber: quoteNumber(quote.seqNo, quote.createdAt),
+    lines,
+    totals: computeQuoteTotals(lines, quote.orderDiscountPct),
+    risk,
+  })
 }
 
 /* ---- submit: score, route, set status (auto approval routing) ---- */
@@ -188,7 +207,7 @@ export async function createQuotation(req: Request, res: Response) {
     .insert(quotations)
     .values({ customerId: p.data.customerId, repId: req.user!.id })
     .returning()
-  res.status(201).json(q)
+  res.status(201).json({ ...q, quoteNumber: quoteNumber(q.seqNo, q.createdAt) })
 }
 
 async function touch(quotationId: string) {
@@ -224,11 +243,13 @@ export async function addLine(req: Request<{ id: string }>, res: Response) {
   if (!p.success) return res.status(400).json({ error: p.error.issues })
 
   const [quote] = await db
-    .select({ id: quotations.id, tier: customers.tier })
+    .select({ id: quotations.id, tier: customers.tier, status: quotations.status })
     .from(quotations)
     .innerJoin(customers, eq(quotations.customerId, customers.id))
     .where(eq(quotations.id, req.params.id))
   if (!quote) return res.status(404).json({ error: 'quotation not found' })
+  if (!EDITABLE.includes(quote.status))
+    return res.status(400).json({ error: notEditable(quote.status) })
 
   const [product] = await db.select().from(products).where(eq(products.id, p.data.productId))
   if (!product) return res.status(400).json({ error: 'product not found' })
@@ -294,6 +315,10 @@ export async function updateLine(req: Request<{ id: string; lineId: string }>, r
     .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
   const { reason, ...patch } = p.data
+  const [parent] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+  if (!parent) return res.status(404).json({ error: 'not found' })
+  if (!EDITABLE.includes(parent.status))
+    return res.status(400).json({ error: notEditable(parent.status) })
   const [before] = await db.select().from(quoteLines).where(eq(quoteLines.id, req.params.lineId))
   const [line] = await db
     .update(quoteLines)
@@ -317,6 +342,10 @@ export async function updateLine(req: Request<{ id: string; lineId: string }>, r
 
 /* ---- delete a line ---- */
 export async function deleteLine(req: Request<{ id: string; lineId: string }>, res: Response) {
+  const [parent] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+  if (!parent) return res.status(404).json({ error: 'not found' })
+  if (!EDITABLE.includes(parent.status))
+    return res.status(400).json({ error: notEditable(parent.status) })
   const [line] = await db
     .delete(quoteLines)
     .where(and(eq(quoteLines.id, req.params.lineId), eq(quoteLines.quotationId, req.params.id)))
@@ -445,6 +474,9 @@ export async function updateQuotation(req: Request<{ id: string }>, res: Respons
   if (!p.success) return res.status(400).json({ error: p.error.issues })
   const { reason, ...patch } = p.data
   const [before] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+  if (!before) return res.status(404).json({ error: 'not found' })
+  if (patch.orderDiscountPct != null && !EDITABLE.includes(before.status))
+    return res.status(400).json({ error: notEditable(before.status) })
   const [q] = await db
     .update(quotations)
     .set({ ...patch, updatedAt: new Date(), lastActivityAt: new Date() })

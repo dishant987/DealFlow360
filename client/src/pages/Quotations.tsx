@@ -3,25 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import KanbanBoard, { type Quote } from '@/components/KanbanBoard'
 import { Button } from '@/components/ui/button'
 
 type Customer = { id: string; name: string; tier: string }
-
-const statusColors: Record<string, string> = {
-  draft: 'bg-muted text-foreground',
-  pending_approval: 'bg-amber-100 text-amber-800',
-  approved: 'bg-emerald-100 text-emerald-800',
-  rejected: 'bg-red-100 text-red-800',
-  cancelled: 'bg-red-100 text-red-800',
-  sent: 'bg-sky-100 text-sky-800',
-  under_negotiation: 'bg-violet-100 text-violet-800',
-  confirmed: 'bg-emerald-100 text-emerald-800',
-  fulfilled: 'bg-emerald-100 text-emerald-800',
-  invoiced: 'bg-emerald-100 text-emerald-800',
-}
 
 export default function Quotations() {
   const nav = useNavigate()
@@ -56,6 +44,11 @@ export default function Quotations() {
 
   const columns: Column<Quote>[] = [
     {
+      key: 'quoteNumber',
+      label: 'Quote #',
+      render: (r) => <span className="font-mono text-xs">{r.quoteNumber}</span>,
+    },
+    {
       key: 'customer',
       label: 'Customer',
       render: (r) => <span className="font-medium">{r.customer}</span>,
@@ -63,11 +56,7 @@ export default function Quotations() {
     {
       key: 'status',
       label: 'Status',
-      render: (r) => (
-        <span className={`rounded px-2 py-0.5 text-xs ${statusColors[r.status] ?? 'bg-muted'}`}>
-          {r.status.replace(/_/g, ' ')}
-        </span>
-      ),
+      render: (r) => <StatusBadge status={r.status} />,
     },
     {
       key: 'amount',
@@ -135,7 +124,7 @@ export default function Quotations() {
           columns={columns}
           loading={quotes.isLoading}
           onRowClick={(r) => nav(`/quotations/${r.id}`)}
-          searchPlaceholder="Search customer or status…"
+          searchPlaceholder="Search quote #, customer or status…"
           emptyMessage="No quotations yet — pick a customer and create one."
           toolbar={
             <>

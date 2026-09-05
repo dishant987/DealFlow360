@@ -3,12 +3,14 @@ import {
   pgEnum,
   uuid,
   integer,
+  serial,
   text,
   numeric,
   boolean,
   timestamp,
   jsonb,
   uniqueIndex,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
 // money helper — always NUMERIC, never float
@@ -53,8 +55,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash').notNull(),
   role: roleEnum('role').notNull().default('rep'),
   resetTokenHash: text('reset_token_hash'),
-  resetTokenExpiresAt: timestamp('reset_token_expires_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  resetTokenExpiresAt: timestamp('reset_token_expires_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 export const customers = pgTable('customers', {
@@ -62,7 +64,7 @@ export const customers = pgTable('customers', {
   name: text('name').notNull(),
   email: text('email').notNull(),
   tier: tierEnum('tier').notNull().default('bronze'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 /* ---------- catalog ---------- */
@@ -84,7 +86,11 @@ export const products = pgTable('products', {
   unit: text('unit').notNull().default('unit'),
   taxRate: numeric('tax_rate', { precision: 5, scale: 2 }).notNull().default('0'),
   description: text('description'),
-  subscriptionPlanId: uuid('subscription_plan_id'), // set for type=subscription
+  // set for type=subscription. subscriptionPlans is declared further down, so the
+  // reference goes through a callback with an explicit return type.
+  subscriptionPlanId: uuid('subscription_plan_id').references(
+    (): AnyPgColumn => subscriptionPlans.id,
+  ),
   isPromoted: boolean('is_promoted').notNull().default(false),
   active: boolean('active').notNull().default(true),
 })
@@ -138,7 +144,7 @@ export const warehouses = pgTable('warehouses', {
   shippingCostWeight: numeric('shipping_cost_weight', { precision: 6, scale: 2 })
     .notNull()
     .default('1'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 export const stock = pgTable(
@@ -202,6 +208,8 @@ export const appSettings = pgTable('app_settings', {
 /* ---------- quotations ---------- */
 export const quotations = pgTable('quotations', {
   id: pk(),
+  // human-readable quotation number — sequence guarantees uniqueness under concurrency
+  seqNo: serial('seq_no').notNull(),
   customerId: uuid('customer_id')
     .notNull()
     .references(() => customers.id),
@@ -216,9 +224,9 @@ export const quotations = pgTable('quotations', {
     .notNull()
     .default('0'),
   portalToken: text('portal_token').unique(), // magic-link token for customer portal
-  lastActivityAt: timestamp('last_activity_at').defaultNow().notNull(), // stalled-deal detection
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).defaultNow().notNull(), // stalled-deal detection
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 export const quoteLines = pgTable('quote_lines', {
@@ -249,7 +257,7 @@ export const approvals = pgTable('approvals', {
   approverId: uuid('approver_id').references(() => users.id),
   action: approvalActionEnum('action'), // null = pending
   reason: text('reason'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 // immutable trail for every approval/rejection/edit (A3)
@@ -260,7 +268,7 @@ export const auditLog = pgTable('audit_log', {
   action: text('action').notNull(),
   detail: jsonb('detail'),
   reason: text('reason'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 /* ---------- fulfillment (allocations hang directly off the quote) ---------- */
@@ -275,21 +283,23 @@ export const fulfillmentAllocations = pgTable('fulfillment_allocations', {
   warehouseId: uuid('warehouse_id').references(() => warehouses.id), // null for backorder rows
   quantity: integer('quantity').notNull(),
   backordered: boolean('backordered').notNull().default(false),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 /* ---------- billing & invoices ---------- */
 export const invoices = pgTable('invoices', {
   id: pk(),
+  // invoices need their own document number, independent of the quote
+  seqNo: serial('seq_no').notNull(),
   quotationId: uuid('quotation_id')
     .notNull()
     .references(() => quotations.id, { onDelete: 'cascade' }),
   type: invoiceTypeEnum('type').notNull().default('onetime'),
   status: invoiceStatusEnum('status').notNull().default('draft'),
   amount: money('amount').notNull(),
-  issuedAt: timestamp('issued_at').defaultNow().notNull(),
-  dueAt: timestamp('due_at'),
-  paidAt: timestamp('paid_at'),
+  issuedAt: timestamp('issued_at', { withTimezone: true }).defaultNow().notNull(),
+  dueAt: timestamp('due_at', { withTimezone: true }),
+  paidAt: timestamp('paid_at', { withTimezone: true }),
 })
 
 export const billingSchedules = pgTable('billing_schedules', {
@@ -303,7 +313,7 @@ export const billingSchedules = pgTable('billing_schedules', {
   subscriptionPlanId: uuid('subscription_plan_id')
     .notNull()
     .references(() => subscriptionPlans.id),
-  nextBillingDate: timestamp('next_billing_date').notNull(),
+  nextBillingDate: timestamp('next_billing_date', { withTimezone: true }).notNull(),
   amount: money('amount').notNull(),
   status: billingStatusEnum('status').notNull().default('scheduled'),
 })
@@ -315,7 +325,7 @@ export const payments = pgTable('payments', {
     .references(() => invoices.id, { onDelete: 'cascade' }),
   amount: money('amount').notNull(),
   method: text('method').notNull().default('manual'),
-  paidAt: timestamp('paid_at').defaultNow().notNull(),
+  paidAt: timestamp('paid_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 export const creditNotes = pgTable('credit_notes', {
@@ -325,7 +335,7 @@ export const creditNotes = pgTable('credit_notes', {
     .references(() => quotations.id, { onDelete: 'cascade' }),
   amount: money('amount').notNull(),
   reason: text('reason'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
 /* ---------- customer portal negotiation ---------- */
@@ -339,5 +349,5 @@ export const negotiationRequests = pgTable('negotiation_requests', {
   message: text('message'),
   counterDiscountPct: numeric('counter_discount_pct', { precision: 5, scale: 2 }),
   status: negotiationStatusEnum('status').notNull().default('open'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })

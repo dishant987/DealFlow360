@@ -3,10 +3,12 @@ import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import PageSkeleton from '@/components/PageSkeleton'
 import { lineMargin, quoteTotals } from '@/lib/pricing'
 import { Button } from '@/components/ui/button'
+import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -58,6 +60,7 @@ type Risk = {
 }
 type Quote = {
   id: string
+  quoteNumber: string
   customer: string
   customerTier: string
   status: string
@@ -79,6 +82,19 @@ export default function QuotationBuilder() {
   const [status, setStatus] = useState('draft')
   const [submitting, setSubmitting] = useState(false)
   const [portalUrl, setPortalUrl] = useState('')
+  // everything persists as you edit — this just makes that visible
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const track = async <T,>(fn: () => Promise<T>): Promise<T> => {
+    setSaveState('saving')
+    try {
+      const out = await fn()
+      setSaveState('saved')
+      return out
+    } catch (e) {
+      setSaveState('error')
+      throw e
+    }
+  }
 
   const quote = useQuery({
     queryKey: ['quotation', id],
@@ -127,6 +143,21 @@ export default function QuotationBuilder() {
   }
 
   const totals = quoteTotals(lines, orderDiscount)
+  // a quote can only be (re)submitted while it is still the rep's to edit
+  const canSubmit = status === 'draft' || status === 'rejected'
+  // same rule as the server: the cart is only editable while it is the rep's
+  const canEdit = canSubmit
+  const canSend = ['approved', 'sent', 'under_negotiation', 'confirmed'].includes(status)
+  const STATUS_NOTE: Record<string, string> = {
+    pending_approval: 'Submitted — awaiting approval. You will be notified once a decision is made.',
+    approved: 'Approved. Continue to fulfillment or billing below.',
+    sent: 'Sent to the customer — awaiting their response in the portal.',
+    under_negotiation: 'The customer has requested changes. Review them before re-sending.',
+    confirmed: 'Confirmed by the customer. Continue to fulfillment or billing.',
+    fulfilled: 'Fulfilled — stock has been allocated.',
+    invoiced: 'Invoiced.',
+    cancelled: 'This deal was cancelled.',
+  }
   const pickedVariants = products.data?.find((p) => p.id === pick)?.variants ?? []
 
   // true impact on the ORDER margin if this suggestion were added (percentage points)
@@ -141,9 +172,12 @@ export default function QuotationBuilder() {
   const addLine = async () => {
     if (!pick) return
     try {
-      const { data } = await api.post(`/quotations/${id}/lines`, {
-        productId: pick,
-        ...(pickVariant ? { variantId: pickVariant } : {}),
+      const data = await track(async () => {
+        const res = await api.post(`/quotations/${id}/lines`, {
+          productId: pick,
+          ...(pickVariant ? { variantId: pickVariant } : {}),
+        })
+        return res.data
       })
       const prod = products.data?.find((p) => p.id === pick)
       const v = prod?.variants?.find((x) => x.id === pickVariant)
@@ -180,7 +214,7 @@ export default function QuotationBuilder() {
 
   const persistLine = async (lineId: string, body: Record<string, unknown>) => {
     try {
-      await api.patch(`/quotations/${id}/lines/${lineId}`, body)
+      await track(() => api.patch(`/quotations/${id}/lines/${lineId}`, body))
     } catch {
       toast.error('Failed to save change')
     }
@@ -195,7 +229,7 @@ export default function QuotationBuilder() {
   const removeLine = async (lineId: string) => {
     setLines((ls) => ls.filter((l) => l.id !== lineId))
     try {
-      await api.delete(`/quotations/${id}/lines/${lineId}`)
+      await track(() => api.delete(`/quotations/${id}/lines/${lineId}`))
       upsell.refetch()
     } catch {
       toast.error('Failed to remove line')
@@ -215,7 +249,7 @@ export default function QuotationBuilder() {
 
   const persistOrderDiscount = async (v: string) => {
     try {
-      await api.patch(`/quotations/${id}`, { orderDiscountPct: v })
+      await track(() => api.patch(`/quotations/${id}`, { orderDiscountPct: v }))
     } catch {
       toast.error('Failed to save order discount')
     }
@@ -234,17 +268,35 @@ export default function QuotationBuilder() {
       crumbs={[
         { label: 'Workspace', to: '/' },
         { label: 'Quotations', to: '/quotations' },
-        { label: `${quote.data.customer} (${quote.data.customerTier})` },
+        { label: `${quote.data.quoteNumber} · ${quote.data.customer} (${quote.data.customerTier})` },
       ]}
       actions={
-        <span className="rounded bg-primary/10 text-primary px-2 py-0.5 text-xs uppercase">
-          {status.replace(/_/g, ' ')}
-        </span>
+        <div className="flex items-center gap-3">
+          {canEdit && saveState !== 'idle' && (
+            <span
+              className={`text-xs ${
+                saveState === 'error'
+                  ? 'text-destructive'
+                  : saveState === 'saving'
+                    ? 'text-muted-foreground'
+                    : 'text-emerald-600'
+              }`}
+            >
+              {saveState === 'saving'
+                ? 'Saving…'
+                : saveState === 'error'
+                  ? 'Not saved — retry your last change'
+                  : '✓ All changes saved'}
+            </span>
+          )}
+          <StatusBadge status={status} />
+        </div>
       }
     >
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         {/* cart */}
         <section className="space-y-4">
+          {canEdit && (
           <div className="flex items-center gap-2">
             <select
               className="h-9 rounded-md border border-input bg-transparent px-2 text-sm min-w-64"
@@ -290,6 +342,13 @@ export default function QuotationBuilder() {
               Add
             </Button>
           </div>
+          )}
+          {!canEdit && (
+            <p className="text-xs rounded bg-muted px-2 py-1.5 text-muted-foreground">
+              Locked — this quotation is {status.replace(/_/g, ' ')}. An approver must return it for
+              revision before it can be edited.
+            </p>
+          )}
 
           <Table>
             <TableHeader>
@@ -322,11 +381,11 @@ export default function QuotationBuilder() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button size="sm" variant="outline" onClick={() => changeQty(l, -1)}>
+                        <Button size="sm" variant="outline" disabled={!canEdit} onClick={() => changeQty(l, -1)}>
                           −
                         </Button>
                         <span className="w-6 text-center">{l.quantity}</span>
-                        <Button size="sm" variant="outline" onClick={() => changeQty(l, 1)}>
+                        <Button size="sm" variant="outline" disabled={!canEdit} onClick={() => changeQty(l, 1)}>
                           +
                         </Button>
                       </div>
@@ -335,6 +394,7 @@ export default function QuotationBuilder() {
                       <Input
                         type="number"
                         className="w-20"
+                        disabled={!canEdit}
                         value={l.discountPct}
                         onChange={(e) => setLine(l.id, { discountPct: e.target.value })}
                         onBlur={(e) => persistLine(l.id, { discountPct: e.target.value })}
@@ -345,9 +405,17 @@ export default function QuotationBuilder() {
                       {m.marginPct.toFixed(1)}%
                     </TableCell>
                     <TableCell>
-                      <Button size="sm" variant="ghost" onClick={() => removeLine(l.id)}>
+                      <ConfirmButton
+                        size="sm"
+                        variant="ghost"
+                        disabled={!canEdit}
+                        title={`Remove ${l.product} from this quotation?`}
+                        description="The line and its discount will be removed."
+                        confirmLabel="Remove"
+                        onConfirm={() => removeLine(l.id)}
+                      >
                         ✕
-                      </Button>
+                      </ConfirmButton>
                     </TableCell>
                   </TableRow>
                 )
@@ -365,7 +433,7 @@ export default function QuotationBuilder() {
 
         <aside className="space-y-4 h-fit">
         {/* upsell / cross-sell */}
-        {(upsell.data ?? []).filter((s) => !dismissed.has(s.productId)).length > 0 && (
+        {canEdit && (upsell.data ?? []).filter((s) => !dismissed.has(s.productId)).length > 0 && (
           <div className="rounded-lg border p-4 space-y-2">
             <h2 className="font-semibold">Suggested add-ons</h2>
             {(upsell.data ?? [])
@@ -399,7 +467,7 @@ export default function QuotationBuilder() {
                     )
                   })()}
                   <div className="flex gap-1">
-                    <Button size="sm" onClick={() => addUpsell(s)}>
+                    <Button size="sm" disabled={!canEdit} onClick={() => addUpsell(s)}>
                       Add to Quote
                     </Button>
                     <Button
@@ -427,6 +495,7 @@ export default function QuotationBuilder() {
             <Input
               type="number"
               className="w-20"
+              disabled={!canEdit}
               value={orderDiscount}
               onChange={(e) => setOrderDiscount(e.target.value)}
               onBlur={(e) => persistOrderDiscount(e.target.value)}
@@ -466,25 +535,41 @@ export default function QuotationBuilder() {
                 )}
               </>
             )}
-            <Button className="w-full" onClick={submit} disabled={submitting || lines.length === 0}>
-              {submitting ? 'Submitting…' : 'Submit / Confirm'}
-            </Button>
-            <p className="text-[11px] text-muted-foreground">
-              Re-evaluates discounts and auto-routes for approval if over limits.
-            </p>
-            {(status === 'approved' || status === 'fulfilled') && (
+            {canSubmit ? (
+              <>
+                <Button
+                  className="w-full"
+                  onClick={submit}
+                  disabled={submitting || lines.length === 0}
+                >
+                  {submitting ? 'Submitting…' : 'Submit / Confirm'}
+                </Button>
+                <p className="text-[11px] text-muted-foreground">
+                  Re-evaluates discounts and auto-routes for approval if over limits.
+                </p>
+              </>
+            ) : (
+              <p className="text-xs rounded bg-muted px-2 py-1.5 text-muted-foreground">
+                {STATUS_NOTE[status] ?? 'This quotation is no longer editable.'}
+              </p>
+            )}
+            {(status === 'approved' || status === 'confirmed' || status === 'fulfilled') && (
               <Button className="w-full" variant="secondary" asChild>
                 <Link to={`/quotations/${id}/fulfillment`}>Go to Fulfillment</Link>
               </Button>
             )}
-            {(status === 'fulfilled' || status === 'invoiced' || status === 'approved') && (
+            {(status === 'approved' || status === 'confirmed' || status === 'fulfilled' || status === 'invoiced') && (
               <Button className="w-full" variant="secondary" asChild>
                 <Link to={`/quotations/${id}/billing`}>Go to Billing</Link>
               </Button>
             )}
-            <Button className="w-full" variant="outline" onClick={sendToCustomer}>
-              Send to Customer
-            </Button>
+            {canSend && (
+              <Button className="w-full" variant="outline" onClick={sendToCustomer}>
+                {status === 'sent' || status === 'under_negotiation'
+                  ? 'Re-send to Customer'
+                  : 'Send to Customer'}
+              </Button>
+            )}
             {portalUrl && (
               <div className="space-y-1">
                 <p className="text-[11px] text-muted-foreground">Customer portal link:</p>

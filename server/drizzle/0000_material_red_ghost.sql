@@ -25,7 +25,7 @@ CREATE TABLE "approvals" (
 	"approver_id" uuid,
 	"action" "approval_action",
 	"reason" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "audit_log" (
@@ -35,7 +35,7 @@ CREATE TABLE "audit_log" (
 	"action" text NOT NULL,
 	"detail" jsonb,
 	"reason" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "billing_schedules" (
@@ -43,7 +43,7 @@ CREATE TABLE "billing_schedules" (
 	"quotation_id" uuid NOT NULL,
 	"quote_line_id" uuid NOT NULL,
 	"subscription_plan_id" uuid NOT NULL,
-	"next_billing_date" timestamp NOT NULL,
+	"next_billing_date" timestamp with time zone NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
 	"status" "billing_status" DEFAULT 'scheduled' NOT NULL
 );
@@ -66,7 +66,7 @@ CREATE TABLE "credit_notes" (
 	"quotation_id" uuid NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
 	"reason" text,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "customers" (
@@ -74,7 +74,7 @@ CREATE TABLE "customers" (
 	"name" text NOT NULL,
 	"email" text NOT NULL,
 	"tier" "customer_tier" DEFAULT 'bronze' NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "discount_tiers" (
@@ -91,18 +91,19 @@ CREATE TABLE "fulfillment_allocations" (
 	"warehouse_id" uuid,
 	"quantity" integer NOT NULL,
 	"backordered" boolean DEFAULT false NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "invoices" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"seq_no" serial NOT NULL,
 	"quotation_id" uuid NOT NULL,
 	"type" "invoice_type" DEFAULT 'onetime' NOT NULL,
 	"status" "invoice_status" DEFAULT 'draft' NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
-	"issued_at" timestamp DEFAULT now() NOT NULL,
-	"due_at" timestamp,
-	"paid_at" timestamp
+	"issued_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"due_at" timestamp with time zone,
+	"paid_at" timestamp with time zone
 );
 --> statement-breakpoint
 CREATE TABLE "negotiation_requests" (
@@ -113,7 +114,7 @@ CREATE TABLE "negotiation_requests" (
 	"message" text,
 	"counter_discount_pct" numeric(5, 2),
 	"status" "negotiation_status" DEFAULT 'open' NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "payments" (
@@ -121,7 +122,7 @@ CREATE TABLE "payments" (
 	"invoice_id" uuid NOT NULL,
 	"amount" numeric(12, 2) NOT NULL,
 	"method" text DEFAULT 'manual' NOT NULL,
-	"paid_at" timestamp DEFAULT now() NOT NULL
+	"paid_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "price_list_items" (
@@ -166,6 +167,7 @@ CREATE TABLE "products" (
 --> statement-breakpoint
 CREATE TABLE "quotations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"seq_no" serial NOT NULL,
 	"customer_id" uuid NOT NULL,
 	"rep_id" uuid NOT NULL,
 	"status" "quote_status" DEFAULT 'draft' NOT NULL,
@@ -174,9 +176,9 @@ CREATE TABLE "quotations" (
 	"requires_finance" boolean DEFAULT false NOT NULL,
 	"order_discount_pct" numeric(5, 2) DEFAULT '0' NOT NULL,
 	"portal_token" text,
-	"last_activity_at" timestamp DEFAULT now() NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
+	"last_activity_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "quotations_portal_token_unique" UNIQUE("portal_token")
 );
 --> statement-breakpoint
@@ -217,8 +219,8 @@ CREATE TABLE "users" (
 	"password_hash" text NOT NULL,
 	"role" "role" DEFAULT 'rep' NOT NULL,
 	"reset_token_hash" text,
-	"reset_token_expires_at" timestamp,
-	"created_at" timestamp DEFAULT now() NOT NULL,
+	"reset_token_expires_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
@@ -226,7 +228,7 @@ CREATE TABLE "warehouses" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"shipping_cost_weight" numeric(6, 2) DEFAULT '1' NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "warehouses_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
@@ -251,6 +253,7 @@ ALTER TABLE "product_pairings" ADD CONSTRAINT "product_pairings_product_id_produ
 ALTER TABLE "product_pairings" ADD CONSTRAINT "product_pairings_suggested_product_id_products_id_fk" FOREIGN KEY ("suggested_product_id") REFERENCES "public"."products"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "product_variants" ADD CONSTRAINT "product_variants_product_id_products_id_fk" FOREIGN KEY ("product_id") REFERENCES "public"."products"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "products" ADD CONSTRAINT "products_category_id_categories_id_fk" FOREIGN KEY ("category_id") REFERENCES "public"."categories"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "products" ADD CONSTRAINT "products_subscription_plan_id_subscription_plans_id_fk" FOREIGN KEY ("subscription_plan_id") REFERENCES "public"."subscription_plans"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "quotations" ADD CONSTRAINT "quotations_customer_id_customers_id_fk" FOREIGN KEY ("customer_id") REFERENCES "public"."customers"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "quotations" ADD CONSTRAINT "quotations_rep_id_users_id_fk" FOREIGN KEY ("rep_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "quote_lines" ADD CONSTRAINT "quote_lines_quotation_id_quotations_id_fk" FOREIGN KEY ("quotation_id") REFERENCES "public"."quotations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import StatusBadge, { statusColor } from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 type Filters = { from?: string; to?: string; status?: string; repId?: string; categoryId?: string }
-type Row = { id: string; customer: string; rep: string; status: string; riskScore: number; amount: number }
+type Row = { id: string; quoteNumber: string; customer: string; rep: string; status: string; riskScore: number; amount: number }
 type Report = {
   rows: Row[]
   summary: { count: number; totalValue: number; avgRisk: number; byStatus: Record<string, number> }
@@ -54,6 +55,7 @@ export default function Reports() {
 
   const chartData = Object.entries(report.data?.summary.byStatus ?? {}).map(([status, count]) => ({
     status: status.replace(/_/g, ' '),
+    raw: status,
     count,
   }))
 
@@ -142,7 +144,11 @@ export default function Reports() {
                 <XAxis dataKey="status" fontSize={11} />
                 <YAxis allowDecimals={false} fontSize={11} />
                 <Tooltip />
-                <Bar dataKey="count" fill="oklch(0.446 0.063 344.5)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {chartData.map((d) => (
+                    <Cell key={d.raw} fill={statusColor(d.raw)} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -162,9 +168,10 @@ export default function Reports() {
 }
 
 const reportColumns: Column<Row>[] = [
+  { key: 'quoteNumber', label: 'Quote #' },
   { key: 'customer', label: 'Customer' },
   { key: 'rep', label: 'Rep' },
-  { key: 'status', label: 'Status', render: (r) => r.status.replace(/_/g, ' ') },
+  { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   { key: 'riskScore', label: 'Risk', align: 'right', render: (r) => r.riskScore.toFixed(1) },
   { key: 'amount', label: 'Amount', align: 'right', render: (r) => `$${r.amount.toFixed(2)}` },
 ]

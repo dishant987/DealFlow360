@@ -1,10 +1,14 @@
 import nodemailer from 'nodemailer'
 
-const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM } = process.env
+const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, MAIL_FROM, MAIL_ENABLED } = process.env
+
+// Kill switch for development/testing: set MAIL_ENABLED=false to log links to the
+// console instead of sending real email, even when SMTP is configured.
+const mailEnabled = MAIL_ENABLED !== 'false'
 
 // Real transport only when SMTP is configured; otherwise we log the link.
 const transport =
-  SMTP_HOST && SMTP_USER && SMTP_PASS
+  mailEnabled && SMTP_HOST && SMTP_USER && SMTP_PASS
     ? nodemailer.createTransport({
         host: SMTP_HOST,
         port: Number(SMTP_PORT) || 587,

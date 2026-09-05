@@ -5,11 +5,13 @@ import { and, eq, gte, lte, inArray, type SQL } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { quotations, customers, users, quoteLines, products, categories } from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
+import { quoteNumber } from '../services/quoteNumber.js'
 
 const require = createRequire(import.meta.url)
 
 interface ReportRow {
   id: string
+  quoteNumber: string
   customer: string
   rep: string
   status: string
@@ -18,10 +20,17 @@ interface ReportRow {
   createdAt: Date
 }
 
+// A date-only input ("2026-09-05") parses as UTC midnight, which is 05:30 local
+// in IST — so "to = today" used to exclude everything after 05:30. Treat bare
+// dates as LOCAL day boundaries instead.
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+const dayStart = (v: string) => new Date(DATE_ONLY.test(v) ? `${v}T00:00:00` : v)
+const dayEnd = (v: string) => new Date(DATE_ONLY.test(v) ? `${v}T23:59:59.999` : v)
+
 async function buildReport(query: Request['query']): Promise<{ rows: ReportRow[]; summary: any }> {
   const conds: SQL[] = []
-  if (query.from) conds.push(gte(quotations.createdAt, new Date(String(query.from))))
-  if (query.to) conds.push(lte(quotations.createdAt, new Date(String(query.to))))
+  if (query.from) conds.push(gte(quotations.createdAt, dayStart(String(query.from))))
+  if (query.to) conds.push(lte(quotations.createdAt, dayEnd(String(query.to))))
   if (query.status) conds.push(eq(quotations.status, String(query.status) as any))
   if (query.repId) conds.push(eq(quotations.repId, String(query.repId)))
 
@@ -39,6 +48,7 @@ async function buildReport(query: Request['query']): Promise<{ rows: ReportRow[]
   const quotes = await db
     .select({
       id: quotations.id,
+      seqNo: quotations.seqNo,
       customer: customers.name,
       rep: users.name,
       status: quotations.status,
@@ -64,6 +74,7 @@ async function buildReport(query: Request['query']): Promise<{ rows: ReportRow[]
 
   const rows: ReportRow[] = quotes.map((q) => ({
     id: q.id,
+    quoteNumber: quoteNumber(q.seqNo, q.createdAt),
     customer: q.customer,
     rep: q.rep,
     status: q.status,
@@ -179,6 +190,7 @@ export async function exportReport(req: Request, res: Response) {
 
     const detailBody = [
       [
+        { text: 'Quote #', style: 'th' },
         { text: 'Customer', style: 'th' },
         { text: 'Rep', style: 'th' },
         { text: 'Status', style: 'th' },
@@ -186,6 +198,7 @@ export async function exportReport(req: Request, res: Response) {
         { text: 'Amount', style: 'th', alignment: 'right' },
       ],
       ...rows.map((r) => [
+        r.quoteNumber,
         r.customer,
         r.rep,
         r.status.replace(/_/g, ' '),
@@ -193,7 +206,8 @@ export async function exportReport(req: Request, res: Response) {
         { text: `$${r.amount.toFixed(2)}`, alignment: 'right' },
       ]),
       [
-        { text: 'Total', bold: true, colSpan: 4 },
+        { text: 'Total', bold: true, colSpan: 5 },
+        {},
         {},
         {},
         {},
@@ -254,7 +268,7 @@ export async function exportReport(req: Request, res: Response) {
           : []),
         { text: 'Detail', style: 'h2' },
         {
-          table: { headerRows: 1, widths: ['*', '*', 'auto', 'auto', 'auto'], body: detailBody },
+          table: { headerRows: 1, widths: ['auto', '*', '*', 'auto', 'auto', 'auto'], body: detailBody },
           layout: { fillColor: (i: number) => (i > 0 && i % 2 === 0 ? LIGHT : null) },
         },
       ],
@@ -270,6 +284,7 @@ export async function exportReport(req: Request, res: Response) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Quotations')
   ws.columns = [
+    { header: 'Quote #', key: 'quoteNumber', width: 16 },
     { header: 'Customer', key: 'customer', width: 24 },
     { header: 'Rep', key: 'rep', width: 20 },
     { header: 'Status', key: 'status', width: 18 },

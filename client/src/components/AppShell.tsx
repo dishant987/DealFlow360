@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import ConfirmButton from '@/components/ConfirmButton'
 
 export type Crumb = { label: string; to?: string }
 
@@ -40,8 +41,8 @@ export default function AppShell({
 
   const logout = async () => {
     await api.post('/auth/logout')
-    await qc.invalidateQueries({ queryKey: ['me'] })
-    nav('/login')
+    qc.setQueryData(['me'], null)
+    nav('/login', { replace: true })
   }
 
   // B1: pull fresh pricing / stock / approval data from the backend
@@ -53,7 +54,6 @@ export default function AppShell({
   // B1: end the current working session view (clears cached workspace data)
   const closeWorkspace = () => {
     qc.clear()
-    toast.message('Workspace closed')
     nav('/')
   }
 
@@ -71,6 +71,9 @@ export default function AppShell({
             {isMgr && (
               <>
                 <NavItem to="/approvals">Approvals</NavItem>
+                <NavItem to="/fulfillment">Fulfillment</NavItem>
+                <NavItem to="/invoices">Invoices</NavItem>
+                <NavItem to="/subscriptions">Subscriptions</NavItem>
                 <NavItem to="/deal-health">Deal Health</NavItem>
                 <NavItem to="/reports">Reports</NavItem>
               </>
@@ -101,9 +104,17 @@ export default function AppShell({
             >
               Close Workspace
             </Button>
-            <Button size="sm" variant="secondary" onClick={logout}>
+            <ConfirmButton
+              size="sm"
+              variant="secondary"
+              title="Log out of DealFlow360?"
+              description="You'll need to sign in again to return to your workspace. Any unsaved edits on this screen will be lost."
+              confirmLabel="Log out"
+              destructive={false}
+              onConfirm={logout}
+            >
               Logout
-            </Button>
+            </ConfirmButton>
           </div>
         </div>
       </header>

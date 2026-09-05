@@ -10,6 +10,9 @@ export default function Dashboard() {
   const tiles: { title: string; desc: string; to: string; show: boolean }[] = [
     { title: 'Quotations', desc: 'Build and track deals', to: '/quotations', show: true },
     { title: 'Approvals', desc: 'Review flagged discounts', to: '/approvals', show: isMgr },
+    { title: 'Fulfillment', desc: 'Orders awaiting warehouse split', to: '/fulfillment', show: isMgr },
+    { title: 'Invoices', desc: 'Outstanding & paid invoices', to: '/invoices', show: isMgr },
+    { title: 'Subscriptions', desc: 'Recurring plans & renewals', to: '/subscriptions', show: isMgr },
     { title: 'Deal Health', desc: 'Stalled deals & anomalies', to: '/deal-health', show: isMgr },
     { title: 'Reports', desc: 'Performance & exports', to: '/reports', show: isMgr },
     {

@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
+import AuditLog from '@/components/AuditLog'
+import StockPanel from '@/components/StockPanel'
 import ResourceManager, { type Field } from '@/components/ResourceManager'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -103,6 +105,7 @@ const productFields: Field[] = [
 export default function Admin() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const [stockFor, setStockFor] = useState<string | null>(null)
   return (
     <AppShell
       crumbs={[
@@ -115,6 +118,7 @@ export default function Admin() {
           <TabsList className="flex-wrap h-auto">
             {isAdmin && <TabsTrigger value="products">Products</TabsTrigger>}
             {isAdmin && <TabsTrigger value="categories">Categories</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="customers">Customers</TabsTrigger>}
             <TabsTrigger value="tiers">Discount Tiers</TabsTrigger>
             <TabsTrigger value="ceilings">Category Ceilings</TabsTrigger>
             {isAdmin && <TabsTrigger value="warehouses">Warehouses</TabsTrigger>}
@@ -123,6 +127,7 @@ export default function Admin() {
             {isAdmin && <TabsTrigger value="pairings">Upsell Pairings</TabsTrigger>}
             {isAdmin && <TabsTrigger value="plans">Subscription Plans</TabsTrigger>}
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
+            <TabsTrigger value="audit">Audit Log</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
@@ -134,11 +139,19 @@ export default function Admin() {
                 columns={[
                   { key: 'name', label: 'Name' },
                   { key: 'sku', label: 'SKU' },
+                  { key: 'category', label: 'Category' },
                   { key: 'type', label: 'Type' },
                   { key: 'unitPrice', label: 'Price' },
                   { key: 'unitCost', label: 'Cost' },
+                  { key: 'stock', label: 'Stock' },
+                  { key: 'stockByWarehouse', label: 'By warehouse' },
                 ]}
                 fields={productFields}
+                rowActions={(row) => (
+                  <Button size="sm" variant="ghost" onClick={() => setStockFor(row.id)}>
+                    Stock
+                  </Button>
+                )}
               />
             </TabsContent>}
 
@@ -148,6 +161,23 @@ export default function Admin() {
                 endpoint="/config/categories"
                 columns={[{ key: 'name', label: 'Name' }]}
                 fields={[{ name: 'name', label: 'Name' }]}
+              />
+            </TabsContent>}
+
+            {isAdmin && <TabsContent value="customers">
+              <ResourceManager
+                title="Customer"
+                endpoint="/config/customers"
+                columns={[
+                  { key: 'name', label: 'Name' },
+                  { key: 'email', label: 'Email' },
+                  { key: 'tier', label: 'Tier' },
+                ]}
+                fields={[
+                  { name: 'name', label: 'Name' },
+                  { name: 'email', label: 'Email' },
+                  { name: 'tier', label: 'Tier', type: 'select', options: tierOpts, default: 'bronze' },
+                ]}
               />
             </TabsContent>}
 
@@ -171,7 +201,7 @@ export default function Admin() {
                 title="Ceiling"
                 endpoint="/config/category-ceilings"
                 columns={[
-                  { key: 'categoryId', label: 'Category Id' },
+                  { key: 'category', label: 'Category' },
                   { key: 'maxDiscountPct', label: 'Max Discount %' },
                 ]}
                 fields={[
@@ -327,7 +357,7 @@ export default function Admin() {
                 fields={[
                   { name: 'name', label: 'Name' },
                   { name: 'email', label: 'Email' },
-                  { name: 'password', label: 'Password' },
+                  { name: 'password', label: 'Password (blank = unchanged)' },
                   {
                     name: 'role',
                     label: 'Role',
@@ -344,12 +374,17 @@ export default function Admin() {
               />
             </TabsContent>}
 
+            <TabsContent value="audit">
+              <AuditLog />
+            </TabsContent>
+
             <TabsContent value="settings">
               <SettingsForm />
             </TabsContent>
           </div>
         </Tabs>
       </div>
+      <StockPanel productId={stockFor} onClose={() => setStockFor(null)} />
     </AppShell>
   )
 }

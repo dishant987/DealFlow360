@@ -4,6 +4,7 @@ import { and, eq, inArray, asc, isNull } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { quotations, approvals, auditLog, customers, users } from '../models/schema.js'
 import { scoreQuotation } from './quotation.controller.js'
+import { quoteNumber } from '../services/quoteNumber.js'
 
 type Step = 'manager' | 'finance'
 
@@ -33,6 +34,8 @@ export async function listApprovals(req: Request, res: Response) {
   const pend = await db
     .select({
       id: quotations.id,
+      seqNo: quotations.seqNo,
+      createdAt: quotations.createdAt,
       customer: customers.name,
       riskScore: quotations.riskScore,
       requiresFinance: quotations.requiresFinance,
@@ -56,7 +59,7 @@ export async function listApprovals(req: Request, res: Response) {
   const visible = pend
     .map((q) => ({ ...q, yourStep: stepForRole(role, byQuote.get(q.id) ?? []) }))
     .filter((q) => q.yourStep !== null)
-  res.json(visible)
+  res.json(visible.map((v: any) => ({ ...v, quoteNumber: quoteNumber(v.seqNo, v.createdAt) })))
 }
 
 /* ---- detail: quote + risk breaches + steps + audit trail ---- */
@@ -64,6 +67,8 @@ export async function getApprovalDetail(req: Request<{ id: string }>, res: Respo
   const [quote] = await db
     .select({
       id: quotations.id,
+      seqNo: quotations.seqNo,
+      createdAt: quotations.createdAt,
       customer: customers.name,
       customerTier: customers.tier,
       status: quotations.status,
@@ -106,7 +111,14 @@ export async function getApprovalDetail(req: Request<{ id: string }>, res: Respo
     .orderBy(asc(auditLog.createdAt))
 
   const risk = await scoreQuotation(req.params.id)
-  res.json({ ...quote, steps, audit, risk, yourStep: stepForRole(req.user!.role, steps) })
+  res.json({
+    ...quote,
+    quoteNumber: quoteNumber(quote.seqNo, quote.createdAt),
+    steps,
+    audit,
+    risk,
+    yourStep: stepForRole(req.user!.role, steps),
+  })
 }
 
 /* ---- approve / reject / return ---- */

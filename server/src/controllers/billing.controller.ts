@@ -25,10 +25,26 @@ import {
 
 const round2 = (x: number) => Math.round(x * 100) / 100
 
+// invoices may only be raised once the deal has cleared approval
+const BILLABLE = ['approved', 'confirmed', 'fulfilled', 'invoiced']
+
 /* ---- generate invoices + subscription schedules ---- */
 export async function generateBilling(req: Request<{ id: string }>, res: Response) {
   const [q] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
   if (!q) return res.status(404).json({ error: 'not found' })
+  if (!BILLABLE.includes(q.status))
+    return res.status(400).json({
+      error: `This quotation is ${q.status.replace(/_/g, ' ')} — it must be approved before billing can be generated.`,
+    })
+
+  // Regenerating deletes the invoices, and payments cascade with them — so once
+  // money has been recorded the billing run is locked.
+  const existing = await db.select().from(invoices).where(eq(invoices.quotationId, req.params.id))
+  if (existing.some((i) => i.status === 'paid'))
+    return res.status(400).json({
+      error:
+        'Billing cannot be regenerated — a payment has already been recorded against this quotation.',
+    })
 
   const lines = await db
     .select({

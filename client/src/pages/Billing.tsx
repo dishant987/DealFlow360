@@ -3,9 +3,11 @@ import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import { useAuth } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
 import { Button } from '@/components/ui/button'
+import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -50,12 +52,14 @@ export default function Billing() {
       toast.success(ok)
       refresh()
     } catch (e: any) {
-      toast.error(e?.response?.data?.error ?? 'Action failed')
+      toast.error(errText(e, 'Action failed'))
     }
   }
 
   const b = billing.data
-  const isEmpty = b && b.invoices.length === 0 && b.schedules.length === 0
+  const isEmpty = b && (b.invoices?.length ?? 0) === 0 && (b.schedules?.length ?? 0) === 0
+  // regenerating deletes invoices (payments cascade) — lock it once money is in
+  const hasPayment = (b?.invoices ?? []).some((i) => i.status === 'paid')
 
   return (
     <AppShell
@@ -67,7 +71,11 @@ export default function Billing() {
       ]}
     >
       <div className="space-y-8 max-w-4xl">
-        {canAct ? (
+        {canAct && hasPayment ? (
+          <p className="text-sm rounded bg-muted px-3 py-2 text-muted-foreground">
+            Billing is locked — a payment has been recorded against this quotation.
+          </p>
+        ) : canAct ? (
           <Button onClick={() => run(() => api.post(`/quotations/${id}/billing/generate`), 'Billing generated')}>
             {isEmpty ? 'Generate Billing' : 'Regenerate Billing'}
           </Button>
@@ -117,7 +125,7 @@ export default function Billing() {
                   </TableCell>
                 </TableRow>
               ))}
-              {b?.invoices.length === 0 && (
+              {(b?.invoices?.length ?? 0) === 0 && (
                 <TableRow>
                   <TableCell colSpan={4} className="text-muted-foreground text-sm">
                     No invoices yet.
@@ -181,10 +189,13 @@ export default function Billing() {
                         >
                           Update
                         </Button>
-                        <Button
+                        <ConfirmButton
                           size="sm"
                           variant="destructive"
-                          onClick={() =>
+                          title={`Cancel the ${s.plan} subscription?`}
+                          description="Billing stops and a prorated refund credit note is raised automatically."
+                          confirmLabel="Cancel subscription"
+                          onConfirm={() =>
                             run(
                               () =>
                                 api.post(
@@ -195,13 +206,13 @@ export default function Billing() {
                           }
                         >
                           Cancel
-                        </Button>
+                        </ConfirmButton>
                       </div>
                     )}
                   </TableCell>
                 </TableRow>
               ))}
-              {b?.schedules.length === 0 && (
+              {(b?.schedules?.length ?? 0) === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-muted-foreground text-sm">
                     No recurring lines.
@@ -213,11 +224,11 @@ export default function Billing() {
         </section>
 
         {/* credit notes */}
-        {(b?.creditNotes.length ?? 0) > 0 && (
+        {(b?.creditNotes?.length ?? 0) > 0 && (
           <section>
             <h2 className="font-semibold mb-2">Credit notes</h2>
             <ul className="text-sm space-y-1">
-              {b!.creditNotes.map((c) => (
+              {(b?.creditNotes ?? []).map((c) => (
                 <li key={c.id} className="flex justify-between border-b py-1">
                   <span>{c.reason}</span>
                   <span>${Number(c.amount).toFixed(2)}</span>

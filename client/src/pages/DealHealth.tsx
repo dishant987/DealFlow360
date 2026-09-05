@@ -1,18 +1,19 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 
-type Stalled = { id: string; customer: string; rep: string; status: string; daysInactive: number }
-type Anomaly = { id: string; customer: string; rep: string; riskScore: number; repAvg: number }
+type Stalled = { id: string; quoteNumber: string; customer: string; rep: string; status: string; daysInactive: number }
+type Anomaly = { id: string; quoteNumber: string; customer: string; rep: string; riskScore: number; repAvg: number }
 type Health = {
   stalledDays: number
   stalled: Stalled[]
   anomalies: Anomaly[]
-  slippage: { id: string; customer: string }[]
+  slippage: { id: string; quoteNumber: string; customer: string }[]
 }
 
 export default function DealHealth() {
@@ -36,9 +37,18 @@ export default function DealHealth() {
   const h = health.data
 
   const stalledCols: Column<Stalled>[] = [
+    {
+      key: 'quoteNumber',
+      label: 'Quote #',
+      render: (r) => (
+        <Link to={`/quotations/${r.id}`} className="font-mono text-xs text-primary hover:underline">
+          {r.quoteNumber}
+        </Link>
+      ),
+    },
     { key: 'customer', label: 'Customer' },
     { key: 'rep', label: 'Rep' },
-    { key: 'status', label: 'Status', render: (r) => r.status.replace(/_/g, ' ') },
+    { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     {
       key: 'daysInactive',
       label: 'Idle',
@@ -70,6 +80,15 @@ export default function DealHealth() {
   ]
 
   const anomalyCols: Column<Anomaly>[] = [
+    {
+      key: 'quoteNumber',
+      label: 'Quote #',
+      render: (r) => (
+        <Link to={`/quotations/${r.id}`} className="font-mono text-xs text-primary hover:underline">
+          {r.quoteNumber}
+        </Link>
+      ),
+    },
     { key: 'customer', label: 'Customer' },
     { key: 'rep', label: 'Rep' },
     {
@@ -129,7 +148,15 @@ export default function DealHealth() {
             <ul className="text-sm space-y-1">
               {h!.slippage.map((s) => (
                 <li key={s.id} className="flex justify-between border-b py-1">
-                  <span>{s.customer}</span>
+                  <span>
+                    <Link
+                      to={`/quotations/${s.id}`}
+                      className="font-mono text-xs text-primary hover:underline mr-2"
+                    >
+                      {s.quoteNumber}
+                    </Link>
+                    {s.customer}
+                  </span>
                   <Button size="sm" variant="ghost" onClick={() => nav(`/quotations/${s.id}/fulfillment`)}>
                     Open
                   </Button>

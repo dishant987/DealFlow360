@@ -13,6 +13,11 @@ import {
 } from '../models/schema.js'
 import { splitLine, shipmentCount, type WhStock } from '../services/fulfillment.js'
 
+// stock may only move once the deal has cleared approval (or the customer confirmed)
+const FULFILLABLE = ['approved', 'confirmed', 'fulfilled', 'invoiced']
+const notFulfillable = (status: string) =>
+  `This quotation is ${status.replace(/_/g, ' ')} — it must be approved before stock can be allocated.`
+
 interface SuggestionLine {
   lineId: string
   product: string
@@ -136,6 +141,8 @@ export async function acceptSplit(req: Request<{ id: string }>, res: Response) {
 
   const [q] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
   if (!q) return res.status(404).json({ error: 'not found' })
+  if (!FULFILLABLE.includes(q.status))
+    return res.status(400).json({ error: notFulfillable(q.status) })
 
   // manual override, or fall back to the computed suggestion
   let allocations = parsed.data.allocations
@@ -155,6 +162,13 @@ export async function acceptSplit(req: Request<{ id: string }>, res: Response) {
     .where(eq(quoteLines.quotationId, req.params.id))
   const neededByLine = new Map(lineRows.map((l) => [l.id, l.quantity]))
   const productByLine = new Map(lineRows.map((l) => [l.id, l.productId]))
+
+  // Only stock-tracked products can be backordered. Services and subscriptions
+  // have no warehouse rows at all — they are not fulfilled from stock, so they
+  // must never appear as a shortfall.
+  const stockedProducts = new Set(
+    (await db.selectDistinct({ productId: stock.productId }).from(stock)).map((r) => r.productId),
+  )
 
   try {
     await db.transaction(async (tx) => {
@@ -204,8 +218,9 @@ export async function acceptSplit(req: Request<{ id: string }>, res: Response) {
         allocatedByLine.set(a.lineId, (allocatedByLine.get(a.lineId) ?? 0) + a.quantity)
       }
 
-      // backorder rows for any shortfall
+      // backorder rows for any shortfall on a STOCKED line
       for (const [lineId, needed] of neededByLine) {
+        if (!stockedProducts.has(productByLine.get(lineId)!)) continue
         const short = needed - (allocatedByLine.get(lineId) ?? 0)
         if (short > 0)
           await tx.insert(fulfillmentAllocations).values({
@@ -260,6 +275,11 @@ export async function getAllocations(req: Request<{ id: string }>, res: Response
 
 /* ---- consolidate: try to fulfill backordered rows from stock that has since arrived ---- */
 export async function consolidateBackorder(req: Request<{ id: string }>, res: Response) {
+  const [quote] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+  if (!quote) return res.status(404).json({ error: 'not found' })
+  if (!FULFILLABLE.includes(quote.status))
+    return res.status(400).json({ error: notFulfillable(quote.status) })
+
   const backorders = await db
     .select({
       id: fulfillmentAllocations.id,

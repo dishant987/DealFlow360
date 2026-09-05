@@ -13,6 +13,7 @@ import {
   subscriptionPlans,
   productPairings,
   productVariants,
+  customers,
 } from '../models/schema.js'
 import {
   listStock,
@@ -20,6 +21,10 @@ import {
   deleteStock,
   listPairings,
   listVariants,
+  listCeilings,
+  listProductsAdmin,
+  productStockDetail,
+  listAudit,
   getSettings,
   updateSettings,
   listUsers,
@@ -38,6 +43,21 @@ const managerConfig = requireRole('manager', 'admin')
 /* ---- catalog / infrastructure: admin only ---- */
 router.use('/categories', adminOnly, crud(categories, z.object({ name: z.string().min(1) })))
 
+router.use(
+  '/customers',
+  adminOnly,
+  crud(
+    customers,
+    z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      tier: z.enum(['bronze', 'silver', 'gold']),
+    }),
+  ),
+)
+
+router.get('/products', adminOnly, listProductsAdmin)
+router.get('/products/:id/stock', adminOnly, productStockDetail)
 router.use(
   '/products',
   adminOnly,
@@ -126,6 +146,7 @@ router.use('/users', adminOnly, (() => {
 /* ---- discount governance & approval chain: Sales Manager (and admin) ---- */
 router.use('/discount-tiers', managerConfig, crud(discountTiers, z.object({ tier, maxDiscountPct: num })))
 
+router.get('/category-ceilings', managerConfig, listCeilings)
 router.use(
   '/category-ceilings',
   managerConfig,
@@ -136,6 +157,8 @@ router.use(
 router.get('/categories-list', managerConfig, async (_req, res) => {
   res.json(await db.select().from(categories))
 })
+
+router.get('/audit', managerConfig, listAudit)
 
 router.get('/settings', managerConfig, getSettings)
 router.patch('/settings', managerConfig, updateSettings)

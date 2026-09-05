@@ -4,8 +4,8 @@ import { z } from 'zod'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { AxiosError } from 'axios'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -29,13 +29,11 @@ export default function Signup() {
 
   const onSubmit = async (data: Form) => {
     try {
-      await api.post('/auth/signup', data)
-      await qc.invalidateQueries({ queryKey: ['me'] })
-      nav('/')
+      const { data: user } = await api.post('/auth/signup', data)
+      qc.setQueryData(['me'], user)
+      nav('/', { replace: true })
     } catch (e) {
-      const msg =
-        e instanceof AxiosError ? (e.response?.data?.error ?? 'Signup failed') : 'Signup failed'
-      toast.error(typeof msg === 'string' ? msg : 'Signup failed')
+      toast.error(errText(e, 'Signup failed'))
     }
   }
 

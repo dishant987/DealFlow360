@@ -10,6 +10,7 @@ import {
   auditLog,
 } from '../models/schema.js'
 import { findDiscountAnomalies } from '../services/anomaly.js'
+import { quoteNumber } from '../services/quoteNumber.js'
 
 const ACTIVE = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
 
@@ -22,6 +23,8 @@ export async function getDealHealth(_req: Request, res: Response) {
   const stalled = await db
     .select({
       id: quotations.id,
+      seqNo: quotations.seqNo,
+      createdAt: quotations.createdAt,
       customer: customers.name,
       rep: users.name,
       status: quotations.status,
@@ -36,6 +39,8 @@ export async function getDealHealth(_req: Request, res: Response) {
   const all = await db
     .select({
       id: quotations.id,
+      seqNo: quotations.seqNo,
+      createdAt: quotations.createdAt,
       repId: quotations.repId,
       riskScore: quotations.riskScore,
       customer: customers.name,
@@ -48,17 +53,26 @@ export async function getDealHealth(_req: Request, res: Response) {
     all.map((q) => ({ id: q.id, repId: q.repId, riskScore: Number(q.riskScore) })),
   )
   const byId = new Map(all.map((q) => [q.id, q]))
-  const anomalies = flagged.map((f) => ({
-    id: f.id,
-    riskScore: f.riskScore,
-    repAvg: f.repAvg,
-    customer: byId.get(f.id)?.customer,
-    rep: byId.get(f.id)?.rep,
-  }))
+  const anomalies = flagged.map((f) => {
+    const q = byId.get(f.id)
+    return {
+      id: f.id,
+      quoteNumber: q ? quoteNumber(q.seqNo, q.createdAt) : '',
+      riskScore: f.riskScore,
+      repAvg: f.repAvg,
+      customer: q?.customer,
+      rep: q?.rep,
+    }
+  })
 
   // delivery slippage: quotes with backordered allocations
   const slippageRows = await db
-    .selectDistinct({ id: quotations.id, customer: customers.name })
+    .selectDistinct({
+      id: quotations.id,
+      seqNo: quotations.seqNo,
+      createdAt: quotations.createdAt,
+      customer: customers.name,
+    })
     .from(fulfillmentAllocations)
     .innerJoin(quotations, eq(fulfillmentAllocations.quotationId, quotations.id))
     .innerJoin(customers, eq(quotations.customerId, customers.id))
@@ -68,10 +82,11 @@ export async function getDealHealth(_req: Request, res: Response) {
     stalledDays,
     stalled: stalled.map((s) => ({
       ...s,
+      quoteNumber: quoteNumber(s.seqNo, s.createdAt),
       daysInactive: Math.floor((Date.now() - new Date(s.lastActivityAt).getTime()) / 86_400_000),
     })),
     anomalies,
-    slippage: slippageRows,
+    slippage: slippageRows.map((r) => ({ ...r, quoteNumber: quoteNumber(r.seqNo, r.createdAt) })),
   })
 }
 

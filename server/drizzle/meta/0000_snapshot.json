@@ -1,5 +1,5 @@
 {
-  "id": "252594a0-ffe5-40f0-8390-5932e34990dc",
+  "id": "7fa2a1ea-c7eb-4c7d-bae5-8f7cd87feac9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -97,7 +97,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -181,7 +181,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -253,7 +253,7 @@
         },
         "next_billing_date": {
           "name": "next_billing_date",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         },
@@ -439,7 +439,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -500,7 +500,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -599,7 +599,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -664,6 +664,12 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "seq_no": {
+          "name": "seq_no",
+          "type": "serial",
+          "primaryKey": false,
+          "notNull": true
+        },
         "quotation_id": {
           "name": "quotation_id",
           "type": "uuid",
@@ -694,20 +700,20 @@
         },
         "issued_at": {
           "name": "issued_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "due_at": {
           "name": "due_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "paid_at": {
           "name": "paid_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         }
@@ -786,7 +792,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -859,7 +865,7 @@
         },
         "paid_at": {
           "name": "paid_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1219,6 +1225,19 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "products_subscription_plan_id_subscription_plans_id_fk": {
+          "name": "products_subscription_plan_id_subscription_plans_id_fk",
+          "tableFrom": "products",
+          "tableTo": "subscription_plans",
+          "columnsFrom": [
+            "subscription_plan_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1245,6 +1264,12 @@
           "primaryKey": true,
           "notNull": true,
           "default": "gen_random_uuid()"
+        },
+        "seq_no": {
+          "name": "seq_no",
+          "type": "serial",
+          "primaryKey": false,
+          "notNull": true
         },
         "customer_id": {
           "name": "customer_id",
@@ -1302,21 +1327,21 @@
         },
         "last_activity_at": {
           "name": "last_activity_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1690,13 +1715,13 @@
         },
         "reset_token_expires_at": {
           "name": "reset_token_expires_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
@@ -1744,7 +1769,7 @@
         },
         "created_at": {
           "name": "created_at",
-          "type": "timestamp",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
