@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { and, eq, inArray, asc, isNull } from 'drizzle-orm'
+import { and, eq, asc, isNull } from 'drizzle-orm'
 import { db } from '../config/db.js'
-import { quotations, approvals, auditLog, customers, users } from '../models/schema.js'
+import { quotations, approvals, auditLog, customers, users, appSettings } from '../models/schema.js'
 import { scoreQuotation } from './quotation.controller.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 
@@ -28,38 +28,113 @@ function stepForRole(
   return null
 }
 
-/* ---- list quotes awaiting THIS user's approval ---- */
+/* ---- list every quotation that needed, needs, or went through approval ----
+   Not just the ones pending for this user: an approver has to be able to see what
+   the other step is sitting on, and what was already decided. `yourStep` still
+   says whether THIS user can act, which is what gates the Review button. */
 export async function listApprovals(req: Request, res: Response) {
   const role = req.user!.role
-  const pend = await db
+
+  const quotes = await db
     .select({
       id: quotations.id,
       seqNo: quotations.seqNo,
       createdAt: quotations.createdAt,
       customer: customers.name,
+      status: quotations.status,
       riskScore: quotations.riskScore,
       requiresFinance: quotations.requiresFinance,
       updatedAt: quotations.updatedAt,
     })
     .from(quotations)
     .innerJoin(customers, eq(quotations.customerId, customers.id))
-    .where(eq(quotations.status, 'pending_approval'))
 
-  const ids = pend.map((q) => q.id)
-  const steps = ids.length
-    ? await db.select().from(approvals).where(inArray(approvals.quotationId, ids))
-    : []
-  const byQuote = new Map<string, { step: Step; action: string | null }[]>()
+  const steps = await db
+    .select({
+      quotationId: approvals.quotationId,
+      step: approvals.step,
+      action: approvals.action,
+      approver: users.name,
+      createdAt: approvals.createdAt,
+    })
+    .from(approvals)
+    .leftJoin(users, eq(approvals.approverId, users.id))
+    .orderBy(asc(approvals.createdAt))
+
+  const byQuote = new Map<string, typeof steps>()
   for (const s of steps) {
     const arr = byQuote.get(s.quotationId) ?? []
-    arr.push({ step: s.step, action: s.action })
+    arr.push(s)
     byQuote.set(s.quotationId, arr)
   }
 
-  const visible = pend
-    .map((q) => ({ ...q, yourStep: stepForRole(role, byQuote.get(q.id) ?? []) }))
-    .filter((q) => q.yourStep !== null)
-  res.json(visible.map((v: any) => ({ ...v, quoteNumber: quoteNumber(v.seqNo, v.createdAt) })))
+  const [settings] = await db.select().from(appSettings).limit(1)
+  const managerThreshold = settings ? Number(settings.managerThreshold) : 5
+  const financeThreshold = settings ? Number(settings.financeThreshold) : 12
+  const riskLabel = (score: number) =>
+    score > financeThreshold ? 'HIGH' : score > managerThreshold ? 'MEDIUM' : 'LOW'
+
+  const rows = quotes
+    // a quote belongs on this screen once it has been through the router: it has
+    // approval steps, or it cleared with none needed (auto-approved)
+    .filter((q) => (byQuote.get(q.id)?.length ?? 0) > 0 || q.status === 'approved')
+    .map((q) => {
+      const mine = byQuote.get(q.id) ?? []
+      const acted = [...mine].reverse().find((s) => s.action !== null)
+      const pendingStep = mine.find((s) => s.action === null)
+
+      let stage: string
+      let outcome: 'pending' | 'returned' | 'approved' | 'rejected'
+      if (mine.length === 0) {
+        stage = 'Auto-Approved'
+        outcome = 'approved'
+      } else if (q.status === 'pending_approval') {
+        stage = pendingStep?.step === 'finance' ? 'Finance' : 'Sales Manager'
+        outcome = 'pending'
+      } else if (q.status === 'rejected') {
+        stage = 'Rejected'
+        outcome = 'rejected'
+      } else if (acted?.action === 'return') {
+        stage = 'Returned for revision'
+        outcome = 'returned'
+      } else if (q.status === 'approved') {
+        stage = 'Approved'
+        outcome = 'approved'
+      } else {
+        stage = q.status.replace(/_/g, ' ')
+        outcome = 'approved'
+      }
+
+      return {
+        id: q.id,
+        quoteNumber: quoteNumber(q.seqNo, q.createdAt),
+        customer: q.customer,
+        status: q.status,
+        riskScore: q.riskScore,
+        riskLabel: mine.length === 0 ? 'LOW' : riskLabel(Number(q.riskScore)),
+        stage,
+        outcome,
+        // nobody is pre-assigned a step in this model — show who last acted instead
+        assignedTo: acted?.approver ?? '—',
+        updatedAt: q.updatedAt,
+        yourStep: stepForRole(
+          role,
+          mine.map((s) => ({ step: s.step, action: s.action })),
+        ),
+      }
+    })
+    .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
+
+  res.json({
+    rows,
+    summary: {
+      pending: rows.filter((r) => r.outcome === 'pending').length,
+      returned: rows.filter((r) => r.outcome === 'returned').length,
+      approved: rows.filter((r) => r.outcome === 'approved').length,
+      rejected: rows.filter((r) => r.outcome === 'rejected').length,
+      actionable: rows.filter((r) => r.yourStep !== null).length,
+    },
+  })
 }
 
 /* ---- detail: quote + risk breaches + steps + audit trail ---- */

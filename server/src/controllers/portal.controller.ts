@@ -79,6 +79,11 @@ const negSchema = z.object({
   message: z.string().optional(),
   counterDiscountPct: z.union([z.number(), z.string()]).optional(),
   quoteLineId: z.string().uuid().optional(),
+  // "can we have this by the 20th?" — a date-only value from the portal's date input
+  requestedDeliveryDate: z
+    .string()
+    .refine((v) => !Number.isNaN(Date.parse(v)), 'invalid date')
+    .optional(),
 })
 
 export async function submitNegotiation(req: Request<{ token: string }>, res: Response) {
@@ -96,6 +101,9 @@ export async function submitNegotiation(req: Request<{ token: string }>, res: Re
     message: parsed.data.message ?? null,
     counterDiscountPct:
       parsed.data.counterDiscountPct != null ? String(parsed.data.counterDiscountPct) : null,
+    requestedDeliveryDate: parsed.data.requestedDeliveryDate
+      ? new Date(parsed.data.requestedDeliveryDate)
+      : null,
   })
   await db
     .update(quotations)
@@ -104,7 +112,11 @@ export async function submitNegotiation(req: Request<{ token: string }>, res: Re
   await db.insert(auditLog).values({
     quotationId: q.id,
     action: `customer_${parsed.data.type}`,
-    detail: { message: parsed.data.message, counterDiscountPct: parsed.data.counterDiscountPct },
+    detail: {
+      message: parsed.data.message,
+      counterDiscountPct: parsed.data.counterDiscountPct,
+      requestedDeliveryDate: parsed.data.requestedDeliveryDate,
+    },
   })
   res.json({ ok: true })
 }

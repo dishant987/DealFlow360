@@ -3,7 +3,15 @@ import { createRequire } from 'module'
 import ExcelJS from 'exceljs'
 import { and, eq, gte, lte, inArray, type SQL } from 'drizzle-orm'
 import { db } from '../config/db.js'
-import { quotations, customers, users, quoteLines, products, categories } from '../models/schema.js'
+import {
+  quotations,
+  customers,
+  users,
+  quoteLines,
+  products,
+  categories,
+  auditLog,
+} from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 
@@ -85,18 +93,67 @@ async function buildReport(query: Request['query']): Promise<{ rows: ReportRow[]
 
   const byStatus: Record<string, number> = {}
   for (const r of rows) byStatus[r.status] = (byStatus[r.status] ?? 0) + 1
+
+  // approval turnaround + upsell effectiveness, both read off the audit trail
+  const trail = ids.length
+    ? await db
+        .select({
+          quotationId: auditLog.quotationId,
+          action: auditLog.action,
+          detail: auditLog.detail,
+          createdAt: auditLog.createdAt,
+        })
+        .from(auditLog)
+        .where(inArray(auditLog.quotationId, ids))
+    : []
+
+  const submittedAt = new Map<string, number>()
+  const decidedAt = new Map<string, number>()
+  const upsellCounts = new Map<string, number>()
+  for (const t of trail) {
+    const qid = t.quotationId!
+    const at = new Date(t.createdAt).getTime()
+    if (t.action === 'submitted') submittedAt.set(qid, Math.min(submittedAt.get(qid) ?? at, at))
+    // the decision that ended the chain, whichever step signed it off last
+    if (t.action.startsWith('approve:') || t.action.startsWith('reject:'))
+      decidedAt.set(qid, Math.max(decidedAt.get(qid) ?? at, at))
+    if (t.action === 'line_added') {
+      const d = t.detail as { product?: string; viaUpsell?: boolean } | null
+      if (d?.viaUpsell && d.product)
+        upsellCounts.set(d.product, (upsellCounts.get(d.product) ?? 0) + 1)
+    }
+  }
+  const turnarounds = [...decidedAt]
+    .filter(([qid]) => submittedAt.has(qid))
+    .map(([qid, done]) => (done - submittedAt.get(qid)!) / 3_600_000)
+    .filter((h) => h >= 0)
+  const topUpsell = [...upsellCounts].sort((a, b) => b[1] - a[1])[0]
+
   const summary = {
     count: rows.length,
     totalValue: Math.round(rows.reduce((s, r) => s + r.amount, 0) * 100) / 100,
     avgRisk: rows.length
       ? Math.round((rows.reduce((s, r) => s + r.riskScore, 0) / rows.length) * 100) / 100
       : 0,
+    avgApprovalHours: turnarounds.length
+      ? Math.round((turnarounds.reduce((s, h) => s + h, 0) / turnarounds.length) * 10) / 10
+      : null,
+    approvalsMeasured: turnarounds.length,
+    topUpsell: topUpsell ? { product: topUpsell[0], count: topUpsell[1] } : null,
     byStatus,
   }
   return { rows, summary }
 }
 
-const emptySummary = () => ({ count: 0, totalValue: 0, avgRisk: 0, byStatus: {} })
+const emptySummary = () => ({
+  count: 0,
+  totalValue: 0,
+  avgRisk: 0,
+  avgApprovalHours: null,
+  approvalsMeasured: 0,
+  topUpsell: null,
+  byStatus: {},
+})
 
 export async function getReport(req: Request, res: Response) {
   res.json(await buildReport(req.query))
@@ -251,6 +308,11 @@ export async function exportReport(req: Request, res: Response) {
             kpi('Quotations', String(summary.count)),
             kpi('Total value', `$${summary.totalValue.toFixed(2)}`),
             kpi('Avg risk score', summary.avgRisk.toFixed(1)),
+            kpi(
+              'Avg approval time',
+              summary.avgApprovalHours == null ? '—' : `${summary.avgApprovalHours}h`,
+            ),
+            kpi('Top upsold', summary.topUpsell ? summary.topUpsell.product : '—'),
           ],
           columnGap: 10,
         },

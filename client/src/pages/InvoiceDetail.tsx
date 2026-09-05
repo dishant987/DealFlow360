@@ -38,6 +38,7 @@ type Detail = {
   creditNotes: { id: string; amount: string; reason: string | null }[]
   paidTotal: number
   balance: number
+  timeline: { key: string; label: string; done: boolean; at: string | null; note?: string }[]
 }
 
 export default function InvoiceDetail() {
@@ -97,6 +98,30 @@ export default function InvoiceDetail() {
     >
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem] max-w-5xl">
         <section className="space-y-6">
+          {/* order → cash progress; nothing shows as shipped while a backorder is open */}
+          <div className="rounded-lg border bg-background p-4">
+            <div className="flex flex-wrap items-start gap-2">
+              {(d.timeline ?? []).map((t, i) => (
+                <div key={t.key} className="flex items-start gap-2">
+                  {i > 0 && <span className="text-muted-foreground mt-1.5">→</span>}
+                  <div className="text-center min-w-24">
+                    <div
+                      className={`mx-auto h-4 w-4 rounded-full ${
+                        t.done ? 'bg-emerald-500' : 'bg-muted border'
+                      }`}
+                    />
+                    <div className={`text-xs mt-1 ${t.done ? 'font-medium' : 'text-muted-foreground'}`}>
+                      {t.label}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {t.at ? new Date(t.at).toLocaleDateString() : t.note ? t.note : '—'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="rounded-lg border bg-background p-4">
             <h2 className="font-semibold mb-3">
               {d.type === 'onetime' ? 'One-time' : 'Recurring'} charges

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
+import { requireAuth, requireRole, quotationAccessParam } from '../middlewares/auth.middleware.js'
 import {
   getSuggestion,
   acceptSplit,
@@ -9,6 +9,8 @@ import {
 
 const router = Router()
 router.use(requireAuth)
+// every :id below is a quotation — reps may only touch their own
+router.param('id', quotationAccessParam)
 
 // reps can view/track; finance/ops (and admin) make the split & backorder decisions
 const ops = requireRole('finance', 'admin')

@@ -31,6 +31,11 @@ const EDITABLE = ['draft', 'rejected']
 const notEditable = (status: string) =>
   `This quotation is ${status.replace(/_/g, ' ')} — it can no longer be edited. Ask an approver to return it for revision.`
 
+// A quotation only reaches the customer once its discounts have cleared the risk
+// router. Sending a draft or an in-review quote would put numbers in front of the
+// customer that no approver ever signed off on.
+const SENDABLE = ['approved', 'sent', 'under_negotiation', 'confirmed']
+
 // Resolve each line's effective ceiling (min of tier + category) and score the quote.
 export async function scoreQuotation(quotationId: string) {
   const [q] = await db
@@ -42,13 +47,20 @@ export async function scoreQuotation(quotationId: string) {
   const orderDiscount = Number(q.orderDiscountPct)
 
   const lines = await db
-    .select({ discountPct: quoteLines.discountPct, categoryId: products.categoryId })
+    .select({
+      id: quoteLines.id,
+      discountPct: quoteLines.discountPct,
+      categoryId: products.categoryId,
+    })
     .from(quoteLines)
     .innerJoin(products, eq(quoteLines.productId, products.id))
     .where(eq(quoteLines.quotationId, quotationId))
 
   const [tierRow] = await db.select().from(discountTiers).where(eq(discountTiers.tier, q.tier))
-  const tierCeiling = tierRow ? Number(tierRow.maxDiscountPct) : 100
+  // Fail CLOSED. A missing tier ceiling used to mean 100%, i.e. no line could ever
+  // breach and the whole approval chain quietly stopped applying to that tier.
+  // With no configured discretion, any discount is over the limit and gets reviewed.
+  const tierCeiling = tierRow ? Number(tierRow.maxDiscountPct) : 0
   const catMap = new Map(
     (await db.select().from(categoryDiscountCeilings)).map((c) => [
       c.categoryId,
@@ -69,11 +81,28 @@ export async function scoreQuotation(quotationId: string) {
       ceiling: cat != null ? Math.min(tierCeiling, cat) : tierCeiling,
     }
   })
-  return computeBlendedRisk(riskLines, thresholds)
+  const risk = computeBlendedRisk(riskLines, thresholds)
+  // breaches carry the index into riskLines, which is built from `lines` in order —
+  // map it back to the line id so the client never has to match on position
+  const overByIndex = new Map(risk.breaches.map((b) => [b.index, b.overBy]))
+  return {
+    ...risk,
+    // the builder re-derives the routing level live as the rep edits, so it needs
+    // the same two thresholds the server scored against
+    thresholds,
+    orderDiscountPct: orderDiscount,
+    byLine: lines.map((l, i) => ({
+      lineId: l.id,
+      ceiling: riskLines[i].ceiling,
+      overBy: overByIndex.get(i) ?? 0,
+    })),
+  }
 }
 
 /* ---- list: quote + customer name + computed total ---- */
-export async function listQuotations(_req: Request, res: Response) {
+export async function listQuotations(req: Request, res: Response) {
+  // same rule as quotationAccessParam: a rep's pipeline is their own deals
+  const scope = req.user!.role === 'rep' ? eq(quotations.repId, req.user!.id) : undefined
   const quotes = await db
     .select({
       id: quotations.id,
@@ -88,6 +117,7 @@ export async function listQuotations(_req: Request, res: Response) {
     })
     .from(quotations)
     .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .where(scope)
 
   const ids = quotes.map((q) => q.id)
   const lines = ids.length
@@ -153,10 +183,13 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
     .where(eq(quoteLines.quotationId, req.params.id))
 
   const risk = await scoreQuotation(req.params.id)
+  const ceilingByLine = new Map((risk?.byLine ?? []).map((b) => [b.lineId, b.ceiling]))
   res.json({
     ...quote,
     quoteNumber: quoteNumber(quote.seqNo, quote.createdAt),
-    lines,
+    // ceiling = min(tier, category) for this line. The client re-checks it live as
+    // the rep types, so a breach shows before submit rather than after.
+    lines: lines.map((l) => ({ ...l, ceiling: ceilingByLine.get(l.id) ?? null })),
     totals: computeQuoteTotals(lines, quote.orderDiscountPct),
     risk,
   })
@@ -238,6 +271,9 @@ export async function addLine(req: Request<{ id: string }>, res: Response) {
       quantity: z.number().int().positive().optional(),
       discountPct: z.union([z.number(), z.string()]).optional(),
       reason: z.string().optional(),
+      // set by the upsell panel so reporting can tell a suggested add from a
+      // line the rep picked out of the catalogue themselves
+      viaUpsell: z.boolean().optional(),
     })
     .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
@@ -288,6 +324,8 @@ export async function addLine(req: Request<{ id: string }>, res: Response) {
       subscriptionPlanId: product.subscriptionPlanId,
     })
     .returning()
+  const scored = await scoreQuotation(quote.id)
+  const ceiling = scored?.byLine.find((b) => b.lineId === line.id)?.ceiling ?? null
   await logEdit(
     quote.id,
     req.user!.id,
@@ -297,10 +335,11 @@ export async function addLine(req: Request<{ id: string }>, res: Response) {
       variant: variant ? `${variant.attribute}: ${variant.value}` : null,
       quantity: p.data.quantity ?? 1,
       unitPrice,
+      viaUpsell: p.data.viaUpsell ?? false,
     },
     p.data.reason,
   )
-  res.status(201).json(line)
+  res.status(201).json({ ...line, ceiling })
 }
 
 /* ---- update a line ---- */
@@ -422,6 +461,13 @@ export async function getUpsell(req: Request<{ id: string }>, res: Response) {
 /* ---- send to customer: generate portal token + set status 'sent' ---- */
 export async function sendToCustomer(req: Request<{ id: string }>, res: Response) {
   const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
+  const [before] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+  if (!before) return res.status(404).json({ error: 'not found' })
+  if (!SENDABLE.includes(before.status))
+    return res.status(400).json({
+      error: `This quotation is ${before.status.replace(/_/g, ' ')} — it must be approved before it can be sent to the customer.`,
+    })
+
   const token = crypto.randomBytes(24).toString('hex')
   const [q] = await db
     .update(quotations)

@@ -12,10 +12,103 @@ import {
   billingSchedules,
   subscriptionPlans,
   fulfillmentAllocations,
+  users,
+  auditLog,
+  appSettings,
+  warehouses,
+  stock,
 } from '../models/schema.js'
+import { findDiscountAnomalies } from '../services/anomaly.js'
 import { createRequire } from 'module'
 import { quoteNumber, invoiceNumber } from '../services/quoteNumber.js'
 import { computeLine } from '../services/pricing.js'
+
+const ACTIVE_STATUSES = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
+
+/* ---- Workspace summary: the KPI tiles + activity feed on the home screen ---- */
+export async function getWorkspaceSummary(req: Request, res: Response) {
+  // a rep's home screen counts their own deals; everyone else sees the pipeline
+  const mine = req.user!.role === 'rep' ? eq(quotations.repId, req.user!.id) : undefined
+
+  const [settings] = await db.select().from(appSettings).limit(1)
+  const stalledDays = settings ? settings.stalledDays : 7
+  const cutoff = Date.now() - stalledDays * 86_400_000
+
+  const quotes = await db
+    .select({
+      id: quotations.id,
+      repId: quotations.repId,
+      status: quotations.status,
+      riskScore: quotations.riskScore,
+      lastActivityAt: quotations.lastActivityAt,
+    })
+    .from(quotations)
+    .where(mine)
+
+  const ids = quotes.map((q) => q.id)
+  const backordered = ids.length
+    ? await db
+        .selectDistinct({ id: fulfillmentAllocations.quotationId })
+        .from(fulfillmentAllocations)
+        .where(
+          and(
+            eq(fulfillmentAllocations.backordered, true),
+            inArray(fulfillmentAllocations.quotationId, ids),
+          ),
+        )
+    : []
+
+  // "at risk" = the same three signals the Deal Health board flags, de-duplicated
+  const atRisk = new Set<string>()
+  for (const q of quotes)
+    if (
+      ACTIVE_STATUSES.includes(q.status as (typeof ACTIVE_STATUSES)[number]) &&
+      new Date(q.lastActivityAt).getTime() < cutoff
+    )
+      atRisk.add(q.id)
+  for (const a of findDiscountAnomalies(
+    quotes.map((q) => ({ id: q.id, repId: q.repId, riskScore: Number(q.riskScore) })),
+  ))
+    atRisk.add(a.id)
+  for (const b of backordered) atRisk.add(b.id)
+
+  const activity = await db
+    .select({
+      id: auditLog.id,
+      action: auditLog.action,
+      createdAt: auditLog.createdAt,
+      user: users.name,
+      customer: customers.name,
+      quotationId: auditLog.quotationId,
+      seqNo: quotations.seqNo,
+      quoteCreatedAt: quotations.createdAt,
+    })
+    .from(auditLog)
+    .innerJoin(quotations, eq(auditLog.quotationId, quotations.id))
+    .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .leftJoin(users, eq(auditLog.userId, users.id))
+    .where(mine)
+    .orderBy(desc(auditLog.createdAt))
+    .limit(8)
+
+  res.json({
+    pendingApprovals: quotes.filter((q) => q.status === 'pending_approval').length,
+    openQuotations: quotes.filter((q) =>
+      ACTIVE_STATUSES.includes(q.status as (typeof ACTIVE_STATUSES)[number]),
+    ).length,
+    atRisk: atRisk.size,
+    scope: req.user!.role === 'rep' ? 'yours' : 'all',
+    activity: activity.map((a) => ({
+      id: a.id,
+      action: a.action.replace(/[_:]/g, ' '),
+      customer: a.customer,
+      user: a.user ?? 'customer (portal)',
+      createdAt: a.createdAt,
+      quotationId: a.quotationId,
+      quoteNumber: quoteNumber(a.seqNo, a.quoteCreatedAt),
+    })),
+  })
+}
 
 /* ---- #12 Invoices list (cross-quotation) ---- */
 export async function listInvoices(req: Request, res: Response) {
@@ -124,8 +217,61 @@ export async function getInvoice(req: Request<{ id: string }>, res: Response) {
 
   const paid = pays.reduce((s, p) => s + Number(p.amount), 0)
 
+  // Delivery/billing timeline, derived from state we already hold — nothing is
+  // marked shipped until every allocation on the order has left a warehouse.
+  const allocs = await db
+    .select({
+      backordered: fulfillmentAllocations.backordered,
+      createdAt: fulfillmentAllocations.createdAt,
+    })
+    .from(fulfillmentAllocations)
+    .where(eq(fulfillmentAllocations.quotationId, inv.quotationId))
+  const shipped = allocs.length > 0 && allocs.every((a) => !a.backordered)
+  const lastAlloc = allocs.length
+    ? allocs.map((a) => a.createdAt).sort((a, b) => +new Date(b) - +new Date(a))[0]
+    : null
+  // An invoice cannot exist unless the order cleared approval or the customer
+  // confirmed it — billing generation refuses any other status. So read the
+  // confirmation off the audit trail rather than off the CURRENT status, which
+  // may since have moved on (or back) and would render the steps out of order.
+  const confirmedEntry = await db
+    .select({ action: auditLog.action, createdAt: auditLog.createdAt })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.quotationId, inv.quotationId),
+        inArray(auditLog.action, [
+          'customer_confirmed',
+          'approve:finance',
+          'approve:manager',
+          'billing_generated',
+        ]),
+      ),
+    )
+    .orderBy(auditLog.createdAt)
+    .limit(1)
+
+  const timeline = [
+    {
+      key: 'confirmed',
+      label: 'Order Confirmed',
+      done: true,
+      at: (confirmedEntry[0]?.createdAt ?? null) as Date | null,
+    },
+    {
+      key: 'shipped',
+      label: 'Shipped',
+      done: shipped,
+      at: shipped ? lastAlloc : null,
+      note: allocs.some((a) => a.backordered) ? 'partially allocated — backorder open' : undefined,
+    },
+    { key: 'invoiced', label: 'Invoiced', done: true, at: inv.issuedAt },
+    { key: 'paid', label: 'Paid', done: inv.status === 'paid', at: inv.paidAt },
+  ]
+
   res.json({
     ...inv,
+    timeline,
     invoiceNumber: invoiceNumber(inv.seqNo, inv.issuedAt),
     quoteNumber: quoteNumber(inv.quoteSeqNo, inv.quoteCreatedAt),
     overdue: inv.status !== 'paid' && !!inv.dueAt && new Date(inv.dueAt) < new Date(),
@@ -161,8 +307,58 @@ export async function listFulfillmentQueue(_req: Request, res: Response) {
         .where(inArray(fulfillmentAllocations.quotationId, ids))
     : []
 
-  res.json(
-    quotes.map((q) => {
+  // Live stock per warehouse. Stock is decremented the moment an allocation is
+  // accepted, so stock.quantity IS the available figure; "reserved" is what has
+  // been allocated to a deal that has not been invoiced out yet.
+  const onHand = await db
+    .select({
+      warehouseId: stock.warehouseId,
+      warehouse: warehouses.name,
+      productId: stock.productId,
+      product: products.name,
+      available: stock.quantity,
+      reorderLevel: stock.reorderLevel,
+    })
+    .from(stock)
+    .innerJoin(warehouses, eq(stock.warehouseId, warehouses.id))
+    .innerJoin(products, eq(stock.productId, products.id))
+    .orderBy(warehouses.name, products.name)
+
+  const reservedRows = await db
+    .select({
+      warehouseId: fulfillmentAllocations.warehouseId,
+      productId: quoteLines.productId,
+      quantity: fulfillmentAllocations.quantity,
+    })
+    .from(fulfillmentAllocations)
+    .innerJoin(quoteLines, eq(fulfillmentAllocations.quoteLineId, quoteLines.id))
+    .innerJoin(quotations, eq(fulfillmentAllocations.quotationId, quotations.id))
+    .where(
+      and(eq(fulfillmentAllocations.backordered, false), eq(quotations.status, 'fulfilled')),
+    )
+  const reservedBy = new Map<string, number>()
+  for (const r of reservedRows)
+    if (r.warehouseId)
+      reservedBy.set(
+        `${r.warehouseId}:${r.productId}`,
+        (reservedBy.get(`${r.warehouseId}:${r.productId}`) ?? 0) + r.quantity,
+      )
+
+  const stockRows = onHand.map((s) => {
+    const reserved = reservedBy.get(`${s.warehouseId}:${s.productId}`) ?? 0
+    return {
+      warehouseId: s.warehouseId,
+      warehouse: s.warehouse,
+      productId: s.productId,
+      product: s.product,
+      inStock: s.available + reserved,
+      reserved,
+      available: s.available,
+      belowReorder: s.available <= s.reorderLevel,
+    }
+  })
+
+  const orders = quotes.map((q) => {
       const mine = allocs.filter((a) => a.quotationId === q.id)
       const allocated = mine.filter((a) => !a.backordered).reduce((n, a) => n + a.quantity, 0)
       const backordered = mine.filter((a) => a.backordered).reduce((n, a) => n + a.quantity, 0)
@@ -181,8 +377,9 @@ export async function listFulfillmentQueue(_req: Request, res: Response) {
         // awaiting = never split; partial = has a backorder; complete = fully allocated
         state: mine.length === 0 ? 'awaiting' : backordered > 0 ? 'partial' : 'complete',
       }
-    }),
-  )
+    })
+
+  res.json({ orders, stock: stockRows })
 }
 
 /* ---- #9 Subscriptions list (cross-quotation) ---- */
@@ -224,6 +421,8 @@ export async function listSubscriptions(_req: Request, res: Response) {
     subscriptions: out,
     summary: {
       active: active.length,
+      // paused plans are excluded from MRR below — they are not billing right now
+      paused: out.filter((s) => s.status === 'paused').length,
       cancelled: out.filter((s) => s.status === 'cancelled').length,
       // normalised to a monthly figure so mixed intervals are comparable
       mrr: round2(
