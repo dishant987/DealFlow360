@@ -1,8 +1,9 @@
-import express from 'express'
+import express, { type NextFunction, type Request, type Response } from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import { pool } from './config/db.js'
+import { friendlyDbError } from './utils/dbError.js'
 import { emitChange } from './config/socket.js'
 import authRouter from './routes/auth.routes.js'
 import configRouter from './routes/config.routes.js'
@@ -60,3 +61,13 @@ app.use('/api', billingRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/reports', reportRouter)
 app.use('/api', opsRouter)
+
+// Express 5 forwards rejected promises here. Without this the default handler
+// answers with an HTML stack trace, leaking SQL and schema to the browser.
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  const friendly = friendlyDbError(err)
+  if (friendly) return res.status(friendly.status).json({ error: friendly.error })
+  console.error(`[error] ${req.method} ${req.originalUrl}:`, err)
+  if (res.headersSent) return next(err)
+  res.status(500).json({ error: 'Something went wrong on the server. Please try again.' })
+})

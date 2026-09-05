@@ -1,9 +1,20 @@
 import { useState, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { errText } from '@/lib/errors'
 import DataTable, { type Column as DTColumn } from '@/components/DataTable'
+import Panel from '@/components/Panel'
+import FormField from '@/components/FormField'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
@@ -41,18 +52,25 @@ function FieldInput({
   field,
   value,
   onChange,
+  id,
 }: {
   field: Field
   value: any
   onChange: (v: any) => void
+  id?: string
 }) {
   const options = useOptions(field)
   const isSelect = field.type === 'select'
 
   if (field.type === 'boolean')
     return (
-      <label className="flex items-center gap-2 text-sm h-9">
-        <input type="checkbox" checked={!!value} onChange={(e) => onChange(e.target.checked)} />
+      <label className="flex h-9 items-center gap-2 text-sm">
+        <input
+          id={id}
+          type="checkbox"
+          checked={!!value}
+          onChange={(e) => onChange(e.target.checked)}
+        />
         {field.label}
       </label>
     )
@@ -60,6 +78,8 @@ function FieldInput({
   if (isSelect)
     return (
       <Select
+        id={id}
+        className="w-full"
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -74,25 +94,31 @@ function FieldInput({
 
   return (
     <Input
+      id={id}
       type={field.type === 'number' ? 'number' : 'text'}
       placeholder={field.label}
       value={value ?? ''}
       onChange={(e) =>
         onChange(field.type === 'number' ? Number(e.target.value) : e.target.value)
       }
-      className="w-40"
     />
   )
 }
 
 export default function ResourceManager({
   title,
+  plural,
+  description,
   endpoint,
   columns,
   fields,
   rowActions,
 }: {
   title: string
+  /** plural heading; defaults to title + "s", which is wrong for "Category" */
+  plural?: string
+  /** one line explaining what this tab configures and what it affects */
+  description?: string
   endpoint: string
   columns: Column[]
   fields: Field[]
@@ -100,17 +126,24 @@ export default function ResourceManager({
   rowActions?: (row: any) => ReactNode
 }) {
   const qc = useQueryClient()
+  const heading = plural ?? `${title}s`
   const blank = () => Object.fromEntries(fields.map((f) => [f.name, f.default ?? '']))
   const [form, setForm] = useState<Record<string, any>>(blank)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
 
-  // load a row into the form below — reuses the same field rendering as "add"
   const startEdit = (row: any) => {
     setEditingId(row.id)
     setForm(Object.fromEntries(fields.map((f) => [f.name, row[f.name] ?? ''])))
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' })
+    setOpen(true)
   }
-  const cancelEdit = () => {
+  const startCreate = () => {
+    setEditingId(null)
+    setForm(blank())
+    setOpen(true)
+  }
+  const closeDialog = () => {
+    setOpen(false)
     setEditingId(null)
     setForm(blank())
   }
@@ -129,7 +162,7 @@ export default function ResourceManager({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [endpoint] })
-      setForm(blank())
+      closeDialog()
       toast.success(`${title} added`)
     },
     onError: (e) => toast.error(errMsg(e, 'Create failed')),
@@ -143,7 +176,7 @@ export default function ResourceManager({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [endpoint] })
-      cancelEdit()
+      closeDialog()
       toast.success(`${title} updated`)
     },
     onError: (e) => toast.error(errMsg(e, 'Update failed')),
@@ -165,19 +198,28 @@ export default function ResourceManager({
       label: '',
       sortable: false,
       render: (row: any) => (
-        <div className="flex gap-1">
+        <div className="flex items-center justify-end gap-0.5">
           {rowActions?.(row)}
-          <Button size="sm" variant="outline" onClick={() => startEdit(row)}>
-            Edit
+          <Button
+            size="sm"
+            variant="ghost"
+            className="px-2"
+            title={`Edit this ${title.toLowerCase()}`}
+            onClick={() => startEdit(row)}
+          >
+            <Pencil className="size-4" />
+            <span className="sr-only">Edit</span>
           </Button>
           <ConfirmButton
             size="sm"
             variant="ghost"
+            className="px-2 text-muted-foreground hover:text-destructive"
             title={`Delete this ${title.toLowerCase()}?`}
             description="This cannot be undone."
             onConfirm={() => remove.mutate(row.id)}
           >
-            Delete
+            <Trash2 className="size-4" />
+            <span className="sr-only">Delete</span>
           </ConfirmButton>
         </div>
       ),
@@ -186,42 +228,92 @@ export default function ResourceManager({
 
   return (
     <div className="space-y-4">
-      <DataTable
-        rows={list.data ?? []}
-        columns={dtColumns}
-        loading={list.isLoading}
-        pageSize={8}
-        searchPlaceholder={`Search ${title.toLowerCase()}…`}
-        emptyMessage="No records yet."
-      />
+      <Panel
+        title={heading}
+        description={description}
+        bodyClassName="pt-0"
+        className="[&>header]:pb-2"
+        action={
+          <Button size="sm" onClick={startCreate}>
+            <Plus className="size-4" /> Add {title.toLowerCase()}
+          </Button>
+        }
+      >
+        <DataTable
+          rows={list.data ?? []}
+          columns={dtColumns}
+          loading={list.isLoading}
+          pageSize={8}
+          searchPlaceholder={`Search ${title.toLowerCase()}…`}
+          emptyMessage={`No ${heading.toLowerCase()} yet — add the first one below.`}
+        />
+      </Panel>
 
-      <div className="flex flex-wrap items-center gap-2 border-t pt-4">
-        {editingId && (
-          <span className="w-full text-xs text-muted-foreground">Editing {title.toLowerCase()} — change the fields below and save.</span>
-        )}
-        {fields.map((f) => (
-          <FieldInput
-            key={f.name}
-            field={f}
-            value={form[f.name]}
-            onChange={(v) => setForm((s) => ({ ...s, [f.name]: v }))}
-          />
-        ))}
-        {editingId ? (
-          <>
-            <Button onClick={() => update.mutate()} disabled={update.isPending}>
-              Save {title}
-            </Button>
-            <Button variant="ghost" onClick={cancelEdit}>
+      {/* Editing used to scroll the page to a form pinned under the table, which
+          on a long list meant losing sight of the row being edited. */}
+      <Dialog open={open} onOpenChange={(v) => (v ? setOpen(true) : closeDialog())}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {editingId ? `Edit ${title.toLowerCase()}` : `Add ${title.toLowerCase()}`}
+            </DialogTitle>
+            <DialogDescription>
+              {editingId
+                ? 'Change what you need and save. Nothing is written until you do.'
+                : description}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            id="resource-form"
+            className="grid gap-3 sm:grid-cols-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (editingId) update.mutate()
+              else create.mutate()
+            }}
+          >
+            {fields.map((f) =>
+              f.type === 'boolean' ? (
+                <div key={f.name} className="sm:col-span-2">
+                  <FieldInput
+                    id={f.name}
+                    field={f}
+                    value={form[f.name]}
+                    onChange={(v) => setForm((s) => ({ ...s, [f.name]: v }))}
+                  />
+                </div>
+              ) : (
+                <FormField key={f.name} id={f.name} label={f.label}>
+                  <FieldInput
+                    id={f.name}
+                    field={f}
+                    value={form[f.name]}
+                    onChange={(v) => setForm((s) => ({ ...s, [f.name]: v }))}
+                  />
+                </FormField>
+              ),
+            )}
+          </form>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeDialog}>
               Cancel
             </Button>
-          </>
-        ) : (
-          <Button onClick={() => create.mutate()} disabled={create.isPending}>
-            Add {title}
-          </Button>
-        )}
-      </div>
+            <Button
+              type="submit"
+              form="resource-form"
+              disabled={create.isPending || update.isPending}
+            >
+              {create.isPending || update.isPending
+                ? 'Saving…'
+                : editingId
+                  ? 'Save changes'
+                  : `Add ${title.toLowerCase()}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

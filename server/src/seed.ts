@@ -55,6 +55,19 @@ async function wipe() {
   await db.execute(sql`ALTER SEQUENCE invoices_seq_no_seq RESTART WITH 1`)
 }
 
+// Deterministic PRNG. The generated trading history has to be identical on every
+// reseed, or the numbers quoted in the manual test guide drift each run.
+function mulberry32(seed: number) {
+  let a = seed
+  return () => {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 const DAY = 86_400_000
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY)
 const plusHours = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000)
@@ -85,7 +98,8 @@ async function seed() {
     ])
     .returning()
 
-  const [acme, beta, gamma, nova, zenith, delta, orion] = await db
+  const [acme, beta, gamma, nova, zenith, delta, orion, helix, vertex, ironwood, kestrel, solace] =
+    await db
     .insert(s.customers)
     .values([
       { name: 'Acme Corp', email: 'buyer@acme.com', tier: 'gold' },
@@ -95,6 +109,11 @@ async function seed() {
       { name: 'Zenith Co', email: 'buyer@zenithco.com', tier: 'silver' },
       { name: 'Delta LLC', email: 'buyer@delta.com', tier: 'bronze' },
       { name: 'Orion Ltd', email: 'buyer@orion.com', tier: 'gold' },
+      { name: 'Helix Systems', email: 'buyer@helix.com', tier: 'silver' },
+      { name: 'Vertex Manufacturing', email: 'buyer@vertex.com', tier: 'gold' },
+      { name: 'Ironwood Traders', email: 'buyer@ironwood.com', tier: 'bronze' },
+      { name: 'Kestrel Logistics', email: 'buyer@kestrel.com', tier: 'silver' },
+      { name: 'Solace Health', email: 'buyer@solace.com', tier: 'bronze' },
     ])
     .returning()
 
@@ -851,6 +870,106 @@ async function seed() {
       reason: 'Customer went with an incumbent supplier',
       createdAt: plusHours(createdAt, 48),
     })
+  }
+
+  /* --- 26+. generated trading history ----------------------------------
+     The hand-written scenarios above each demonstrate one behaviour. This block
+     supplies volume and, more importantly, TIME SPREAD: without it every deal
+     sits inside the last 50 days and the report date filters have nothing to
+     filter. Deals here run back roughly ten months.
+
+     Only services and subscriptions are used. Those carry no warehouse stock,
+     so nothing here disturbs the laptop and monitor levels the fulfilment
+     walkthrough depends on.                                                  */
+  {
+    const rand = mulberry32(20260906)
+    const pick = <T,>(xs: T[]): T => xs[Math.floor(rand() * xs.length)]
+    const between = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1))
+
+    const BOOK = [acme, beta, gamma, nova, zenith, delta, orion, helix, vertex, ironwood, kestrel, solace]
+    const REPS = [riya, dev, sana]
+    const CATALOGUE = [setup, warranty, training, support, carePlan, premiumSla, enterprise]
+    // weighted towards closed business, which is what a year of history mostly is
+    const STATUSES = [
+      ...Array(22).fill('invoiced'),
+      ...Array(7).fill('approved'),
+      ...Array(9).fill('cancelled'),
+      ...Array(5).fill('rejected'),
+      ...Array(6).fill('draft'),
+      ...Array(6).fill('sent'),
+    ] as (typeof s.quoteStatusEnum.enumValues)[number][]
+
+    for (const status of STATUSES) {
+      const customer = pick(BOOK)
+      const rep = pick(REPS)
+      const ceiling = Math.min(TIER_CEILING[customer.tier], 10) // services & subs cap at 10
+      const createdDaysAgo = between(35, 300)
+
+      const lines: DemoLine[] = []
+      for (let i = 0; i < between(1, 3); i++) {
+        const product = pick(CATALOGUE)
+        if (lines.some((l) => l.product.id === product.id)) continue
+        // mostly compliant; one deal in six pushes a little past the ceiling so
+        // rep averages reflect real behaviour rather than a flat zero
+        const over = rand() < 0.17
+        lines.push({
+          product,
+          qty: between(1, 4),
+          disc: over ? ceiling + between(1, 3) : between(0, ceiling),
+          viaUpsell: rand() < 0.25,
+        })
+      }
+
+      const { quote, lines: rows, risk, createdAt } = await makeQuote({
+        customer,
+        rep,
+        lines,
+        status,
+        createdDaysAgo,
+        activityDaysAgo: createdDaysAgo - between(0, 3),
+      })
+
+      if (status !== 'draft') await submitted(quote.id, rep, plusHours(createdAt, between(1, 6)), risk)
+      if (risk.requiresManager && (status === 'approved' || status === 'invoiced'))
+        await decide(quote.id, 'manager', 'approve', manoj, plusHours(createdAt, between(4, 30)))
+      if (status === 'rejected' && risk.requiresManager)
+        await decide(quote.id, 'manager', 'reject', manoj, plusHours(createdAt, between(4, 30)))
+
+      if (status === 'invoiced') {
+        const total = rows.reduce(
+          (sum, l) =>
+            sum +
+            computeLine({
+              quantity: l.qty,
+              unitPrice: l.unitPrice,
+              unitCost: l.product.unitCost,
+              discountPct: l.disc,
+            }).net,
+          0,
+        )
+        const issued = daysAgo(createdDaysAgo - 2)
+        const paid = rand() < 0.72
+        const [inv] = await db
+          .insert(s.invoices)
+          .values({
+            quotationId: quote.id,
+            type: 'onetime',
+            status: paid ? 'paid' : 'sent',
+            amount: money(total),
+            issuedAt: issued,
+            dueAt: new Date(issued.getTime() + 14 * DAY),
+            paidAt: paid ? new Date(issued.getTime() + between(2, 13) * DAY) : null,
+          })
+          .returning()
+        if (paid)
+          await db.insert(s.payments).values({
+            invoiceId: inv.id,
+            amount: money(total),
+            method: pick(['bank transfer', 'card', 'manual']),
+            paidAt: inv.paidAt!,
+          })
+      }
+    }
   }
 
   /* ------------------------------------------------------------------ */

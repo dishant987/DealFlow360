@@ -7,6 +7,9 @@ import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import KanbanBoard, { type Quote } from '@/components/KanbanBoard'
+import { Trash2 } from 'lucide-react'
+import { errText } from '@/lib/errors'
+import ConfirmButton from '@/components/ConfirmButton'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 
@@ -41,6 +44,16 @@ export default function Quotations() {
       nav(`/quotations/${q.id}`)
     },
     onError: () => toast.error('Could not create quotation'),
+  })
+
+  const remove = useMutation({
+    mutationFn: async (id: string) => (await api.delete(`/quotations/${id}`)).data,
+    onSuccess: (d: { deleted?: string }) => {
+      qc.invalidateQueries({ queryKey: ['quotations'] })
+      qc.invalidateQueries({ queryKey: ['summary'] })
+      toast.success(d.deleted ? `${d.deleted} deleted` : 'Draft deleted')
+    },
+    onError: (e) => toast.error(errText(e, 'Could not delete this quotation')),
   })
 
   const columns: Column<Quote>[] = [
@@ -78,6 +91,28 @@ export default function Quotations() {
       label: 'Updated',
       value: (r) => new Date(r.updatedAt).getTime(),
       render: (r) => new Date(r.updatedAt).toLocaleDateString(),
+    },
+    {
+      key: 'actions',
+      label: '',
+      sortable: false,
+      // only drafts: everything further along has to be cancelled so its
+      // history survives, which is what the server enforces too
+      render: (r) =>
+        r.status === 'draft' ? (
+          <ConfirmButton
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground hover:text-destructive"
+            title={`Delete ${r.quoteNumber}?`}
+            description={`This permanently removes the draft for ${r.customer} and its lines. It cannot be undone.`}
+            confirmLabel="Delete draft"
+            onConfirm={() => remove.mutate(r.id)}
+          >
+            <Trash2 className="size-4" />
+            <span className="sr-only">Delete draft</span>
+          </ConfirmButton>
+        ) : null,
     },
   ]
 

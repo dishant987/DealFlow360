@@ -1,7 +1,21 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Menu, RefreshCw, PanelsTopLeft } from 'lucide-react'
+import {
+  Activity,
+  BadgeCheck,
+  BarChart3,
+  FileText,
+  LayoutDashboard,
+  Menu,
+  PanelsTopLeft,
+  Receipt,
+  RefreshCcw,
+  RefreshCw,
+  Settings2,
+  Truck,
+  type LucideIcon,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
@@ -11,28 +25,51 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 
 export type Crumb = { label: string; to?: string }
 
-type NavEntry = { to: string; label: string; badgeKey?: 'pendingApprovals' }
+type NavEntry = {
+  to: string
+  label: string
+  icon: LucideIcon
+  badgeKey?: 'pendingApprovals'
+}
 
 function navFor(role: string | undefined): NavEntry[] {
   const isMgr = !!role && ['manager', 'finance', 'admin'].includes(role)
+  // icons match the Workspace tiles, so the same concept looks the same everywhere
   return [
-    { to: '/', label: 'Workspace' },
-    { to: '/quotations', label: 'Quotations' },
+    { to: '/', label: 'Workspace', icon: LayoutDashboard },
+    { to: '/quotations', label: 'Quotations', icon: FileText },
     ...(isMgr
       ? [
-          { to: '/approvals', label: 'Approvals', badgeKey: 'pendingApprovals' as const },
-          { to: '/fulfillment', label: 'Fulfillment' },
-          { to: '/invoices', label: 'Invoices' },
-          { to: '/subscriptions', label: 'Subscriptions' },
-          { to: '/deal-health', label: 'Deal Health' },
-          { to: '/reports', label: 'Reports' },
+          {
+            to: '/approvals',
+            label: 'Approvals',
+            icon: BadgeCheck,
+            badgeKey: 'pendingApprovals' as const,
+          },
+          { to: '/fulfillment', label: 'Fulfillment', icon: Truck },
+          { to: '/invoices', label: 'Invoices', icon: Receipt },
+          { to: '/subscriptions', label: 'Subscriptions', icon: RefreshCcw },
+          { to: '/deal-health', label: 'Deal Health', icon: Activity },
+          { to: '/reports', label: 'Reports', icon: BarChart3 },
         ]
       : []),
-    ...(role === 'admin' || role === 'manager' ? [{ to: '/admin', label: 'Config' }] : []),
+    ...(role === 'admin' || role === 'manager'
+      ? [{ to: '/admin', label: 'Config', icon: Settings2 }]
+      : []),
   ]
 }
 
-function NavItem({ to, badge, children }: { to: string; badge?: number; children: ReactNode }) {
+function NavItem({
+  to,
+  icon: Icon,
+  badge,
+  children,
+}: {
+  to: string
+  icon: LucideIcon
+  badge?: number
+  children: ReactNode
+}) {
   return (
     <NavLink
       to={to}
@@ -45,6 +82,9 @@ function NavItem({ to, badge, children }: { to: string; badge?: number; children
         }`
       }
     >
+      {/* Nine labelled items plus icons need 2xl. At xl the icons push the last
+          item under the workspace actions, so labels carry it alone until then. */}
+      <Icon className="hidden size-4 shrink-0 2xl:block" />
       {children}
       {!!badge && badge > 0 && (
         <span className="rounded-full bg-amber-400 px-1.5 text-[10px] font-semibold text-amber-950 tabular-nums">
@@ -127,13 +167,14 @@ export default function AppShell({
                     end={e.to === '/'}
                     onClick={() => setMenuOpen(false)}
                     className={({ isActive }) =>
-                      `rounded-md px-3 py-2 text-sm transition-colors ${
+                      `flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
                         isActive
                           ? 'bg-primary/10 font-medium text-primary'
                           : 'text-foreground hover:bg-muted'
                       }`
                     }
                   >
+                    <e.icon className="size-4 shrink-0" />
                     {e.label}
                   </NavLink>
                 ))}
@@ -172,13 +213,13 @@ export default function AppShell({
 
           <nav className="hidden min-w-0 items-center gap-0.5 lg:flex">
             {entries.map((e) => (
-              <NavItem key={e.to} to={e.to} badge={badgeFor(e)}>
+              <NavItem key={e.to} to={e.to} icon={e.icon} badge={badgeFor(e)}>
                 {e.label}
               </NavItem>
             ))}
           </nav>
 
-          <div className="ml-auto flex shrink-0 items-center gap-1 text-sm">
+          <div className="ml-auto flex shrink-0 items-center gap-1 pl-2 text-sm">
             <Button
               size="sm"
               variant="ghost"
@@ -187,7 +228,7 @@ export default function AppShell({
               title="Refresh pricing, stock and approval data"
             >
               <RefreshCw className="size-4" />
-              <span className="sr-only 2xl:not-sr-only">Reload Data</span>
+              <span className="sr-only min-[1700px]:not-sr-only">Reload Data</span>
             </Button>
             <Button
               size="sm"
@@ -197,8 +238,9 @@ export default function AppShell({
               title="End the current working session view"
             >
               <PanelsTopLeft className="size-4" />
-              <span className="sr-only 2xl:not-sr-only">Close Workspace</span>
+              <span className="sr-only min-[1700px]:not-sr-only">Close Workspace</span>
             </Button>
+            <span aria-hidden className="mx-1 hidden h-5 w-px bg-white/20 xl:block" />
             <UserMenu onReloadData={reloadData} onCloseWorkspace={closeWorkspace} />
           </div>
         </div>

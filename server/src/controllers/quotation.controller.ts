@@ -17,6 +17,7 @@ import {
   negotiationRequests,
   productPairings,
   productVariants,
+  invoices,
 } from '../models/schema.js'
 import { sendPortalLink } from '../utils/mailer.js'
 import { computeQuoteTotals } from '../services/pricing.js'
@@ -538,6 +539,37 @@ export async function updateQuotation(req: Request<{ id: string }>, res: Respons
       reason,
     )
   res.json(q)
+}
+
+/* ---- delete a draft ----
+   Only a draft, and only one that has never been through the approval router.
+   Deleting cascades to its lines AND its audit entries, so anything that carries
+   a decision on the record has to be cancelled instead — that keeps the trail
+   the brief asks for while still letting a rep bin a genuine scratch draft.
+
+   Who may do it is already settled by quotationAccessParam on this router: a rep
+   reaches only their own drafts, manager/finance/admin reach any. */
+export async function deleteQuotation(req: Request<{ id: string }>, res: Response) {
+  const [q] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+  if (!q) return res.status(404).json({ error: 'not found' })
+  if (q.status !== 'draft')
+    return res.status(400).json({
+      error: `Only a draft can be deleted — this quotation is ${q.status.replace(/_/g, ' ')}. Cancel it instead.`,
+    })
+
+  const history = await db.select().from(approvals).where(eq(approvals.quotationId, q.id))
+  if (history.length)
+    return res.status(400).json({
+      error:
+        'This draft has already been through approval. Cancel it instead so the approver’s decision stays on record.',
+    })
+
+  const [billed] = await db.select().from(invoices).where(eq(invoices.quotationId, q.id)).limit(1)
+  if (billed)
+    return res.status(400).json({ error: 'This quotation has been invoiced — it cannot be deleted.' })
+
+  await db.delete(quotations).where(eq(quotations.id, q.id))
+  res.json({ ok: true, deleted: quoteNumber(q.seqNo, q.createdAt) })
 }
 
 /* ---- cancel a deal (drag-to-Rejected in the pipeline) ---- */

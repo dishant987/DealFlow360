@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -102,6 +102,18 @@ const productFields: Field[] = [
   { name: 'isPromoted', label: 'Promoted', type: 'boolean' },
 ]
 
+function TabGroupLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+      {children}
+    </span>
+  )
+}
+
+function Divider() {
+  return <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
+}
+
 export default function Admin() {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
@@ -113,28 +125,68 @@ export default function Admin() {
         { label: isAdmin ? 'Backend Config' : 'Discount Config' },
       ]}
     >
-      <div>
-        <Tabs defaultValue={isAdmin ? 'products' : 'tiers'}>
-          <TabsList className="flex-wrap h-auto">
-            {isAdmin && <TabsTrigger value="products">Products</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="categories">Categories</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="customers">Customers</TabsTrigger>}
-            <TabsTrigger value="tiers">Discount Tiers</TabsTrigger>
-            <TabsTrigger value="ceilings">Category Ceilings</TabsTrigger>
-            {isAdmin && <TabsTrigger value="warehouses">Warehouses</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="stock">Stock</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="variants">Variants</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="pairings">Upsell Pairings</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="plans">Subscription Plans</TabsTrigger>}
-            {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
-            <TabsTrigger value="audit">Audit Log</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+      <div className="space-y-4">
+        <div>
+          <h1 className="font-heading text-xl font-semibold">
+            {isAdmin ? 'Backend configuration' : 'Discount configuration'}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {isAdmin
+              ? 'Everything the sales engine reads at runtime: catalogue, pricing, discount governance, stock and users.'
+              : 'The discount ceilings and thresholds the approval router applies to every quotation.'}
+          </p>
+        </div>
 
-          <div className="mt-6">
+        <Tabs defaultValue={isAdmin ? 'products' : 'tiers'}>
+          {/* thirteen flat tabs read as one undifferentiated wall — grouping them
+              by what they govern makes the screen navigable */}
+          <div className="flex flex-wrap items-center gap-x-1 gap-y-2 rounded-lg border bg-background p-1.5">
+            {isAdmin && (
+              <>
+                <TabGroupLabel>Catalogue</TabGroupLabel>
+                <TabsList className="h-auto flex-wrap bg-transparent p-0">
+                  <TabsTrigger value="products">Products</TabsTrigger>
+                  <TabsTrigger value="categories">Categories</TabsTrigger>
+                  <TabsTrigger value="variants">Variants</TabsTrigger>
+                  <TabsTrigger value="pairings">Upsell Pairings</TabsTrigger>
+                  <TabsTrigger value="plans">Subscription Plans</TabsTrigger>
+                </TabsList>
+                <Divider />
+              </>
+            )}
+
+            <TabGroupLabel>Governance</TabGroupLabel>
+            <TabsList className="h-auto flex-wrap bg-transparent p-0">
+              <TabsTrigger value="tiers">Discount Tiers</TabsTrigger>
+              <TabsTrigger value="ceilings">Category Ceilings</TabsTrigger>
+              <TabsTrigger value="settings">Thresholds</TabsTrigger>
+            </TabsList>
+
+            {isAdmin && (
+              <>
+                <Divider />
+                <TabGroupLabel>Operations</TabGroupLabel>
+                <TabsList className="h-auto flex-wrap bg-transparent p-0">
+                  <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
+                  <TabsTrigger value="stock">Stock</TabsTrigger>
+                  <TabsTrigger value="customers">Customers</TabsTrigger>
+                </TabsList>
+              </>
+            )}
+
+            <Divider />
+            <TabGroupLabel>Records</TabGroupLabel>
+            <TabsList className="h-auto flex-wrap bg-transparent p-0">
+              {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
+              <TabsTrigger value="audit">Audit Log</TabsTrigger>
+            </TabsList>
+          </div>
+
+          <div className="mt-4">
             {isAdmin && <TabsContent value="products">
               <ResourceManager
                 title="Product"
+                description="The catalogue reps sell from. Price and cost drive every margin figure in the app."
                 endpoint="/config/products"
                 columns={[
                   { key: 'name', label: 'Name' },
@@ -158,6 +210,8 @@ export default function Admin() {
             {isAdmin && <TabsContent value="categories">
               <ResourceManager
                 title="Category"
+                plural="Categories"
+                description="Groups products, and is what category discount ceilings apply to."
                 endpoint="/config/categories"
                 columns={[{ key: 'name', label: 'Name' }]}
                 fields={[{ name: 'name', label: 'Name' }]}
@@ -167,6 +221,7 @@ export default function Admin() {
             {isAdmin && <TabsContent value="customers">
               <ResourceManager
                 title="Customer"
+                description="Accounts and their tier. Tier sets both the price list and the discount ceiling."
                 endpoint="/config/customers"
                 columns={[
                   { key: 'name', label: 'Name' },
@@ -184,6 +239,8 @@ export default function Admin() {
             <TabsContent value="tiers">
               <ResourceManager
                 title="Tier"
+                plural="Discount tiers"
+                description="The most any customer on that tier may be discounted, before category limits apply."
                 endpoint="/config/discount-tiers"
                 columns={[
                   { key: 'tier', label: 'Tier' },
@@ -199,6 +256,8 @@ export default function Admin() {
             <TabsContent value="ceilings">
               <ResourceManager
                 title="Ceiling"
+                plural="Category ceilings"
+                description="A category's own discount limit. Each line is judged against min(tier, category)."
                 endpoint="/config/category-ceilings"
                 columns={[
                   { key: 'category', label: 'Category' },
@@ -219,6 +278,7 @@ export default function Admin() {
             {isAdmin && <TabsContent value="warehouses">
               <ResourceManager
                 title="Warehouse"
+                description="Stock locations. Shipping weight decides which one the split logic prefers."
                 endpoint="/config/warehouses"
                 columns={[
                   { key: 'name', label: 'Name' },
@@ -234,6 +294,8 @@ export default function Admin() {
             {isAdmin && <TabsContent value="stock">
               <ResourceManager
                 title="Stock"
+                plural="Stock levels"
+                description="Quantity per warehouse. Reorder level drives the low-stock warning on the fulfilment board."
                 endpoint="/config/stock"
                 columns={[
                   { key: 'warehouse', label: 'Warehouse' },
@@ -264,6 +326,7 @@ export default function Admin() {
               <TabsContent value="variants">
                 <ResourceManager
                   title="Variant"
+                  description="Attribute options on a product, each adding to the base price."
                   endpoint="/config/variants"
                   columns={[
                     { key: 'product', label: 'Product' },
@@ -292,6 +355,8 @@ export default function Admin() {
               <TabsContent value="pairings">
                 <ResourceManager
                   title="Pairing"
+                  plural="Upsell pairings"
+                  description="Co-purchase links that drive the upsell panel while a rep builds a quote."
                   endpoint="/config/pairings"
                   columns={[
                     { key: 'product', label: 'When buying' },
@@ -320,6 +385,8 @@ export default function Admin() {
             {isAdmin && <TabsContent value="plans">
               <ResourceManager
                 title="Plan"
+                plural="Subscription plans"
+                description="Recurring plans: interval, whether mid-cycle changes prorate, and refund on cancellation."
                 endpoint="/config/subscription-plans"
                 columns={[
                   { key: 'name', label: 'Name' },
@@ -348,6 +415,7 @@ export default function Admin() {
             {isAdmin && <TabsContent value="users">
               <ResourceManager
                 title="User"
+                description="Internal accounts and their role. Self-signup always creates a rep."
                 endpoint="/config/users"
                 columns={[
                   { key: 'name', label: 'Name' },
