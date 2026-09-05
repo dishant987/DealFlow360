@@ -16,6 +16,17 @@ type Row = {
   shipments: number
   state: 'awaiting' | 'partial' | 'complete'
 }
+type StockRow = {
+  warehouseId: string
+  warehouse: string
+  productId: string
+  product: string
+  inStock: number
+  reserved: number
+  available: number
+  belowReorder: boolean
+}
+type Payload = { orders: Row[]; stock: StockRow[] }
 
 const stateLabel: Record<Row['state'], string> = {
   awaiting: 'awaiting split',
@@ -27,15 +38,34 @@ export default function FulfillmentQueue() {
   const nav = useNavigate()
   const q = useQuery({
     queryKey: ['fulfillment-queue'],
-    queryFn: async () => (await api.get('/fulfillment-queue')).data as Row[],
+    queryFn: async () => (await api.get('/fulfillment-queue')).data as Payload,
   })
 
-  const rows = q.data ?? []
+  const rows = q.data?.orders ?? []
+  const stock = q.data?.stock ?? []
   const counts = {
     awaiting: rows.filter((r) => r.state === 'awaiting').length,
     partial: rows.filter((r) => r.state === 'partial').length,
     complete: rows.filter((r) => r.state === 'complete').length,
   }
+
+  const stockColumns: Column<StockRow>[] = [
+    { key: 'warehouse', label: 'Warehouse' },
+    { key: 'product', label: 'Product' },
+    { key: 'inStock', label: 'In Stock', align: 'right' },
+    { key: 'reserved', label: 'Reserved', align: 'right' },
+    {
+      key: 'available',
+      label: 'Available',
+      align: 'right',
+      render: (r) => (
+        <span className={r.belowReorder ? 'text-amber-600 font-medium' : ''}>
+          {r.available}
+          {r.belowReorder && ' ⚠'}
+        </span>
+      ),
+    },
+  ]
 
   const columns: Column<Row>[] = [
     {
@@ -89,14 +119,32 @@ export default function FulfillmentQueue() {
           ))}
         </div>
 
-        <DataTable
-          rows={rows}
-          columns={columns}
-          loading={q.isLoading}
-          onRowClick={(r) => nav(`/quotations/${r.id}/fulfillment`)}
-          searchPlaceholder="Search quote # or customer…"
-          emptyMessage="Nothing approved is waiting on fulfillment."
-        />
+        <div>
+          <h2 className="font-semibold mb-2">Stock by warehouse</h2>
+          <p className="text-xs text-muted-foreground mb-2">
+            Available is what the split logic can draw on right now; reserved is already
+            committed to a fulfilled deal. ⚠ marks a line at or below its reorder level.
+          </p>
+          <DataTable
+            rows={stock}
+            columns={stockColumns}
+            loading={q.isLoading}
+            searchPlaceholder="Search warehouse or product…"
+            emptyMessage="No stock records yet — add them in Config → Stock."
+          />
+        </div>
+
+        <div>
+          <h2 className="font-semibold mb-2">Orders awaiting fulfillment</h2>
+          <DataTable
+            rows={rows}
+            columns={columns}
+            loading={q.isLoading}
+            onRowClick={(r) => nav(`/quotations/${r.id}/fulfillment`)}
+            searchPlaceholder="Search quote # or customer…"
+            emptyMessage="Nothing approved is waiting on fulfillment."
+          />
+        </div>
       </div>
     </AppShell>
   )

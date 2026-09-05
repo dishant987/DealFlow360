@@ -21,7 +21,7 @@ type Sub = {
 }
 type Payload = {
   subscriptions: Sub[]
-  summary: { active: number; cancelled: number; mrr: number }
+  summary: { active: number; paused: number; cancelled: number; mrr: number }
 }
 
 export default function Subscriptions() {
@@ -85,9 +85,10 @@ export default function Subscriptions() {
   return (
     <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Subscriptions' }]}>
       <div className="space-y-6">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           {[
             { label: 'Active', value: s?.active ?? 0 },
+            { label: 'Paused', value: s?.paused ?? 0 },
             { label: 'Cancelled', value: s?.cancelled ?? 0 },
             { label: 'MRR (normalised)', value: `$${(s?.mrr ?? 0).toFixed(2)}` },
           ].map((k) => (

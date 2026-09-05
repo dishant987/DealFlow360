@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth } from '../middlewares/auth.middleware.js'
+import { requireAuth, quotationAccessParam } from '../middlewares/auth.middleware.js'
 import {
   listQuotations,
   getQuotation,
@@ -18,6 +18,8 @@ import { listCustomers, listProducts } from '../controllers/catalog.controller.j
 
 const router = Router()
 router.use(requireAuth) // any authenticated internal user
+// every :id below is a quotation — reps may only touch their own
+router.param('id', quotationAccessParam)
 
 // catalog (rep workspace)
 router.get('/customers', listCustomers)

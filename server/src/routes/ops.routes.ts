@@ -6,6 +6,7 @@ import {
   listFulfillmentQueue,
   listSubscriptions,
   invoicePdf,
+  getWorkspaceSummary,
 } from '../controllers/ops.controller.js'
 
 // Cross-quotation operational views (mockup screens #7, #9, #12, #13).
@@ -14,6 +15,7 @@ import {
 const router = Router()
 router.use(requireAuth)
 
+router.get('/summary', getWorkspaceSummary)
 router.get('/invoices', listInvoices)
 router.get('/invoices/:id', getInvoice)
 router.get('/invoices/:id/pdf', invoicePdf)

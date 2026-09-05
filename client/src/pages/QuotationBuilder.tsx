@@ -41,6 +41,7 @@ type Line = {
   unitCost: string
   discountPct: string
   lineType: string
+  ceiling: number | null // min(tier, category) discount limit for this line
 }
 type Upsell = {
   productId: string
@@ -57,6 +58,7 @@ type Risk = {
   requiresManager: boolean
   requiresFinance: boolean
   breaches: { index: number; discountPct: number; ceiling: number; overBy: number }[]
+  thresholds: { managerThreshold: number; financeThreshold: number }
 }
 type Quote = {
   id: string
@@ -71,6 +73,14 @@ type Quote = {
 
 const marginColor = (pct: number) =>
   pct >= 20 ? 'text-emerald-600' : pct >= 10 ? 'text-amber-600' : 'text-red-600'
+
+// Same rule the server scores on: the order discount stacks on top of the line
+// discount, and the line is judged against its own ceiling. Recomputed on every
+// keystroke so a breach shows the moment it is typed, not at submit.
+const lineOverBy = (l: Line, orderDiscount: number | string) =>
+  l.ceiling == null
+    ? 0
+    : Math.max(0, Math.round((Number(l.discountPct) + Number(orderDiscount) - l.ceiling) * 100) / 100)
 
 export default function QuotationBuilder() {
   const { id } = useParams<{ id: string }>()
@@ -143,6 +153,7 @@ export default function QuotationBuilder() {
   }
 
   const totals = quoteTotals(lines, orderDiscount)
+  const liveScore = Math.round(lines.reduce((s, l) => s + lineOverBy(l, orderDiscount), 0) * 100) / 100
   // a quote can only be (re)submitted while it is still the rep's to edit
   const canSubmit = status === 'draft' || status === 'rejected'
   // same rule as the server: the cart is only editable while it is the rep's
@@ -200,7 +211,10 @@ export default function QuotationBuilder() {
 
   const addUpsell = async (s: Upsell) => {
     try {
-      const { data } = await api.post(`/quotations/${id}/lines`, { productId: s.productId })
+      const { data } = await api.post(`/quotations/${id}/lines`, {
+        productId: s.productId,
+        viaUpsell: true,
+      })
       setLines((ls) => [...ls, { ...data, product: s.name }])
       toast.success(`Added ${s.name}`)
       upsell.refetch()
@@ -356,6 +370,8 @@ export default function QuotationBuilder() {
                 <TableHead>Product</TableHead>
                 <TableHead className="w-28">Qty</TableHead>
                 <TableHead className="w-24">Disc %</TableHead>
+                <TableHead className="w-16 text-right">Limit</TableHead>
+                <TableHead className="w-24">Status</TableHead>
                 <TableHead className="text-right">Net</TableHead>
                 <TableHead className="text-right">Margin</TableHead>
                 <TableHead className="w-10" />
@@ -400,6 +416,22 @@ export default function QuotationBuilder() {
                         onBlur={(e) => persistLine(l.id, { discountPct: e.target.value })}
                       />
                     </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {l.ceiling == null ? '—' : `${l.ceiling}%`}
+                    </TableCell>
+                    <TableCell>
+                      {l.ceiling == null ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : lineOverBy(l, orderDiscount) > 0 ? (
+                        <span className="rounded bg-red-100 text-red-700 px-1.5 py-0.5 text-xs font-medium">
+                          OVER (+{lineOverBy(l, orderDiscount)}pt)
+                        </span>
+                      ) : (
+                        <span className="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-xs font-medium">
+                          OK
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">${m.net.toFixed(2)}</TableCell>
                     <TableCell className={`text-right ${marginColor(m.marginPct)}`}>
                       {m.marginPct.toFixed(1)}%
@@ -422,7 +454,7 @@ export default function QuotationBuilder() {
               })}
               {lines.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-muted-foreground text-sm">
+                  <TableCell colSpan={8} className="text-muted-foreground text-sm">
                     No lines yet — add a product above.
                   </TableCell>
                 </TableRow>
@@ -522,17 +554,41 @@ export default function QuotationBuilder() {
               <>
                 <div className="flex justify-between text-sm">
                   <span>Discount risk score</span>
-                  <span className="font-medium">{risk.score.toFixed(1)}</span>
+                  <span className="font-medium">{liveScore.toFixed(1)}</span>
                 </div>
-                {risk.level === 'none' ? (
-                  <p className="text-xs text-emerald-600">Within limits — no approval needed.</p>
-                ) : (
-                  <p className="text-xs text-amber-600">
-                    Needs {risk.requiresFinance ? 'Manager → Finance' : 'Manager'} approval
-                    {risk.breaches.length > 0 &&
-                      ` · ${risk.breaches.length} line(s) over ceiling`}
-                  </p>
-                )}
+                {(() => {
+                  const overLines = lines.filter((l) => lineOverBy(l, orderDiscount) > 0).length
+                  // Being over a ceiling is NOT the same as needing approval — the
+                  // blended score still has to clear a threshold. That is the whole
+                  // point of blending: one small overage stays under the bar, while
+                  // several small ones add up and cross it.
+                  const { managerThreshold, financeThreshold } = risk.thresholds
+                  const route =
+                    liveScore > financeThreshold
+                      ? 'Manager → Finance'
+                      : liveScore > managerThreshold
+                        ? 'Manager'
+                        : null
+
+                  if (route)
+                    return (
+                      <p className="text-xs text-amber-600">
+                        {overLines} line(s) over ceiling · routes for {route} approval on submit
+                      </p>
+                    )
+                  if (overLines === 0)
+                    return (
+                      <p className="text-xs text-emerald-600">
+                        Every line is within its limit — no approval needed.
+                      </p>
+                    )
+                  return (
+                    <p className="text-xs text-emerald-600">
+                      {overLines} line(s) over ceiling, but the blended score is within the{' '}
+                      {managerThreshold} approval threshold — no approval needed.
+                    </p>
+                  )
+                })()}
               </>
             )}
             {canSubmit ? (

@@ -16,10 +16,11 @@ import {
 import { computeLine } from '../services/pricing.js'
 import {
   nextBillingDate,
-  intervalDays,
+  periodDays,
   daysBetween,
   proratedAmount,
   refundAmount,
+  applyPayment,
   type Interval,
 } from '../services/billing.js'
 
@@ -150,7 +151,7 @@ export async function changeSubscription(
       quantity: quoteLines.quantity,
     })
     .from(quoteLines)
-    .where(eq(quoteLines.id, req.params.lineId))
+    .where(and(eq(quoteLines.id, req.params.lineId), eq(quoteLines.quotationId, req.params.id)))
   if (!line) return res.status(404).json({ error: 'line not found' })
 
   const [sched] = await db
@@ -162,7 +163,12 @@ export async function changeSubscription(
     })
     .from(billingSchedules)
     .innerJoin(subscriptionPlans, eq(billingSchedules.subscriptionPlanId, subscriptionPlans.id))
-    .where(eq(billingSchedules.quoteLineId, req.params.lineId))
+    .where(
+      and(
+        eq(billingSchedules.quoteLineId, req.params.lineId),
+        eq(billingSchedules.quotationId, req.params.id),
+      ),
+    )
   if (!sched) return res.status(400).json({ error: 'no active subscription schedule for this line' })
 
   const perUnit = Number(line.unitPrice) * (1 - Number(line.discountPct) / 100)
@@ -174,7 +180,11 @@ export async function changeSubscription(
   // when the plan disables proration the change simply takes effect next cycle —
   // no immediate charge or credit
   const prorated = sched.prorationEnabled
-    ? proratedAmount(Math.abs(delta), daysRemaining, intervalDays(sched.interval as Interval))
+    ? proratedAmount(
+        Math.abs(delta),
+        daysRemaining,
+        periodDays(new Date(sched.nextBillingDate), sched.interval as Interval),
+      )
     : 0
 
   if (delta > 0 && prorated > 0) {
@@ -211,6 +221,53 @@ export async function changeSubscription(
   res.json(await billingView(req.params.id))
 }
 
+/* ---- pause / resume a subscription ----
+   Pausing suspends billing without tearing the plan down. Resuming rolls the next
+   billing date forward from today rather than back-billing the paused gap, so the
+   customer is never charged for time the service was suspended. */
+export function setSubscriptionPause(paused: boolean) {
+  return async (req: Request<{ id: string; lineId: string }>, res: Response) => {
+    const [sched] = await db
+      .select({
+        id: billingSchedules.id,
+        status: billingSchedules.status,
+        interval: subscriptionPlans.interval,
+      })
+      .from(billingSchedules)
+      .innerJoin(subscriptionPlans, eq(billingSchedules.subscriptionPlanId, subscriptionPlans.id))
+      .where(
+        and(
+          eq(billingSchedules.quoteLineId, req.params.lineId),
+          eq(billingSchedules.quotationId, req.params.id),
+        ),
+      )
+    if (!sched) return res.status(404).json({ error: 'schedule not found' })
+    if (sched.status === 'cancelled')
+      return res.status(400).json({ error: 'This subscription is cancelled — it cannot be paused or resumed.' })
+    if (paused && sched.status !== 'scheduled')
+      return res.status(400).json({ error: 'Only an active subscription can be paused.' })
+    if (!paused && sched.status !== 'paused')
+      return res.status(400).json({ error: 'This subscription is not paused.' })
+
+    await db
+      .update(billingSchedules)
+      .set({
+        status: paused ? 'paused' : 'scheduled',
+        ...(paused
+          ? {}
+          : { nextBillingDate: nextBillingDate(new Date(), (sched.interval ?? 'monthly') as Interval) }),
+      })
+      .where(eq(billingSchedules.id, sched.id))
+    await db.insert(auditLog).values({
+      quotationId: req.params.id,
+      userId: req.user!.id,
+      action: paused ? 'subscription_paused' : 'subscription_resumed',
+      detail: { lineId: req.params.lineId },
+    })
+    res.json(await billingView(req.params.id))
+  }
+}
+
 /* ---- cancel subscription → prorated refund credit note ---- */
 export async function cancelSubscription(
   req: Request<{ id: string; lineId: string }>,
@@ -226,14 +283,19 @@ export async function cancelSubscription(
     })
     .from(billingSchedules)
     .innerJoin(subscriptionPlans, eq(billingSchedules.subscriptionPlanId, subscriptionPlans.id))
-    .where(eq(billingSchedules.quoteLineId, req.params.lineId))
+    .where(
+      and(
+        eq(billingSchedules.quoteLineId, req.params.lineId),
+        eq(billingSchedules.quotationId, req.params.id),
+      ),
+    )
   if (!sched) return res.status(404).json({ error: 'schedule not found' })
 
   const daysRemaining = daysBetween(new Date(), new Date(sched.nextBillingDate))
   const refund = refundAmount(
     Number(sched.amount),
     daysRemaining,
-    intervalDays(sched.interval as Interval),
+    periodDays(new Date(sched.nextBillingDate), sched.interval as Interval),
     Number(sched.refundPct),
   )
   if (refund > 0) {
@@ -257,26 +319,59 @@ export async function cancelSubscription(
 /* ---- record a payment against an invoice ---- */
 export async function payInvoice(req: Request<{ invoiceId: string }>, res: Response) {
   const parsed = z
-    .object({ amount: z.union([z.number(), z.string()]).optional(), method: z.string().optional() })
+    .object({
+      // a partial payment is legitimate, a zero/negative one is not
+      amount: z
+        .union([z.number(), z.string()])
+        .transform(Number)
+        .refine((n) => Number.isFinite(n) && n > 0, 'amount must be greater than zero')
+        .optional(),
+      method: z.string().optional(),
+    })
     .safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
 
   const [inv] = await db.select().from(invoices).where(eq(invoices.id, req.params.invoiceId))
   if (!inv) return res.status(404).json({ error: 'invoice not found' })
+  if (inv.status === 'void')
+    return res.status(400).json({ error: 'This invoice is void — no payment can be recorded.' })
 
-  const amount = parsed.data.amount != null ? String(parsed.data.amount) : inv.amount
-  await db.insert(payments).values({ invoiceId: inv.id, amount, method: parsed.data.method ?? 'manual' })
-  const [updated] = await db
-    .update(invoices)
-    .set({ status: 'paid', paidAt: new Date() })
-    .where(eq(invoices.id, inv.id))
-    .returning()
+  const alreadyPaid = (await db.select().from(payments).where(eq(payments.invoiceId, inv.id))).reduce(
+    (s, p) => s + Number(p.amount),
+    0,
+  )
+  // no amount = pay off whatever is still outstanding
+  const { outstanding, amount, paidTotal, settled, balance } = applyPayment(
+    Number(inv.amount),
+    alreadyPaid,
+    parsed.data.amount,
+  )
+  if (outstanding <= 0)
+    return res.status(400).json({ error: 'This invoice is already paid in full.' })
+  if (amount > outstanding)
+    return res
+      .status(400)
+      .json({ error: `Payment exceeds the outstanding balance of $${outstanding.toFixed(2)}.` })
+
+  await db
+    .insert(payments)
+    .values({ invoiceId: inv.id, amount: String(amount), method: parsed.data.method ?? 'manual' })
+
+  // only a payment that clears the balance settles the invoice — a partial one
+  // leaves it open, which is what the detail screen's `balance` already reports
+  const [updated] = settled
+    ? await db
+        .update(invoices)
+        .set({ status: 'paid', paidAt: new Date() })
+        .where(eq(invoices.id, inv.id))
+        .returning()
+    : [inv]
   await db.insert(auditLog).values({
     quotationId: inv.quotationId,
     userId: req.user!.id,
     action: 'payment_recorded',
-    detail: { invoiceId: inv.id, amount },
+    detail: { invoiceId: inv.id, amount, paidTotal, settled },
   })
 
-  res.json(updated)
+  res.json({ ...updated, paidTotal, balance })
 }

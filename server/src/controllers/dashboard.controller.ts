@@ -90,15 +90,24 @@ export async function getDealHealth(_req: Request, res: Response) {
   })
 }
 
-// automated nudge / escalation triggered from an alert
-export async function nudge(req: Request<{ id: string }>, res: Response) {
-  const [q] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
-  if (!q) return res.status(404).json({ error: 'not found' })
-  await db.insert(auditLog).values({
-    quotationId: q.id,
-    userId: req.user!.id,
-    action: 'nudge',
-    detail: { note: 'follow-up nudge triggered from deal-health dashboard' },
-  })
-  res.json({ ok: true })
+// automated nudge / escalation triggered from an alert. Both land in the audit
+// trail, which is what the deal-health board reads back as "Nudge sent" /
+// "Escalated to Manager".
+const ALERT_ACTIONS = {
+  nudge: 'follow-up nudge sent to the rep from the deal-health dashboard',
+  escalate: 'escalated to the sales manager from the deal-health dashboard',
+} as const
+
+export function alertAction(kind: keyof typeof ALERT_ACTIONS) {
+  return async (req: Request<{ id: string }>, res: Response) => {
+    const [q] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+    if (!q) return res.status(404).json({ error: 'not found' })
+    await db.insert(auditLog).values({
+      quotationId: q.id,
+      userId: req.user!.id,
+      action: kind,
+      detail: { note: ALERT_ACTIONS[kind] },
+    })
+    res.json({ ok: true, action: kind })
+  }
 }

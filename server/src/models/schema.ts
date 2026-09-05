@@ -39,7 +39,14 @@ export const approvalStepEnum = pgEnum('approval_step', ['manager', 'finance'])
 export const approvalActionEnum = pgEnum('approval_action', ['approve', 'reject', 'return'])
 export const invoiceTypeEnum = pgEnum('invoice_type', ['onetime', 'recurring'])
 export const invoiceStatusEnum = pgEnum('invoice_status', ['draft', 'sent', 'paid', 'void'])
-export const billingStatusEnum = pgEnum('billing_status', ['scheduled', 'billed', 'cancelled'])
+export const billingStatusEnum = pgEnum('billing_status', [
+  'scheduled',
+  'billed',
+  // paused: billing is suspended but the plan is not torn down — resuming rolls the
+  // next billing date forward rather than back-billing the gap
+  'paused',
+  'cancelled',
+])
 export const negotiationTypeEnum = pgEnum('negotiation_type', [
   'comment',
   'change_request',
@@ -348,6 +355,8 @@ export const negotiationRequests = pgTable('negotiation_requests', {
   type: negotiationTypeEnum('type').notNull(),
   message: text('message'),
   counterDiscountPct: numeric('counter_discount_pct', { precision: 5, scale: 2 }),
+  // customers can ask for a delivery date alongside a comment or counter-offer
+  requestedDeliveryDate: timestamp('requested_delivery_date', { withTimezone: true }),
   status: negotiationStatusEnum('status').notNull().default('open'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })

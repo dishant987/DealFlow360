@@ -8,6 +8,13 @@
       "when": 1788618283461,
       "tag": "0000_material_red_ghost",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788624296936,
+      "tag": "0001_wandering_the_watchers",
+      "breakpoints": true
     }
   ]
 }

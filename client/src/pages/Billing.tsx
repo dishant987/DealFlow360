@@ -189,6 +189,25 @@ export default function Billing() {
                         >
                           Update
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            run(
+                              () =>
+                                api.post(
+                                  `/quotations/${id}/billing/subscriptions/${s.quoteLineId}/${
+                                    s.status === 'paused' ? 'resume' : 'pause'
+                                  }`,
+                                ),
+                              s.status === 'paused'
+                                ? 'Subscription resumed — next bill rolls forward a full period'
+                                : 'Subscription paused — billing suspended',
+                            )
+                          }
+                        >
+                          {s.status === 'paused' ? 'Resume' : 'Pause'}
+                        </Button>
                         <ConfirmButton
                           size="sm"
                           variant="destructive"

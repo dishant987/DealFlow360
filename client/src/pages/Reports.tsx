@@ -13,7 +13,15 @@ type Filters = { from?: string; to?: string; status?: string; repId?: string; ca
 type Row = { id: string; quoteNumber: string; customer: string; rep: string; status: string; riskScore: number; amount: number }
 type Report = {
   rows: Row[]
-  summary: { count: number; totalValue: number; avgRisk: number; byStatus: Record<string, number> }
+  summary: {
+    count: number
+    totalValue: number
+    avgRisk: number
+    avgApprovalHours: number | null
+    approvalsMeasured: number
+    topUpsell: { product: string; count: number } | null
+    byStatus: Record<string, number>
+  }
 }
 
 export default function Reports() {
@@ -119,7 +127,7 @@ export default function Reports() {
         </div>
 
         {/* summary */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
           <div className="rounded-lg border p-4">
             <div className="text-xs text-muted-foreground">Quotations</div>
             <div className="text-2xl font-semibold">{report.data?.summary.count ?? 0}</div>
@@ -133,6 +141,28 @@ export default function Reports() {
           <div className="rounded-lg border p-4">
             <div className="text-xs text-muted-foreground">Avg risk score</div>
             <div className="text-2xl font-semibold">{(report.data?.summary.avgRisk ?? 0).toFixed(1)}</div>
+          </div>
+          <div className="rounded-lg border p-4">
+            <div className="text-xs text-muted-foreground">Avg approval time</div>
+            <div className="text-2xl font-semibold">
+              {report.data?.summary.avgApprovalHours == null
+                ? '—'
+                : `${report.data.summary.avgApprovalHours}h`}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {report.data?.summary.approvalsMeasured ?? 0} decided
+            </div>
+          </div>
+          <div className="rounded-lg border p-4">
+            <div className="text-xs text-muted-foreground">Top upsold product</div>
+            <div className="text-lg font-semibold truncate">
+              {report.data?.summary.topUpsell?.product ?? '—'}
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              {report.data?.summary.topUpsell
+                ? `${report.data.summary.topUpsell.count} added from suggestions`
+                : 'no suggestions accepted yet'}
+            </div>
           </div>
         </div>
 

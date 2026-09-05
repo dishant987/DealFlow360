@@ -24,13 +24,14 @@ export default function DealHealth() {
     queryFn: async () => (await api.get('/dashboard')).data as Health,
   })
 
-  const nudge = async (id: string) => {
+  // both actions land in the audit trail against the quotation
+  const alert = async (id: string, kind: 'nudge' | 'escalate') => {
     try {
-      await api.post(`/dashboard/quotations/${id}/nudge`)
-      toast.success('Nudge sent')
+      await api.post(`/dashboard/quotations/${id}/${kind}`)
+      toast.success(kind === 'nudge' ? 'Nudge sent to the rep' : 'Escalated to the sales manager')
       qc.invalidateQueries({ queryKey: ['deal-health'] })
     } catch {
-      toast.error('Nudge failed')
+      toast.error(kind === 'nudge' ? 'Nudge failed' : 'Escalation failed')
     }
   }
 
@@ -69,10 +70,20 @@ export default function DealHealth() {
             variant="outline"
             onClick={(e) => {
               e.stopPropagation()
-              nudge(r.id)
+              alert(r.id, 'nudge')
             }}
           >
             Nudge
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={(e) => {
+              e.stopPropagation()
+              alert(r.id, 'escalate')
+            }}
+          >
+            Escalate
           </Button>
         </div>
       ),

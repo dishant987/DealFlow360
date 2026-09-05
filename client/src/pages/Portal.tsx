@@ -36,6 +36,7 @@ type PortalQuote = {
     type: string
     message: string | null
     counterDiscountPct: string | null
+    requestedDeliveryDate: string | null
     status: string
     quoteLineId: string | null
   }[]
@@ -46,6 +47,7 @@ export default function Portal() {
   const qc = useQueryClient()
   const [message, setMessage] = useState('')
   const [counter, setCounter] = useState('')
+  const [deliveryDate, setDeliveryDate] = useState('')
   const [busy, setBusy] = useState(false)
   const [openLine, setOpenLine] = useState<string | null>(null)
   const [lineNote, setLineNote] = useState('')
@@ -59,17 +61,21 @@ export default function Portal() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['portal', token] })
 
   const submitRequest = async () => {
-    if (!message && !counter) return toast.error('Add a comment or a counter discount')
+    if (!message && !counter && !deliveryDate)
+      return toast.error('Add a comment, a counter discount or a requested delivery date')
     setBusy(true)
     try {
       await api.post(`/portal/${token}/negotiate`, {
-        type: counter ? 'counter_discount' : 'comment',
+        // a date-only ask with no counter is a change request, not a discount counter
+        type: counter ? 'counter_discount' : deliveryDate && !message ? 'change_request' : 'comment',
         message: message || undefined,
         counterDiscountPct: counter || undefined,
+        requestedDeliveryDate: deliveryDate || undefined,
       })
       toast.success('Request sent to the sales team')
       setMessage('')
       setCounter('')
+      setDeliveryDate('')
       refresh()
     } catch {
       toast.error('Could not send request')
@@ -220,14 +226,25 @@ export default function Portal() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
             />
-            <div className="flex items-center gap-2">
-              <span className="text-sm">Counter order discount %</span>
-              <Input
-                type="number"
-                className="w-24"
-                value={counter}
-                onChange={(e) => setCounter(e.target.value)}
-              />
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Counter order discount %</span>
+                <Input
+                  type="number"
+                  className="w-24"
+                  value={counter}
+                  onChange={(e) => setCounter(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">Requested delivery date</span>
+                <Input
+                  type="date"
+                  className="w-40"
+                  value={deliveryDate}
+                  onChange={(e) => setDeliveryDate(e.target.value)}
+                />
+              </div>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={submitRequest} disabled={busy}>
@@ -253,6 +270,9 @@ export default function Portal() {
                       {n.type.replace(/_/g, ' ')}
                       {n.message ? `: ${n.message}` : ''}
                       {n.counterDiscountPct ? ` (${Number(n.counterDiscountPct).toFixed(0)}%)` : ''}
+                      {n.requestedDeliveryDate
+                        ? ` · delivery by ${new Date(n.requestedDeliveryDate).toLocaleDateString()}`
+                        : ''}
                     </span>
                     <span className="text-muted-foreground shrink-0">{n.status}</span>
                   </li>
