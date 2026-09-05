@@ -40,9 +40,16 @@ export default function Dashboard() {
         <p className="text-muted-foreground text-sm">
           You're signed in as <b>{user?.role}</b>.
         </p>
-        <Button asChild>
-          <Link to="/quotations">Open Quotations</Link>
-        </Button>
+        <div className="flex gap-3">
+          <Button asChild>
+            <Link to="/quotations">Open Quotations</Link>
+          </Button>
+          {(user?.role === 'manager' || user?.role === 'finance' || user?.role === 'admin') && (
+            <Button variant="secondary" asChild>
+              <Link to="/approvals">Approvals</Link>
+            </Button>
+          )}
+        </div>
       </main>
     </div>
   )
