@@ -295,13 +295,14 @@ export default function Admin() {
               <ResourceManager
                 title="Stock"
                 plural="Stock levels"
-                description="Quantity per warehouse. Reorder level drives the low-stock warning on the fulfilment board."
+                description="Quantity per warehouse, plus the reorder rule: restock when it falls to 'Reorder at', and bring it back up to 'Restock to'."
                 endpoint="/config/stock"
                 columns={[
                   { key: 'warehouse', label: 'Warehouse' },
                   { key: 'product', label: 'Product' },
                   { key: 'quantity', label: 'Qty' },
-                  { key: 'reorderLevel', label: 'Reorder' },
+                  { key: 'reorderLevel', label: 'Reorder at' },
+                  { key: 'targetLevel', label: 'Restock to' },
                 ]}
                 fields={[
                   {
@@ -317,6 +318,7 @@ export default function Admin() {
                     optionsFrom: '/config/products',
                   },
                   { name: 'quantity', label: 'Qty', type: 'number' },
+                  { name: 'targetLevel', label: 'Restock to', type: 'number' },
                   { name: 'reorderLevel', label: 'Reorder', type: 'number' },
                 ]}
               />

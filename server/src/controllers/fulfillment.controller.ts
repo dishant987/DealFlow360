@@ -12,6 +12,7 @@ import {
   auditLog,
 } from '../models/schema.js'
 import { splitLine, shipmentCount, type WhStock } from '../services/fulfillment.js'
+import { replenishmentPlan } from '../services/replenishment.js'
 
 // stock may only move once the deal has cleared approval (or the customer confirmed)
 const FULFILLABLE = ['approved', 'confirmed', 'fulfilled', 'invoiced']
@@ -271,6 +272,99 @@ async function currentAllocations(quotationId: string) {
 
 export async function getAllocations(req: Request<{ id: string }>, res: Response) {
   res.json(await currentAllocations(req.params.id))
+}
+
+/* ---- A4: receive stock against a warehouse's replenishment rule ----
+   Booking in a delivery is the action a reorder rule exists to trigger. Quantity
+   is optional: without one we bring the location back up to its target. */
+const receiveSchema = z.object({ quantity: z.number().int().positive().optional() })
+
+export async function receiveStock(req: Request<{ stockId: string }>, res: Response) {
+  const parsed = receiveSchema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
+
+  const [row] = await db
+    .select({
+      id: stock.id,
+      quantity: stock.quantity,
+      reorderLevel: stock.reorderLevel,
+      targetLevel: stock.targetLevel,
+      warehouse: warehouses.name,
+      product: products.name,
+      productId: stock.productId,
+      warehouseId: stock.warehouseId,
+    })
+    .from(stock)
+    .innerJoin(warehouses, eq(stock.warehouseId, warehouses.id))
+    .innerJoin(products, eq(stock.productId, products.id))
+    .where(eq(stock.id, req.params.stockId))
+  if (!row) return res.status(404).json({ error: 'stock record not found' })
+
+  // reserved units are committed elsewhere, so they do not count as available
+  const reservedRows = await db
+    .select({ quantity: fulfillmentAllocations.quantity })
+    .from(fulfillmentAllocations)
+    .innerJoin(quoteLines, eq(fulfillmentAllocations.quoteLineId, quoteLines.id))
+    .innerJoin(quotations, eq(fulfillmentAllocations.quotationId, quotations.id))
+    .where(
+      and(
+        eq(fulfillmentAllocations.warehouseId, row.warehouseId),
+        eq(quoteLines.productId, row.productId),
+        eq(fulfillmentAllocations.backordered, false),
+        eq(quotations.status, 'fulfilled'),
+      ),
+    )
+  const reserved = reservedRows.reduce((n, r) => n + r.quantity, 0)
+
+  const [proposal] = replenishmentPlan([
+    {
+      stockId: row.id,
+      warehouse: row.warehouse,
+      product: row.product,
+      // stock.quantity is already net of accepted allocations, so physical
+      // on-hand is that plus whatever is reserved. Passing quantity straight in
+      // would subtract the reserved units twice and over-order.
+      onHand: row.quantity + reserved,
+      reserved,
+      reorderLevel: row.reorderLevel,
+      targetLevel: row.targetLevel,
+    },
+  ])
+
+  const quantity = parsed.data.quantity ?? proposal?.suggested
+  if (!quantity)
+    return res.status(400).json({
+      error: row.targetLevel
+        ? 'This location is already at or above its reorder point — nothing to replenish.'
+        : 'Set a target level on this stock line before replenishing it.',
+    })
+
+  const [updated] = await db
+    .update(stock)
+    .set({ quantity: sql`${stock.quantity} + ${quantity}` })
+    .where(eq(stock.id, row.id))
+    .returning()
+
+  await db.insert(auditLog).values({
+    userId: req.user!.id,
+    action: 'stock_replenished',
+    detail: {
+      warehouse: row.warehouse,
+      product: row.product,
+      quantity,
+      from: row.quantity,
+      to: updated.quantity,
+      targetLevel: row.targetLevel,
+    },
+  })
+
+  res.json({
+    ok: true,
+    warehouse: row.warehouse,
+    product: row.product,
+    received: quantity,
+    onHand: updated.quantity,
+  })
 }
 
 /* ---- consolidate: try to fulfill backordered rows from stock that has since arrived ---- */

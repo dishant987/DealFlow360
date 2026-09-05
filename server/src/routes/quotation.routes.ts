@@ -10,6 +10,7 @@ import {
   deleteQuotation,
   sendToCustomer,
   listNegotiations,
+  resolveNegotiation,
   getUpsell,
   addLine,
   updateLine,
@@ -36,6 +37,7 @@ router.post('/quotations/:id/cancel', cancelQuotation)
 router.delete('/quotations/:id', deleteQuotation)
 router.post('/quotations/:id/send', sendToCustomer)
 router.get('/quotations/:id/negotiations', listNegotiations)
+router.patch('/quotations/:id/negotiations/:negotiationId', resolveNegotiation)
 router.get('/quotations/:id/upsell', getUpsell)
 router.post('/quotations/:id/lines', addLine)
 router.patch('/quotations/:id/lines/:lineId', updateLine)

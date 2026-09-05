@@ -501,12 +501,53 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
 
 /* ---- rep view of customer negotiation requests ---- */
 export async function listNegotiations(req: Request<{ id: string }>, res: Response) {
+  // joined to the line so the rep sees WHICH product a question is about,
+  // rather than a bare uuid
   res.json(
     await db
-      .select()
+      .select({
+        id: negotiationRequests.id,
+        type: negotiationRequests.type,
+        message: negotiationRequests.message,
+        counterDiscountPct: negotiationRequests.counterDiscountPct,
+        requestedDeliveryDate: negotiationRequests.requestedDeliveryDate,
+        status: negotiationRequests.status,
+        createdAt: negotiationRequests.createdAt,
+        quoteLineId: negotiationRequests.quoteLineId,
+        product: products.name,
+      })
       .from(negotiationRequests)
-      .where(eq(negotiationRequests.quotationId, req.params.id)),
+      .leftJoin(quoteLines, eq(negotiationRequests.quoteLineId, quoteLines.id))
+      .leftJoin(products, eq(quoteLines.productId, products.id))
+      .where(eq(negotiationRequests.quotationId, req.params.id))
+      .orderBy(negotiationRequests.createdAt),
   )
+}
+
+/* ---- B8: the rep's side of the conversation — close off a request once it has
+   been dealt with, so the customer's asks do not pile up unanswered ---- */
+export async function resolveNegotiation(
+  req: Request<{ id: string; negotiationId: string }>,
+  res: Response,
+) {
+  const [row] = await db
+    .update(negotiationRequests)
+    .set({ status: 'addressed' })
+    .where(
+      and(
+        eq(negotiationRequests.id, req.params.negotiationId),
+        eq(negotiationRequests.quotationId, req.params.id),
+      ),
+    )
+    .returning()
+  if (!row) return res.status(404).json({ error: 'request not found on this quotation' })
+
+  await logEdit(req.params.id, req.user!.id, 'negotiation_addressed', {
+    negotiationId: row.id,
+    type: row.type,
+    message: row.message,
+  })
+  res.json(row)
 }
 
 /* ---- update quote (order-level discount) ---- */

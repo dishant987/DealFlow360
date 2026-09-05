@@ -15,6 +15,13 @@
       "when": 1788624296936,
       "tag": "0001_wandering_the_watchers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788638053456,
+      "tag": "0002_perpetual_nighthawk",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "stock" ADD COLUMN "target_level" integer DEFAULT 0 NOT NULL;

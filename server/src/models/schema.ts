@@ -165,7 +165,12 @@ export const stock = pgTable(
       .notNull()
       .references(() => products.id),
     quantity: integer('quantity').notNull().default(0),
+    // A4 replenishment rule, held per warehouse+product:
+    //   reorderLevel = the point at which this location needs restocking
+    //   targetLevel  = what a replenishment should bring it back up to
+    // A target of 0 means "warn me but propose nothing" — the old behaviour.
     reorderLevel: integer('reorder_level').notNull().default(0),
+    targetLevel: integer('target_level').notNull().default(0),
   },
   (t) => [uniqueIndex('stock_wh_product_uq').on(t.warehouseId, t.productId)],
 )

@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { CalendarClock, Check, MessageSquare, Percent } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import PageSkeleton from '@/components/PageSkeleton'
@@ -60,6 +62,17 @@ type Risk = {
   requiresFinance: boolean
   breaches: { index: number; discountPct: number; ceiling: number; overBy: number }[]
   thresholds: { managerThreshold: number; financeThreshold: number }
+}
+type Negotiation = {
+  id: string
+  type: 'comment' | 'change_request' | 'counter_discount'
+  message: string | null
+  counterDiscountPct: string | null
+  requestedDeliveryDate: string | null
+  status: 'open' | 'addressed'
+  createdAt: string
+  quoteLineId: string | null
+  product: string | null
 }
 type Quote = {
   id: string
@@ -120,6 +133,25 @@ export default function QuotationBuilder() {
     queryFn: async () => (await api.get(`/quotations/${id}/upsell`)).data as Upsell[],
   })
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
+
+  // B8 / §3: what the customer has asked for. The status note already tells the
+  // rep to "review them before re-sending" — this is where they do that.
+  const qc = useQueryClient()
+  const negotiations = useQuery({
+    queryKey: ['negotiations', id],
+    queryFn: async () => (await api.get(`/quotations/${id}/negotiations`)).data as Negotiation[],
+  })
+  const resolve = useMutation({
+    mutationFn: async (negotiationId: string) =>
+      (await api.patch(`/quotations/${id}/negotiations/${negotiationId}`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['negotiations', id] })
+      toast.success('Marked as addressed')
+    },
+    onError: (e) => toast.error(errText(e, 'Could not update the request')),
+  })
+  const requests = negotiations.data ?? []
+  const openRequests = requests.filter((r) => r.status === 'open')
 
   // Seed the editable cart ONCE — live refetches (socket updates) must never
   // clobber in-progress edits. Status/risk stay live so approvals show up instantly.
@@ -311,6 +343,68 @@ export default function QuotationBuilder() {
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         {/* cart */}
         <section className="space-y-4">
+          {/* B8: the customer's side of the conversation, and the rep's reply to it */}
+          {requests.length > 0 && (
+            <div className="rounded-xl border bg-background">
+              <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
+                <div>
+                  <h2 className="font-heading font-medium">Customer requests</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {openRequests.length > 0
+                      ? `${openRequests.length} still open — address them before re-sending.`
+                      : 'All requests have been addressed.'}
+                  </p>
+                </div>
+                {openRequests.length > 0 && (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                    {openRequests.length} open
+                  </span>
+                )}
+              </header>
+              <ul className="divide-y">
+                {requests.map((r) => (
+                  <li key={r.id} className="flex flex-wrap items-start gap-3 px-4 py-3">
+                    <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm">
+                        {r.product && <span className="font-medium text-primary">{r.product}: </span>}
+                        {r.message || <span className="text-muted-foreground">{r.type.replace(/_/g, ' ')}</span>}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{new Date(r.createdAt).toLocaleDateString()}</span>
+                        {r.counterDiscountPct && (
+                          <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                            <Percent className="size-3" />
+                            counter {Number(r.counterDiscountPct).toFixed(0)}%
+                          </span>
+                        )}
+                        {r.requestedDeliveryDate && (
+                          <span className="inline-flex items-center gap-1">
+                            <CalendarClock className="size-3" />
+                            wants it by {new Date(r.requestedDeliveryDate).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {r.status === 'open' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={resolve.isPending}
+                        onClick={() => resolve.mutate(r.id)}
+                      >
+                        Mark addressed
+                      </Button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                        <Check className="size-3.5" /> addressed
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           {canEdit && (
           <div className="flex items-center gap-2">
             <Select

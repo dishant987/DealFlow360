@@ -19,6 +19,7 @@ import {
   stock,
 } from '../models/schema.js'
 import { findDiscountAnomalies } from '../services/anomaly.js'
+import { replenishmentPlan, type StockRule } from '../services/replenishment.js'
 import { createRequire } from 'module'
 import { quoteNumber, invoiceNumber } from '../services/quoteNumber.js'
 import { computeLine } from '../services/pricing.js'
@@ -318,6 +319,8 @@ export async function listFulfillmentQueue(_req: Request, res: Response) {
       product: products.name,
       available: stock.quantity,
       reorderLevel: stock.reorderLevel,
+      targetLevel: stock.targetLevel,
+      stockId: stock.id,
     })
     .from(stock)
     .innerJoin(warehouses, eq(stock.warehouseId, warehouses.id))
@@ -354,9 +357,23 @@ export async function listFulfillmentQueue(_req: Request, res: Response) {
       inStock: s.available + reserved,
       reserved,
       available: s.available,
+      reorderLevel: s.reorderLevel,
+      targetLevel: s.targetLevel,
       belowReorder: s.available <= s.reorderLevel,
     }
   })
+
+  // A4: the reorder rules turned into concrete restock proposals
+  const rules: StockRule[] = onHand.map((s) => ({
+    stockId: s.stockId,
+    warehouse: s.warehouse,
+    product: s.product,
+    onHand: s.available + (reservedBy.get(`${s.warehouseId}:${s.productId}`) ?? 0),
+    reserved: reservedBy.get(`${s.warehouseId}:${s.productId}`) ?? 0,
+    reorderLevel: s.reorderLevel,
+    targetLevel: s.targetLevel,
+  }))
+  const replenishment = replenishmentPlan(rules)
 
   const orders = quotes.map((q) => {
       const mine = allocs.filter((a) => a.quotationId === q.id)
@@ -379,7 +396,7 @@ export async function listFulfillmentQueue(_req: Request, res: Response) {
       }
     })
 
-  res.json({ orders, stock: stockRows })
+  res.json({ orders, stock: stockRows, replenishment })
 }
 
 /* ---- #9 Subscriptions list (cross-quotation) ---- */

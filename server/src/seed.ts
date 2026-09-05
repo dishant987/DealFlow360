@@ -183,17 +183,19 @@ async function seed() {
     ])
     .returning()
 
+  // reorderLevel is when to restock; targetLevel is what to restock up to (A4)
   await db.insert(s.stock).values([
-    { warehouseId: main.id, productId: laptop.id, quantity: 8, reorderLevel: 3 },
-    { warehouseId: east.id, productId: laptop.id, quantity: 5, reorderLevel: 2 },
-    { warehouseId: main.id, productId: mouse.id, quantity: 50, reorderLevel: 10 },
-    { warehouseId: east.id, productId: mouse.id, quantity: 20, reorderLevel: 5 },
-    { warehouseId: main.id, productId: docking.id, quantity: 65, reorderLevel: 15 },
-    { warehouseId: east.id, productId: docking.id, quantity: 12, reorderLevel: 10 },
-    { warehouseId: west.id, productId: docking.id, quantity: 20, reorderLevel: 5 },
-    // deliberately short: the backorder / delivery-slippage demo runs on this one
-    { warehouseId: main.id, productId: monitor.id, quantity: 3, reorderLevel: 4 },
-    { warehouseId: east.id, productId: monitor.id, quantity: 2, reorderLevel: 4 },
+    { warehouseId: main.id, productId: laptop.id, quantity: 8, reorderLevel: 3, targetLevel: 24 },
+    { warehouseId: east.id, productId: laptop.id, quantity: 5, reorderLevel: 2, targetLevel: 12 },
+    { warehouseId: main.id, productId: mouse.id, quantity: 50, reorderLevel: 10, targetLevel: 80 },
+    { warehouseId: east.id, productId: mouse.id, quantity: 20, reorderLevel: 5, targetLevel: 40 },
+    { warehouseId: main.id, productId: docking.id, quantity: 65, reorderLevel: 15, targetLevel: 90 },
+    { warehouseId: east.id, productId: docking.id, quantity: 12, reorderLevel: 10, targetLevel: 40 },
+    { warehouseId: west.id, productId: docking.id, quantity: 20, reorderLevel: 5, targetLevel: 30 },
+    // deliberately short: the backorder, slippage AND replenishment demos all
+    // run on this one — both locations sit under their reorder point
+    { warehouseId: main.id, productId: monitor.id, quantity: 3, reorderLevel: 4, targetLevel: 25 },
+    { warehouseId: east.id, productId: monitor.id, quantity: 2, reorderLevel: 4, targetLevel: 15 },
   ])
 
   const [, laptop32] = await db

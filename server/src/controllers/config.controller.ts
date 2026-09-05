@@ -34,6 +34,7 @@ export async function listStock(_req: Request, res: Response) {
       product: products.name,
       quantity: stock.quantity,
       reorderLevel: stock.reorderLevel,
+      targetLevel: stock.targetLevel,
     })
     .from(stock)
     .innerJoin(warehouses, eq(stock.warehouseId, warehouses.id))
@@ -46,6 +47,7 @@ const stockSchema = z.object({
   productId: z.string().uuid(),
   quantity: z.number().int().nonnegative(),
   reorderLevel: z.number().int().nonnegative().optional(),
+  targetLevel: z.number().int().nonnegative().optional(),
 })
 export async function upsertStock(req: Request, res: Response) {
   const p = stockSchema.safeParse(req.body)
@@ -55,7 +57,11 @@ export async function upsertStock(req: Request, res: Response) {
     .values(p.data)
     .onConflictDoUpdate({
       target: [stock.warehouseId, stock.productId],
-      set: { quantity: p.data.quantity, reorderLevel: p.data.reorderLevel ?? 0 },
+      set: {
+        quantity: p.data.quantity,
+        reorderLevel: p.data.reorderLevel ?? 0,
+        targetLevel: p.data.targetLevel ?? 0,
+      },
     })
     .returning()
   res.status(201).json(row)
