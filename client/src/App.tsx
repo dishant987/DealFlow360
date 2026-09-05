@@ -9,8 +9,11 @@ import Quotations from '@/pages/Quotations'
 import QuotationBuilder from '@/pages/QuotationBuilder'
 import Fulfillment from '@/pages/Fulfillment'
 import Billing from '@/pages/Billing'
+import Portal from '@/pages/Portal'
 import Approvals from '@/pages/Approvals'
 import ApprovalDetail from '@/pages/ApprovalDetail'
+import DealHealth from '@/pages/DealHealth'
+import Reports from '@/pages/Reports'
 import ProtectedRoute from '@/components/ProtectedRoute'
 
 export default function App() {
@@ -20,6 +23,8 @@ export default function App() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      {/* public, token-gated customer portal — separate from the internal app */}
+      <Route path="/portal/:token" element={<Portal />} />
       <Route element={<ProtectedRoute />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/quotations" element={<Quotations />} />
@@ -30,6 +35,8 @@ export default function App() {
       <Route element={<ProtectedRoute roles={['manager', 'finance', 'admin']} />}>
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/approvals/:id" element={<ApprovalDetail />} />
+        <Route path="/deal-health" element={<DealHealth />} />
+        <Route path="/reports" element={<Reports />} />
       </Route>
       <Route element={<ProtectedRoute roles={['admin']} />}>
         <Route path="/admin" element={<Admin />} />

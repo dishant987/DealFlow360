@@ -45,9 +45,17 @@ export default function Dashboard() {
             <Link to="/quotations">Open Quotations</Link>
           </Button>
           {(user?.role === 'manager' || user?.role === 'finance' || user?.role === 'admin') && (
-            <Button variant="secondary" asChild>
-              <Link to="/approvals">Approvals</Link>
-            </Button>
+            <>
+              <Button variant="secondary" asChild>
+                <Link to="/approvals">Approvals</Link>
+              </Button>
+              <Button variant="secondary" asChild>
+                <Link to="/deal-health">Deal Health</Link>
+              </Button>
+              <Button variant="secondary" asChild>
+                <Link to="/reports">Reports</Link>
+              </Button>
+            </>
           )}
         </div>
       </main>

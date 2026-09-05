@@ -9,6 +9,9 @@ import quotationRouter from './routes/quotation.routes.js'
 import approvalRouter from './routes/approval.routes.js'
 import fulfillmentRouter from './routes/fulfillment.routes.js'
 import billingRouter from './routes/billing.routes.js'
+import portalRouter from './routes/portal.routes.js'
+import dashboardRouter from './routes/dashboard.routes.js'
+import reportRouter from './routes/report.routes.js'
 
 export const app = express()
 app.use(helmet())
@@ -31,3 +34,6 @@ app.use('/api', quotationRouter)
 app.use('/api/approvals', approvalRouter)
 app.use('/api/quotations', fulfillmentRouter)
 app.use('/api', billingRouter)
+app.use('/api/portal', portalRouter) // public, token-gated customer view
+app.use('/api/dashboard', dashboardRouter)
+app.use('/api/reports', reportRouter)

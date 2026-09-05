@@ -33,6 +33,14 @@ type Line = {
   discountPct: string
   lineType: string
 }
+type Upsell = {
+  productId: string
+  name: string
+  unitPrice: string
+  marginPct: number
+  isPromoted: boolean
+  reason: string
+}
 type Risk = {
   score: number
   level: 'none' | 'manager' | 'finance'
@@ -61,6 +69,7 @@ export default function QuotationBuilder() {
   const [risk, setRisk] = useState<Risk | null>(null)
   const [status, setStatus] = useState('draft')
   const [submitting, setSubmitting] = useState(false)
+  const [portalUrl, setPortalUrl] = useState('')
 
   const quote = useQuery({
     queryKey: ['quotation', id],
@@ -70,6 +79,11 @@ export default function QuotationBuilder() {
     queryKey: ['products'],
     queryFn: async () => (await api.get('/products')).data as Product[],
   })
+  const upsell = useQuery({
+    queryKey: ['upsell', id],
+    queryFn: async () => (await api.get(`/quotations/${id}/upsell`)).data as Upsell[],
+  })
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (quote.data) {
@@ -107,8 +121,20 @@ export default function QuotationBuilder() {
       const prod = products.data?.find((p) => p.id === pick)
       setLines((ls) => [...ls, { ...data, product: prod?.name ?? '' }])
       setPick('')
+      upsell.refetch()
     } catch {
       toast.error('Could not add product')
+    }
+  }
+
+  const addUpsell = async (s: Upsell) => {
+    try {
+      const { data } = await api.post(`/quotations/${id}/lines`, { productId: s.productId })
+      setLines((ls) => [...ls, { ...data, product: s.name }])
+      toast.success(`Added ${s.name}`)
+      upsell.refetch()
+    } catch {
+      toast.error('Could not add suggestion')
     }
   }
 
@@ -133,8 +159,20 @@ export default function QuotationBuilder() {
     setLines((ls) => ls.filter((l) => l.id !== lineId))
     try {
       await api.delete(`/quotations/${id}/lines/${lineId}`)
+      upsell.refetch()
     } catch {
       toast.error('Failed to remove line')
+    }
+  }
+
+  const sendToCustomer = async () => {
+    try {
+      const { data } = await api.post(`/quotations/${id}/send`)
+      setPortalUrl(data.portalUrl)
+      setStatus('sent')
+      toast.success('Portal link generated')
+    } catch {
+      toast.error('Could not generate portal link')
     }
   }
 
@@ -252,8 +290,47 @@ export default function QuotationBuilder() {
           </Table>
         </section>
 
+        <aside className="space-y-4 h-fit">
+        {/* upsell / cross-sell */}
+        {(upsell.data ?? []).filter((s) => !dismissed.has(s.productId)).length > 0 && (
+          <div className="rounded-lg border p-4 space-y-2">
+            <h2 className="font-semibold">Suggested add-ons</h2>
+            {(upsell.data ?? [])
+              .filter((s) => !dismissed.has(s.productId))
+              .map((s) => (
+                <div key={s.productId} className="rounded border p-2 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{s.name}</span>
+                    {s.isPromoted && (
+                      <span className="rounded bg-primary/10 text-primary px-1.5 text-[10px]">
+                        Promoted
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{s.reason}</div>
+                  <div className="text-xs">
+                    ${Number(s.unitPrice).toFixed(2)} ·{' '}
+                    <span className={marginColor(s.marginPct)}>{s.marginPct}% margin</span>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" onClick={() => addUpsell(s)}>
+                      Add to Quote
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setDismissed((d) => new Set(d).add(s.productId))}
+                    >
+                      Dismiss
+                    </Button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+
         {/* live summary */}
-        <aside className="space-y-3 rounded-lg border p-4 h-fit">
+        <div className="space-y-3 rounded-lg border p-4">
           <h2 className="font-semibold">Summary</h2>
           <div className="flex justify-between text-sm">
             <span>Subtotal</span>
@@ -319,7 +396,17 @@ export default function QuotationBuilder() {
                 <Link to={`/quotations/${id}/billing`}>Go to Billing</Link>
               </Button>
             )}
+            <Button className="w-full" variant="outline" onClick={sendToCustomer}>
+              Send to Customer
+            </Button>
+            {portalUrl && (
+              <div className="space-y-1">
+                <p className="text-[11px] text-muted-foreground">Customer portal link:</p>
+                <Input readOnly value={portalUrl} onFocus={(e) => e.currentTarget.select()} />
+              </div>
+            )}
           </div>
+        </div>
         </aside>
       </main>
     </div>

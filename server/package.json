@@ -31,7 +31,7 @@
     "jsonwebtoken": "^9.0.3",
     "node-cron": "^4.6.0",
     "nodemailer": "^10.0.0",
-    "pdfmake": "^0.3.11",
+    "pdfmake": "^0.2.23",
     "pg": "^8.23.0",
     "socket.io": "^4.8.3",
     "zod": "^4.5.4"

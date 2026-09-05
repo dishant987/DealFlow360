@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import crypto from 'crypto'
 import { z } from 'zod'
 import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../config/db.js'
@@ -13,6 +14,8 @@ import {
   appSettings,
   approvals,
   auditLog,
+  negotiationRequests,
+  productPairings,
 } from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { computeBlendedRisk } from '../services/risk.js'
@@ -20,11 +23,12 @@ import { computeBlendedRisk } from '../services/risk.js'
 // Resolve each line's effective ceiling (min of tier + category) and score the quote.
 export async function scoreQuotation(quotationId: string) {
   const [q] = await db
-    .select({ tier: customers.tier })
+    .select({ tier: customers.tier, orderDiscountPct: quotations.orderDiscountPct })
     .from(quotations)
     .innerJoin(customers, eq(quotations.customerId, customers.id))
     .where(eq(quotations.id, quotationId))
   if (!q) return null
+  const orderDiscount = Number(q.orderDiscountPct)
 
   const lines = await db
     .select({ discountPct: quoteLines.discountPct, categoryId: products.categoryId })
@@ -49,7 +53,8 @@ export async function scoreQuotation(quotationId: string) {
   const riskLines = lines.map((l) => {
     const cat = catMap.get(l.categoryId)
     return {
-      discountPct: Number(l.discountPct),
+      // order-level discount stacks on top of the line discount for risk purposes
+      discountPct: Number(l.discountPct) + orderDiscount,
       ceiling: cat != null ? Math.min(tierCeiling, cat) : tierCeiling,
     }
   })
@@ -262,6 +267,93 @@ export async function deleteLine(req: Request<{ id: string; lineId: string }>, r
   if (!line) return res.status(404).json({ error: 'not found' })
   await touch(req.params.id)
   res.json({ ok: true })
+}
+
+/* ---- upsell / cross-sell suggestions (A6/B5) ---- */
+export async function getUpsell(req: Request<{ id: string }>, res: Response) {
+  const cart = await db
+    .select({ productId: quoteLines.productId })
+    .from(quoteLines)
+    .where(eq(quoteLines.quotationId, req.params.id))
+  const inCart = new Set(cart.map((c) => c.productId))
+
+  const [settings] = await db.select().from(appSettings).limit(1)
+  const minMargin = settings ? Number(settings.minUpsellMarginPct) : 20
+
+  // products paired with anything already in the cart (co-purchase history)
+  const paired = inCart.size
+    ? await db
+        .select({
+          suggestedId: productPairings.suggestedProductId,
+          score: productPairings.score,
+          pairedWith: productPairings.productId,
+        })
+        .from(productPairings)
+        .where(inArray(productPairings.productId, [...inCart]))
+    : []
+
+  const scoreById = new Map<string, number>()
+  const pairedWithById = new Map<string, string>()
+  for (const p of paired) {
+    if (inCart.has(p.suggestedId)) continue
+    scoreById.set(p.suggestedId, Math.max(scoreById.get(p.suggestedId) ?? 0, p.score))
+    pairedWithById.set(p.suggestedId, p.pairedWith)
+  }
+
+  const candidates = await db.select().from(products)
+  const nameById = new Map(candidates.map((p) => [p.id, p.name]))
+
+  const suggestions = candidates
+    .filter((p) => p.active && !inCart.has(p.id))
+    .map((p) => {
+      const price = Number(p.unitPrice)
+      const marginPct = price > 0 ? Math.round(((price - Number(p.unitCost)) / price) * 100) : 0
+      const paired = scoreById.has(p.id)
+      return {
+        productId: p.id,
+        name: p.name,
+        unitPrice: p.unitPrice,
+        marginPct,
+        isPromoted: p.isPromoted,
+        paired,
+        score: scoreById.get(p.id) ?? 0,
+        reason: paired ? `Often bought with ${nameById.get(pairedWithById.get(p.id)!)}` : p.isPromoted ? 'Promoted' : '',
+      }
+    })
+    // only healthy-margin suggestions surface, and only paired or promoted ones
+    .filter((s) => s.marginPct >= minMargin && (s.paired || s.isPromoted))
+    .sort((a, b) => Number(b.isPromoted) - Number(a.isPromoted) || b.score - a.score)
+    .slice(0, 5)
+
+  res.json(suggestions)
+}
+
+/* ---- send to customer: generate portal token + set status 'sent' ---- */
+export async function sendToCustomer(req: Request<{ id: string }>, res: Response) {
+  const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
+  const token = crypto.randomBytes(24).toString('hex')
+  const [q] = await db
+    .update(quotations)
+    .set({ portalToken: token, status: 'sent', updatedAt: new Date(), lastActivityAt: new Date() })
+    .where(eq(quotations.id, req.params.id))
+    .returning()
+  if (!q) return res.status(404).json({ error: 'not found' })
+  await db.insert(auditLog).values({
+    quotationId: q.id,
+    userId: req.user!.id,
+    action: 'sent_to_customer',
+  })
+  res.json({ portalToken: token, portalUrl: `${CLIENT_URL}/portal/${token}` })
+}
+
+/* ---- rep view of customer negotiation requests ---- */
+export async function listNegotiations(req: Request<{ id: string }>, res: Response) {
+  res.json(
+    await db
+      .select()
+      .from(negotiationRequests)
+      .where(eq(negotiationRequests.quotationId, req.params.id)),
+  )
 }
 
 /* ---- update quote (order-level discount) ---- */
