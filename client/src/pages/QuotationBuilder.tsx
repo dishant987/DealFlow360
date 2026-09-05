@@ -33,6 +33,13 @@ type Line = {
   discountPct: string
   lineType: string
 }
+type Risk = {
+  score: number
+  level: 'none' | 'manager' | 'finance'
+  requiresManager: boolean
+  requiresFinance: boolean
+  breaches: { index: number; discountPct: number; ceiling: number; overBy: number }[]
+}
 type Quote = {
   id: string
   customer: string
@@ -40,6 +47,7 @@ type Quote = {
   status: string
   orderDiscountPct: string
   lines: Line[]
+  risk: Risk | null
 }
 
 const marginColor = (pct: number) =>
@@ -50,6 +58,9 @@ export default function QuotationBuilder() {
   const [lines, setLines] = useState<Line[]>([])
   const [orderDiscount, setOrderDiscount] = useState('0')
   const [pick, setPick] = useState('')
+  const [risk, setRisk] = useState<Risk | null>(null)
+  const [status, setStatus] = useState('draft')
+  const [submitting, setSubmitting] = useState(false)
 
   const quote = useQuery({
     queryKey: ['quotation', id],
@@ -64,8 +75,28 @@ export default function QuotationBuilder() {
     if (quote.data) {
       setLines(quote.data.lines)
       setOrderDiscount(String(quote.data.orderDiscountPct))
+      setRisk(quote.data.risk)
+      setStatus(quote.data.status)
     }
   }, [quote.data])
+
+  const submit = async () => {
+    setSubmitting(true)
+    try {
+      const { data } = await api.post(`/quotations/${id}/submit`)
+      setRisk(data.risk)
+      setStatus(data.quotation.status)
+      toast.success(
+        data.risk.level === 'none'
+          ? 'No approval needed — approved for fulfillment'
+          : `Routed for approval: ${data.risk.requiresFinance ? 'Manager → Finance' : 'Manager'}`,
+      )
+    } catch {
+      toast.error('Submit failed')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const totals = quoteTotals(lines, orderDiscount)
 
@@ -124,6 +155,9 @@ export default function QuotationBuilder() {
         <span className="font-semibold">
           Quotation · {quote.data.customer}{' '}
           <span className="opacity-80 text-xs uppercase">({quote.data.customerTier})</span>
+          <span className="ml-2 rounded bg-white/20 px-2 py-0.5 text-xs">
+            {status.replace(/_/g, ' ')}
+          </span>
         </span>
         <Button size="sm" variant="secondary" asChild>
           <Link to="/quotations">Back to list</Link>
@@ -248,6 +282,33 @@ export default function QuotationBuilder() {
             <span>
               ${totals.marginAmount.toFixed(2)} ({totals.marginPct.toFixed(1)}%)
             </span>
+          </div>
+
+          {/* discount risk + submit */}
+          <div className="border-t pt-3 space-y-2">
+            {risk && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span>Discount risk score</span>
+                  <span className="font-medium">{risk.score.toFixed(1)}</span>
+                </div>
+                {risk.level === 'none' ? (
+                  <p className="text-xs text-emerald-600">Within limits — no approval needed.</p>
+                ) : (
+                  <p className="text-xs text-amber-600">
+                    Needs {risk.requiresFinance ? 'Manager → Finance' : 'Manager'} approval
+                    {risk.breaches.length > 0 &&
+                      ` · ${risk.breaches.length} line(s) over ceiling`}
+                  </p>
+                )}
+              </>
+            )}
+            <Button className="w-full" onClick={submit} disabled={submitting || lines.length === 0}>
+              {submitting ? 'Submitting…' : 'Submit / Confirm'}
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              Re-evaluates discounts and auto-routes for approval if over limits.
+            </p>
           </div>
         </aside>
       </main>

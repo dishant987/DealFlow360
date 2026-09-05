@@ -8,8 +8,53 @@ import {
   customers,
   products,
   priceListItems,
+  discountTiers,
+  categoryDiscountCeilings,
+  appSettings,
+  approvals,
+  auditLog,
 } from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
+import { computeBlendedRisk } from '../services/risk.js'
+
+// Resolve each line's effective ceiling (min of tier + category) and score the quote.
+export async function scoreQuotation(quotationId: string) {
+  const [q] = await db
+    .select({ tier: customers.tier })
+    .from(quotations)
+    .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .where(eq(quotations.id, quotationId))
+  if (!q) return null
+
+  const lines = await db
+    .select({ discountPct: quoteLines.discountPct, categoryId: products.categoryId })
+    .from(quoteLines)
+    .innerJoin(products, eq(quoteLines.productId, products.id))
+    .where(eq(quoteLines.quotationId, quotationId))
+
+  const [tierRow] = await db.select().from(discountTiers).where(eq(discountTiers.tier, q.tier))
+  const tierCeiling = tierRow ? Number(tierRow.maxDiscountPct) : 100
+  const catMap = new Map(
+    (await db.select().from(categoryDiscountCeilings)).map((c) => [
+      c.categoryId,
+      Number(c.maxDiscountPct),
+    ]),
+  )
+  const [settings] = await db.select().from(appSettings).limit(1)
+  const thresholds = {
+    managerThreshold: settings ? Number(settings.managerThreshold) : 5,
+    financeThreshold: settings ? Number(settings.financeThreshold) : 12,
+  }
+
+  const riskLines = lines.map((l) => {
+    const cat = catMap.get(l.categoryId)
+    return {
+      discountPct: Number(l.discountPct),
+      ceiling: cat != null ? Math.min(tierCeiling, cat) : tierCeiling,
+    }
+  })
+  return computeBlendedRisk(riskLines, thresholds)
+}
 
 /* ---- list: quote + customer name + computed total ---- */
 export async function listQuotations(_req: Request, res: Response) {
@@ -84,7 +129,45 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
     .innerJoin(products, eq(quoteLines.productId, products.id))
     .where(eq(quoteLines.quotationId, req.params.id))
 
-  res.json({ ...quote, lines, totals: computeQuoteTotals(lines, quote.orderDiscountPct) })
+  const risk = await scoreQuotation(req.params.id)
+  res.json({ ...quote, lines, totals: computeQuoteTotals(lines, quote.orderDiscountPct), risk })
+}
+
+/* ---- submit: score, route, set status (auto approval routing) ---- */
+export async function submitQuotation(req: Request<{ id: string }>, res: Response) {
+  const risk = await scoreQuotation(req.params.id)
+  if (!risk) return res.status(404).json({ error: 'not found' })
+
+  const status = risk.level === 'none' ? 'approved' : 'pending_approval'
+  const [q] = await db
+    .update(quotations)
+    .set({
+      riskScore: String(risk.score),
+      requiresManager: risk.requiresManager,
+      requiresFinance: risk.requiresFinance,
+      status,
+      updatedAt: new Date(),
+      lastActivityAt: new Date(),
+    })
+    .where(eq(quotations.id, req.params.id))
+    .returning()
+  if (!q) return res.status(404).json({ error: 'not found' })
+
+  // reset approval steps and create fresh pending ones for this submission
+  await db.delete(approvals).where(eq(approvals.quotationId, q.id))
+  if (risk.requiresManager)
+    await db.insert(approvals).values({ quotationId: q.id, step: 'manager' })
+  if (risk.requiresFinance)
+    await db.insert(approvals).values({ quotationId: q.id, step: 'finance' })
+
+  await db.insert(auditLog).values({
+    quotationId: q.id,
+    userId: req.user!.id,
+    action: 'submitted',
+    detail: { score: risk.score, level: risk.level, breaches: risk.breaches },
+  })
+
+  res.json({ quotation: q, risk })
 }
 
 /* ---- create draft ---- */

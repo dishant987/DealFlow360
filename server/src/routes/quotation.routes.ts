@@ -5,6 +5,7 @@ import {
   getQuotation,
   createQuotation,
   updateQuotation,
+  submitQuotation,
   addLine,
   updateLine,
   deleteLine,
@@ -23,6 +24,7 @@ router.get('/quotations', listQuotations)
 router.post('/quotations', createQuotation)
 router.get('/quotations/:id', getQuotation)
 router.patch('/quotations/:id', updateQuotation)
+router.post('/quotations/:id/submit', submitQuotation)
 router.post('/quotations/:id/lines', addLine)
 router.patch('/quotations/:id/lines/:lineId', updateLine)
 router.delete('/quotations/:id/lines/:lineId', deleteLine)
