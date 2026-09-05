@@ -309,6 +309,11 @@ export default function QuotationBuilder() {
             <p className="text-[11px] text-muted-foreground">
               Re-evaluates discounts and auto-routes for approval if over limits.
             </p>
+            {(status === 'approved' || status === 'fulfilled') && (
+              <Button className="w-full" variant="secondary" asChild>
+                <Link to={`/quotations/${id}/fulfillment`}>Go to Fulfillment</Link>
+              </Button>
+            )}
           </div>
         </aside>
       </main>

@@ -88,7 +88,7 @@ CREATE TABLE "fulfillment_allocations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"quotation_id" uuid NOT NULL,
 	"quote_line_id" uuid NOT NULL,
-	"warehouse_id" uuid NOT NULL,
+	"warehouse_id" uuid,
 	"quantity" integer NOT NULL,
 	"backordered" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL

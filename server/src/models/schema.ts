@@ -259,9 +259,7 @@ export const fulfillmentAllocations = pgTable('fulfillment_allocations', {
   quoteLineId: uuid('quote_line_id')
     .notNull()
     .references(() => quoteLines.id, { onDelete: 'cascade' }),
-  warehouseId: uuid('warehouse_id')
-    .notNull()
-    .references(() => warehouses.id),
+  warehouseId: uuid('warehouse_id').references(() => warehouses.id), // null for backorder rows
   quantity: integer('quantity').notNull(),
   backordered: boolean('backordered').notNull().default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),

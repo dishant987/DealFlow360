@@ -1,5 +1,5 @@
 {
-  "id": "c49bcbe7-02fb-497a-aa21-744a7e8e61f8",
+  "id": "cc3c150c-2be0-444a-ba48-82f55a2cb711",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -582,7 +582,7 @@
           "name": "warehouse_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "quantity": {
           "name": "quantity",

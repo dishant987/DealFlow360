@@ -7,6 +7,7 @@ import Dashboard from '@/pages/Dashboard'
 import Admin from '@/pages/Admin'
 import Quotations from '@/pages/Quotations'
 import QuotationBuilder from '@/pages/QuotationBuilder'
+import Fulfillment from '@/pages/Fulfillment'
 import Approvals from '@/pages/Approvals'
 import ApprovalDetail from '@/pages/ApprovalDetail'
 import ProtectedRoute from '@/components/ProtectedRoute'
@@ -22,6 +23,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/quotations" element={<Quotations />} />
         <Route path="/quotations/:id" element={<QuotationBuilder />} />
+        <Route path="/quotations/:id/fulfillment" element={<Fulfillment />} />
       </Route>
       <Route element={<ProtectedRoute roles={['manager', 'finance', 'admin']} />}>
         <Route path="/approvals" element={<Approvals />} />
