@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -29,7 +29,14 @@ type PortalQuote = {
   lines: Line[]
   total: number
   subtotal: number
-  negotiations: { id: string; type: string; message: string | null; counterDiscountPct: string | null; status: string }[]
+  negotiations: {
+    id: string
+    type: string
+    message: string | null
+    counterDiscountPct: string | null
+    status: string
+    quoteLineId: string | null
+  }[]
 }
 
 export default function Portal() {
@@ -38,6 +45,8 @@ export default function Portal() {
   const [message, setMessage] = useState('')
   const [counter, setCounter] = useState('')
   const [busy, setBusy] = useState(false)
+  const [openLine, setOpenLine] = useState<string | null>(null)
+  const [lineNote, setLineNote] = useState('')
 
   const quote = useQuery({
     queryKey: ['portal', token],
@@ -59,6 +68,27 @@ export default function Portal() {
       toast.success('Request sent to the sales team')
       setMessage('')
       setCounter('')
+      refresh()
+    } catch {
+      toast.error('Could not send request')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // B8: comment / request a change on a specific line
+  const submitLineNote = async (lineId: string) => {
+    if (!lineNote.trim()) return
+    setBusy(true)
+    try {
+      await api.post(`/portal/${token}/negotiate`, {
+        type: 'change_request',
+        message: lineNote,
+        quoteLineId: lineId,
+      })
+      toast.success('Request sent for this line')
+      setLineNote('')
+      setOpenLine(null)
       refresh()
     } catch {
       toast.error('Could not send request')
@@ -117,21 +147,56 @@ export default function Portal() {
                 <TableHead>Qty</TableHead>
                 <TableHead className="text-right">Unit</TableHead>
                 <TableHead className="text-right">Disc</TableHead>
+                {!confirmed && <TableHead className="w-24" />}
               </TableRow>
             </TableHeader>
             <TableBody>
               {q.lines.map((l) => (
-                <TableRow key={l.id}>
-                  <TableCell>
-                    {l.product}
-                    {l.lineType === 'subscription' && (
-                      <span className="ml-1 text-xs text-muted-foreground">(subscription)</span>
+                <Fragment key={l.id}>
+                  <TableRow>
+                    <TableCell>
+                      {l.product}
+                      {l.lineType === 'subscription' && (
+                        <span className="ml-1 text-xs text-muted-foreground">(subscription)</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{l.quantity}</TableCell>
+                    <TableCell className="text-right">${Number(l.unitPrice).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{Number(l.discountPct).toFixed(0)}%</TableCell>
+                    {!confirmed && (
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setOpenLine(openLine === l.id ? null : l.id)
+                            setLineNote('')
+                          }}
+                        >
+                          {openLine === l.id ? 'Cancel' : 'Comment'}
+                        </Button>
+                      </TableCell>
                     )}
-                  </TableCell>
-                  <TableCell>{l.quantity}</TableCell>
-                  <TableCell className="text-right">${Number(l.unitPrice).toFixed(2)}</TableCell>
-                  <TableCell className="text-right">{Number(l.discountPct).toFixed(0)}%</TableCell>
-                </TableRow>
+                  </TableRow>
+                  {openLine === l.id && (
+                    <TableRow>
+                      <TableCell colSpan={5}>
+                        <div className="flex gap-2">
+                          <Input
+                            autoFocus
+                            placeholder={`Question or change request for ${l.product}…`}
+                            value={lineNote}
+                            onChange={(e) => setLineNote(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && submitLineNote(l.id)}
+                          />
+                          <Button size="sm" disabled={busy} onClick={() => submitLineNote(l.id)}>
+                            Send
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
               ))}
             </TableBody>
           </Table>
@@ -179,16 +244,20 @@ export default function Portal() {
           <div className="rounded-lg border bg-background p-4">
             <h3 className="font-medium text-sm mb-2">Your requests</h3>
             <ul className="text-sm space-y-1">
-              {q.negotiations.map((n) => (
-                <li key={n.id} className="flex justify-between border-b py-1">
-                  <span>
-                    {n.type.replace(/_/g, ' ')}
-                    {n.message ? `: ${n.message}` : ''}
-                    {n.counterDiscountPct ? ` (${Number(n.counterDiscountPct).toFixed(0)}%)` : ''}
-                  </span>
-                  <span className="text-muted-foreground">{n.status}</span>
-                </li>
-              ))}
+              {q.negotiations.map((n) => {
+                const line = q.lines.find((l) => l.id === n.quoteLineId)
+                return (
+                  <li key={n.id} className="flex justify-between border-b py-1 gap-2">
+                    <span>
+                      {line && <b className="text-primary">{line.product}: </b>}
+                      {n.type.replace(/_/g, ' ')}
+                      {n.message ? `: ${n.message}` : ''}
+                      {n.counterDiscountPct ? ` (${Number(n.counterDiscountPct).toFixed(0)}%)` : ''}
+                    </span>
+                    <span className="text-muted-foreground shrink-0">{n.status}</span>
+                  </li>
+                )
+              })}
             </ul>
           </div>
         )}

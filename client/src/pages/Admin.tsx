@@ -88,7 +88,16 @@ const productFields: Field[] = [
   },
   { name: 'unitPrice', label: 'Price', type: 'number' },
   { name: 'unitCost', label: 'Cost', type: 'number' },
+  { name: 'unit', label: 'Unit' },
   { name: 'taxRate', label: 'Tax %', type: 'number' },
+  { name: 'description', label: 'Description' },
+  {
+    name: 'subscriptionPlanId',
+    label: 'Plan',
+    type: 'select',
+    optionsFrom: '/config/subscription-plans',
+  },
+  { name: 'isPromoted', label: 'Promoted', type: 'boolean' },
 ]
 
 export default function Admin() {
@@ -110,6 +119,8 @@ export default function Admin() {
             <TabsTrigger value="ceilings">Category Ceilings</TabsTrigger>
             {isAdmin && <TabsTrigger value="warehouses">Warehouses</TabsTrigger>}
             {isAdmin && <TabsTrigger value="stock">Stock</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="variants">Variants</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="pairings">Upsell Pairings</TabsTrigger>}
             {isAdmin && <TabsTrigger value="plans">Subscription Plans</TabsTrigger>}
             {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
             <TabsTrigger value="settings">Settings</TabsTrigger>
@@ -219,6 +230,63 @@ export default function Admin() {
               />
             </TabsContent>}
 
+            {isAdmin && (
+              <TabsContent value="variants">
+                <ResourceManager
+                  title="Variant"
+                  endpoint="/config/variants"
+                  columns={[
+                    { key: 'product', label: 'Product' },
+                    { key: 'attribute', label: 'Attribute' },
+                    { key: 'value', label: 'Value' },
+                    { key: 'extraPrice', label: 'Extra Price' },
+                    { key: 'sku', label: 'SKU' },
+                  ]}
+                  fields={[
+                    {
+                      name: 'productId',
+                      label: 'Product',
+                      type: 'select',
+                      optionsFrom: '/config/products',
+                    },
+                    { name: 'attribute', label: 'Attribute (e.g. Size)' },
+                    { name: 'value', label: 'Value (e.g. Large)' },
+                    { name: 'extraPrice', label: 'Extra Price', type: 'number' },
+                    { name: 'sku', label: 'SKU' },
+                  ]}
+                />
+              </TabsContent>
+            )}
+
+            {isAdmin && (
+              <TabsContent value="pairings">
+                <ResourceManager
+                  title="Pairing"
+                  endpoint="/config/pairings"
+                  columns={[
+                    { key: 'product', label: 'When buying' },
+                    { key: 'suggested', label: 'Suggest' },
+                    { key: 'score', label: 'Score' },
+                  ]}
+                  fields={[
+                    {
+                      name: 'productId',
+                      label: 'When buying',
+                      type: 'select',
+                      optionsFrom: '/config/products',
+                    },
+                    {
+                      name: 'suggestedProductId',
+                      label: 'Suggest',
+                      type: 'select',
+                      optionsFrom: '/config/products',
+                    },
+                    { name: 'score', label: 'Score', type: 'number' },
+                  ]}
+                />
+              </TabsContent>
+            )}
+
             {isAdmin && <TabsContent value="plans">
               <ResourceManager
                 title="Plan"
@@ -242,6 +310,7 @@ export default function Admin() {
                     default: 'monthly',
                   },
                   { name: 'cancellationRefundPct', label: 'Refund %', type: 'number' },
+                  { name: 'prorationEnabled', label: 'Proration', type: 'boolean', default: true },
                 ]}
               />
             </TabsContent>}

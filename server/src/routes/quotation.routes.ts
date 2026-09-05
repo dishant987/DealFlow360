@@ -6,6 +6,7 @@ import {
   createQuotation,
   updateQuotation,
   submitQuotation,
+  cancelQuotation,
   sendToCustomer,
   listNegotiations,
   getUpsell,
@@ -28,6 +29,7 @@ router.post('/quotations', createQuotation)
 router.get('/quotations/:id', getQuotation)
 router.patch('/quotations/:id', updateQuotation)
 router.post('/quotations/:id/submit', submitQuotation)
+router.post('/quotations/:id/cancel', cancelQuotation)
 router.post('/quotations/:id/send', sendToCustomer)
 router.get('/quotations/:id/negotiations', listNegotiations)
 router.get('/quotations/:id/upsell', getUpsell)

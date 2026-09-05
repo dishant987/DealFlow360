@@ -4,7 +4,16 @@ import { eq } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { hashPassword } from '../utils/token.js'
 import { num } from '../utils/crud.js'
-import { stock, warehouses, products, appSettings, users } from '../models/schema.js'
+import {
+  stock,
+  warehouses,
+  products,
+  appSettings,
+  users,
+  productPairings,
+  productVariants,
+} from '../models/schema.js'
+import { alias } from 'drizzle-orm/pg-core'
 
 /* ---- stock: joined list + upsert by (warehouse, product) ---- */
 export async function listStock(_req: Request, res: Response) {
@@ -47,6 +56,43 @@ export async function deleteStock(req: Request<{ id: string }>, res: Response) {
   const [row] = await db.delete(stock).where(eq(stock.id, req.params.id)).returning()
   if (!row) return res.status(404).json({ error: 'not found' })
   res.json({ ok: true })
+}
+
+/* ---- upsell pairings: joined list so the UI shows product names, not uuids ---- */
+export async function listPairings(_req: Request, res: Response) {
+  const suggested = alias(products, 'suggested')
+  res.json(
+    await db
+      .select({
+        id: productPairings.id,
+        productId: productPairings.productId,
+        product: products.name,
+        suggestedProductId: productPairings.suggestedProductId,
+        suggested: suggested.name,
+        score: productPairings.score,
+      })
+      .from(productPairings)
+      .innerJoin(products, eq(productPairings.productId, products.id))
+      .innerJoin(suggested, eq(productPairings.suggestedProductId, suggested.id)),
+  )
+}
+
+/* ---- product variants (A2): joined list ---- */
+export async function listVariants(_req: Request, res: Response) {
+  res.json(
+    await db
+      .select({
+        id: productVariants.id,
+        productId: productVariants.productId,
+        product: products.name,
+        attribute: productVariants.attribute,
+        value: productVariants.value,
+        extraPrice: productVariants.extraPrice,
+        sku: productVariants.sku,
+      })
+      .from(productVariants)
+      .innerJoin(products, eq(productVariants.productId, products.id)),
+  )
 }
 
 /* ---- app settings (singleton row) ---- */

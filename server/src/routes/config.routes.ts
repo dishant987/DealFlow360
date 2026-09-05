@@ -12,11 +12,14 @@ import {
   warehouses,
   subscriptionPlans,
   productPairings,
+  productVariants,
 } from '../models/schema.js'
 import {
   listStock,
   upsertStock,
   deleteStock,
+  listPairings,
+  listVariants,
   getSettings,
   updateSettings,
   listUsers,
@@ -75,6 +78,8 @@ router.use(
   ),
 )
 
+// joined GET registered first so the UI shows names; crud handles the writes
+router.get('/pairings', adminOnly, listPairings)
 router.use(
   '/pairings',
   adminOnly,
@@ -84,6 +89,23 @@ router.use(
       productId: z.string().uuid(),
       suggestedProductId: z.string().uuid(),
       score: z.number().int().optional(),
+    }),
+  ),
+)
+
+/* ---- A2: product variants (attribute / value / extra price) ---- */
+router.get('/variants', adminOnly, listVariants)
+router.use(
+  '/variants',
+  adminOnly,
+  crud(
+    productVariants,
+    z.object({
+      productId: z.string().uuid(),
+      attribute: z.string().min(1),
+      value: z.string().min(1),
+      extraPrice: num.optional(),
+      sku: z.string().optional(),
     }),
   ),
 )

@@ -16,6 +16,7 @@ async function wipe() {
   await db.delete(s.quoteLines)
   await db.delete(s.quotations)
   await db.delete(s.productPairings)
+  await db.delete(s.productVariants)
   await db.delete(s.stock)
   await db.delete(s.priceListItems)
   await db.delete(s.categoryDiscountCeilings)
@@ -111,6 +112,14 @@ async function seed() {
     { warehouseId: east.id, productId: laptop.id, quantity: 5, reorderLevel: 2 },
     { warehouseId: main.id, productId: mouse.id, quantity: 50, reorderLevel: 10 },
     { warehouseId: east.id, productId: mouse.id, quantity: 20, reorderLevel: 5 },
+  ])
+
+  // A2 variants — attribute / value / extra price on top of the base price
+  await db.insert(s.productVariants).values([
+    { productId: laptop.id, attribute: 'RAM', value: '16GB', extraPrice: '0', sku: 'HW-LAPTOP-16' },
+    { productId: laptop.id, attribute: 'RAM', value: '32GB', extraPrice: '250', sku: 'HW-LAPTOP-32' },
+    { productId: mouse.id, attribute: 'Pack', value: 'Single', extraPrice: '0' },
+    { productId: mouse.id, attribute: 'Pack', value: 'Pack of 5', extraPrice: '80' },
   ])
 
   // upsell pairings (Laptop → ...)

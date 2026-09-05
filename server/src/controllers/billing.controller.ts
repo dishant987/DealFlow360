@@ -142,6 +142,7 @@ export async function changeSubscription(
       id: billingSchedules.id,
       nextBillingDate: billingSchedules.nextBillingDate,
       interval: subscriptionPlans.interval,
+      prorationEnabled: subscriptionPlans.prorationEnabled,
     })
     .from(billingSchedules)
     .innerJoin(subscriptionPlans, eq(billingSchedules.subscriptionPlanId, subscriptionPlans.id))
@@ -154,7 +155,11 @@ export async function changeSubscription(
   const delta = newPeriod - oldPeriod
 
   const daysRemaining = daysBetween(new Date(), new Date(sched.nextBillingDate))
-  const prorated = proratedAmount(Math.abs(delta), daysRemaining, intervalDays(sched.interval as Interval))
+  // when the plan disables proration the change simply takes effect next cycle —
+  // no immediate charge or credit
+  const prorated = sched.prorationEnabled
+    ? proratedAmount(Math.abs(delta), daysRemaining, intervalDays(sched.interval as Interval))
+    : 0
 
   if (delta > 0 && prorated > 0) {
     await db.insert(invoices).values({
@@ -177,7 +182,14 @@ export async function changeSubscription(
     quotationId: req.params.id,
     userId: req.user!.id,
     action: 'subscription_changed',
-    detail: { lineId: line.id, from: line.quantity, to: parsed.data.quantity, prorated, delta },
+    detail: {
+      lineId: line.id,
+      from: line.quantity,
+      to: parsed.data.quantity,
+      prorated,
+      delta,
+      prorationEnabled: sched.prorationEnabled,
+    },
   })
 
   res.json(await billingView(req.params.id))

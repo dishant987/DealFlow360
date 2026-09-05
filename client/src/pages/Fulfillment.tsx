@@ -16,6 +16,7 @@ type Suggestion = {
   lines: SugLine[]
   shipmentCount: number
   estimatedShippingCost: number
+  consolidatable: number
 }
 type Alloc = {
   id: string
@@ -123,6 +124,20 @@ export default function Fulfillment() {
         { label: 'Fulfillment' },
       ]}
     >
+      {/* B6: stock has arrived since we backordered → prompt automatically */}
+      {(s?.consolidatable ?? 0) > 0 && (
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <p className="text-sm text-amber-900">
+            Stock has arrived — <b>{s!.consolidatable}</b> backordered unit(s) can now be fulfilled.
+          </p>
+          {canAct && (
+            <Button size="sm" onClick={consolidate} disabled={busy}>
+              Consolidate Remaining Backorder
+            </Button>
+          )}
+        </div>
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
         <section className="space-y-6">
           {s?.lines.length === 0 && (

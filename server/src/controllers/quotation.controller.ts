@@ -16,7 +16,9 @@ import {
   auditLog,
   negotiationRequests,
   productPairings,
+  productVariants,
 } from '../models/schema.js'
+import { sendPortalLink } from '../utils/mailer.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { computeBlendedRisk } from '../services/risk.js'
 
@@ -123,6 +125,8 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
       id: quoteLines.id,
       productId: quoteLines.productId,
       product: products.name,
+      variantAttribute: productVariants.attribute,
+      variantValue: productVariants.value,
       quantity: quoteLines.quantity,
       unitPrice: quoteLines.unitPrice,
       unitCost: quoteLines.unitCost,
@@ -132,6 +136,7 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
     })
     .from(quoteLines)
     .innerJoin(products, eq(quoteLines.productId, products.id))
+    .leftJoin(productVariants, eq(quoteLines.variantId, productVariants.id))
     .where(eq(quoteLines.quotationId, req.params.id))
 
   const risk = await scoreQuotation(req.params.id)
@@ -193,13 +198,27 @@ async function touch(quotationId: string) {
     .where(eq(quotations.id, quotationId))
 }
 
+// A3: every edit is logged with user, timestamp and (optional) reason
+async function logEdit(
+  quotationId: string,
+  userId: string,
+  action: string,
+  detail: Record<string, unknown>,
+  reason?: string,
+) {
+  await db.insert(auditLog).values({ quotationId, userId, action, detail, reason: reason ?? null })
+  await touch(quotationId)
+}
+
 /* ---- add a line (snapshots tier price + cost) ---- */
 export async function addLine(req: Request<{ id: string }>, res: Response) {
   const p = z
     .object({
       productId: z.string().uuid(),
+      variantId: z.string().uuid().optional(),
       quantity: z.number().int().positive().optional(),
       discountPct: z.union([z.number(), z.string()]).optional(),
+      reason: z.string().optional(),
     })
     .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
@@ -219,22 +238,47 @@ export async function addLine(req: Request<{ id: string }>, res: Response) {
     .select()
     .from(priceListItems)
     .where(and(eq(priceListItems.productId, product.id), eq(priceListItems.tier, quote.tier)))
-  const unitPrice = tierPrice?.unitPrice ?? product.unitPrice
+  let unitPrice = Number(tierPrice?.unitPrice ?? product.unitPrice)
+
+  // variant extra price stacks on top of the (tier) base price
+  let variant = null
+  if (p.data.variantId) {
+    const [v] = await db
+      .select()
+      .from(productVariants)
+      .where(eq(productVariants.id, p.data.variantId))
+    if (!v || v.productId !== product.id)
+      return res.status(400).json({ error: 'variant does not belong to product' })
+    variant = v
+    unitPrice += Number(v.extraPrice)
+  }
 
   const [line] = await db
     .insert(quoteLines)
     .values({
       quotationId: quote.id,
       productId: product.id,
+      variantId: variant?.id ?? null,
       quantity: p.data.quantity ?? 1,
-      unitPrice,
+      unitPrice: String(unitPrice),
       unitCost: product.unitCost,
       discountPct: p.data.discountPct != null ? String(p.data.discountPct) : '0',
       lineType: product.type,
       subscriptionPlanId: product.subscriptionPlanId,
     })
     .returning()
-  await touch(quote.id)
+  await logEdit(
+    quote.id,
+    req.user!.id,
+    'line_added',
+    {
+      product: product.name,
+      variant: variant ? `${variant.attribute}: ${variant.value}` : null,
+      quantity: p.data.quantity ?? 1,
+      unitPrice,
+    },
+    p.data.reason,
+  )
   res.status(201).json(line)
 }
 
@@ -244,17 +288,30 @@ export async function updateLine(req: Request<{ id: string; lineId: string }>, r
     .object({
       quantity: z.number().int().positive(),
       discountPct: z.union([z.number(), z.string()]).transform(String),
+      reason: z.string(),
     })
     .partial()
     .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
+  const { reason, ...patch } = p.data
+  const [before] = await db.select().from(quoteLines).where(eq(quoteLines.id, req.params.lineId))
   const [line] = await db
     .update(quoteLines)
-    .set(p.data)
+    .set(patch)
     .where(and(eq(quoteLines.id, req.params.lineId), eq(quoteLines.quotationId, req.params.id)))
     .returning()
   if (!line) return res.status(404).json({ error: 'not found' })
-  await touch(req.params.id)
+  await logEdit(
+    req.params.id,
+    req.user!.id,
+    'line_updated',
+    {
+      lineId: line.id,
+      from: { quantity: before?.quantity, discountPct: before?.discountPct },
+      to: { quantity: line.quantity, discountPct: line.discountPct },
+    },
+    reason,
+  )
   res.json(line)
 }
 
@@ -265,7 +322,11 @@ export async function deleteLine(req: Request<{ id: string; lineId: string }>, r
     .where(and(eq(quoteLines.id, req.params.lineId), eq(quoteLines.quotationId, req.params.id)))
     .returning()
   if (!line) return res.status(404).json({ error: 'not found' })
-  await touch(req.params.id)
+  await logEdit(req.params.id, req.user!.id, 'line_removed', {
+    lineId: line.id,
+    productId: line.productId,
+    quantity: line.quantity,
+  })
   res.json({ ok: true })
 }
 
@@ -339,12 +400,27 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
     .where(eq(quotations.id, req.params.id))
     .returning()
   if (!q) return res.status(404).json({ error: 'not found' })
+
+  // email the magic link to the customer (console fallback when SMTP isn't set)
+  const portalUrl = `${CLIENT_URL}/portal/${token}`
+  const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId))
+  let emailed = false
+  if (customer?.email) {
+    try {
+      await sendPortalLink(customer.email, portalUrl, customer.name)
+      emailed = true
+    } catch (e) {
+      console.error('portal link email failed:', (e as Error).message)
+    }
+  }
+
   await db.insert(auditLog).values({
     quotationId: q.id,
     userId: req.user!.id,
     action: 'sent_to_customer',
+    detail: { emailed, to: customer?.email ?? null },
   })
-  res.json({ portalToken: token, portalUrl: `${CLIENT_URL}/portal/${token}` })
+  res.json({ portalToken: token, portalUrl, emailed, sentTo: customer?.email ?? null })
 }
 
 /* ---- rep view of customer negotiation requests ---- */
@@ -360,15 +436,51 @@ export async function listNegotiations(req: Request<{ id: string }>, res: Respon
 /* ---- update quote (order-level discount) ---- */
 export async function updateQuotation(req: Request<{ id: string }>, res: Response) {
   const p = z
-    .object({ orderDiscountPct: z.union([z.number(), z.string()]).transform(String) })
+    .object({
+      orderDiscountPct: z.union([z.number(), z.string()]).transform(String),
+      reason: z.string(),
+    })
     .partial()
     .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
+  const { reason, ...patch } = p.data
+  const [before] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
   const [q] = await db
     .update(quotations)
-    .set({ ...p.data, updatedAt: new Date(), lastActivityAt: new Date() })
+    .set({ ...patch, updatedAt: new Date(), lastActivityAt: new Date() })
     .where(eq(quotations.id, req.params.id))
     .returning()
   if (!q) return res.status(404).json({ error: 'not found' })
+  if (patch.orderDiscountPct != null)
+    await logEdit(
+      q.id,
+      req.user!.id,
+      'order_discount_changed',
+      { from: before?.orderDiscountPct, to: q.orderDiscountPct },
+      reason,
+    )
+  res.json(q)
+}
+
+/* ---- cancel a deal (drag-to-Rejected in the pipeline) ---- */
+export async function cancelQuotation(req: Request<{ id: string }>, res: Response) {
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined
+  const [before] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
+  if (!before) return res.status(404).json({ error: 'not found' })
+  if (['fulfilled', 'invoiced'].includes(before.status))
+    return res.status(400).json({ error: 'This deal is already fulfilled or invoiced — it cannot be cancelled.' })
+
+  const [q] = await db
+    .update(quotations)
+    .set({ status: 'cancelled', updatedAt: new Date(), lastActivityAt: new Date() })
+    .where(eq(quotations.id, req.params.id))
+    .returning()
+  await db.insert(auditLog).values({
+    quotationId: q.id,
+    userId: req.user!.id,
+    action: 'cancelled',
+    detail: { from: before.status },
+    reason: reason ?? null,
+  })
   res.json(q)
 }

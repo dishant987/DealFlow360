@@ -103,6 +103,18 @@ export const priceListItems = pgTable(
   (t) => [uniqueIndex('price_list_product_tier_uq').on(t.productId, t.tier)],
 )
 
+// A2: variants — attribute (e.g. "Size"), value (e.g. "Large"), extra price on top of base
+export const productVariants = pgTable('product_variants', {
+  id: pk(),
+  productId: uuid('product_id')
+    .notNull()
+    .references(() => products.id, { onDelete: 'cascade' }),
+  attribute: text('attribute').notNull(),
+  value: text('value').notNull(),
+  extraPrice: money('extra_price').notNull().default('0'),
+  sku: text('sku'),
+})
+
 /* ---------- discount governance ---------- */
 export const discountTiers = pgTable('discount_tiers', {
   id: pk(),
@@ -217,6 +229,7 @@ export const quoteLines = pgTable('quote_lines', {
   productId: uuid('product_id')
     .notNull()
     .references(() => products.id),
+  variantId: uuid('variant_id').references(() => productVariants.id),
   description: text('description'),
   quantity: integer('quantity').notNull().default(1),
   unitPrice: money('unit_price').notNull(), // snapshot

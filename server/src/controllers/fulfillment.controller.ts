@@ -89,7 +89,33 @@ export async function getSuggestion(req: Request<{ id: string }>, res: Response)
     (sum, id) => sum + (usedWeights.get(id) ?? 0),
     0,
   )
-  res.json({ status: q.status, lines, shipmentCount: shipments, estimatedShippingCost })
+
+  // B6: has stock arrived since we backordered? drives the automatic consolidate prompt
+  const backorders = await db
+    .select({ productId: quoteLines.productId, quantity: fulfillmentAllocations.quantity })
+    .from(fulfillmentAllocations)
+    .innerJoin(quoteLines, eq(fulfillmentAllocations.quoteLineId, quoteLines.id))
+    .where(
+      and(
+        eq(fulfillmentAllocations.quotationId, req.params.id),
+        eq(fulfillmentAllocations.backordered, true),
+      ),
+    )
+  let consolidatable = 0
+  for (const b of backorders) {
+    if (b.quantity <= 0) continue
+    const rows = await db.select().from(stock).where(eq(stock.productId, b.productId))
+    const available = rows.reduce((s, r) => s + r.quantity, 0)
+    consolidatable += Math.min(available, b.quantity)
+  }
+
+  res.json({
+    status: q.status,
+    lines,
+    shipmentCount: shipments,
+    estimatedShippingCost,
+    consolidatable, // units now fulfillable from stock that has since arrived
+  })
 }
 
 const acceptSchema = z.object({

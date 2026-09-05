@@ -17,18 +17,23 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
+type Variant = { id: string; attribute: string; value: string; extraPrice: string }
 type Product = {
   id: string
   name: string
+  category: string
   type: string
   unitPrice: string
   unitCost: string
   isPromoted: boolean
+  variants: Variant[]
 }
 type Line = {
   id: string
   productId: string
   product: string
+  variantAttribute?: string | null
+  variantValue?: string | null
   quantity: number
   unitPrice: string
   unitCost: string
@@ -69,6 +74,7 @@ export default function QuotationBuilder() {
   const [lines, setLines] = useState<Line[]>([])
   const [orderDiscount, setOrderDiscount] = useState('0')
   const [pick, setPick] = useState('')
+  const [pickVariant, setPickVariant] = useState('')
   const [risk, setRisk] = useState<Risk | null>(null)
   const [status, setStatus] = useState('draft')
   const [submitting, setSubmitting] = useState(false)
@@ -121,6 +127,7 @@ export default function QuotationBuilder() {
   }
 
   const totals = quoteTotals(lines, orderDiscount)
+  const pickedVariants = products.data?.find((p) => p.id === pick)?.variants ?? []
 
   // true impact on the ORDER margin if this suggestion were added (percentage points)
   const marginDelta = (s: Upsell) => {
@@ -134,10 +141,23 @@ export default function QuotationBuilder() {
   const addLine = async () => {
     if (!pick) return
     try {
-      const { data } = await api.post(`/quotations/${id}/lines`, { productId: pick })
+      const { data } = await api.post(`/quotations/${id}/lines`, {
+        productId: pick,
+        ...(pickVariant ? { variantId: pickVariant } : {}),
+      })
       const prod = products.data?.find((p) => p.id === pick)
-      setLines((ls) => [...ls, { ...data, product: prod?.name ?? '' }])
+      const v = prod?.variants?.find((x) => x.id === pickVariant)
+      setLines((ls) => [
+        ...ls,
+        {
+          ...data,
+          product: prod?.name ?? '',
+          variantAttribute: v?.attribute ?? null,
+          variantValue: v?.value ?? null,
+        },
+      ])
       setPick('')
+      setPickVariant('')
       upsell.refetch()
     } catch {
       toast.error('Could not add product')
@@ -229,15 +249,43 @@ export default function QuotationBuilder() {
             <select
               className="h-9 rounded-md border border-input bg-transparent px-2 text-sm min-w-64"
               value={pick}
-              onChange={(e) => setPick(e.target.value)}
+              onChange={(e) => {
+                setPick(e.target.value)
+                setPickVariant('')
+              }}
             >
               <option value="">Add product…</option>
-              {(products.data ?? []).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} — ${Number(p.unitPrice).toFixed(2)} {p.isPromoted ? '★' : ''}
-                </option>
+              {/* B3: grouped by category (Hardware / Services / Subscriptions …) */}
+              {Object.entries(
+                (products.data ?? []).reduce<Record<string, Product[]>>((acc, p) => {
+                  ;(acc[p.category ?? 'Other'] ??= []).push(p)
+                  return acc
+                }, {}),
+              ).map(([category, items]) => (
+                <optgroup key={category} label={category}>
+                  {items.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — ${Number(p.unitPrice).toFixed(2)} {p.isPromoted ? '★' : ''}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            {pickedVariants.length > 0 && (
+              <select
+                className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+                value={pickVariant}
+                onChange={(e) => setPickVariant(e.target.value)}
+              >
+                <option value="">{pickedVariants[0].attribute}…</option>
+                {pickedVariants.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.value}
+                    {Number(v.extraPrice) > 0 ? ` (+$${Number(v.extraPrice).toFixed(2)})` : ''}
+                  </option>
+                ))}
+              </select>
+            )}
             <Button onClick={addLine} disabled={!pick}>
               Add
             </Button>
@@ -261,6 +309,11 @@ export default function QuotationBuilder() {
                   <TableRow key={l.id}>
                     <TableCell>
                       {l.product}
+                      {l.variantValue && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          ({l.variantAttribute}: {l.variantValue})
+                        </span>
+                      )}
                       {l.lineType === 'subscription' && (
                         <span className="ml-1 rounded bg-primary/10 text-primary px-1 text-xs">
                           sub

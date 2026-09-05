@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -43,6 +44,19 @@ export default function AppShell({
     nav('/login')
   }
 
+  // B1: pull fresh pricing / stock / approval data from the backend
+  const reloadData = async () => {
+    await qc.invalidateQueries()
+    toast.success('Data reloaded from backend')
+  }
+
+  // B1: end the current working session view (clears cached workspace data)
+  const closeWorkspace = () => {
+    qc.clear()
+    toast.message('Workspace closed')
+    nav('/')
+  }
+
   return (
     <div className="min-h-svh bg-muted/20">
       {/* Odoo-style purple top bar with primary nav */}
@@ -65,10 +79,28 @@ export default function AppShell({
               <NavItem to="/admin">Config</NavItem>
             )}
           </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="hidden sm:inline opacity-90">
+          <div className="ml-auto flex items-center gap-2 text-sm">
+            <span className="hidden lg:inline opacity-90 mr-1">
               {user?.name} · <span className="uppercase opacity-70">{user?.role}</span>
             </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-primary-foreground hover:bg-white/10"
+              onClick={reloadData}
+              title="Refresh pricing, stock and approval data"
+            >
+              Reload Data
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-primary-foreground hover:bg-white/10"
+              onClick={closeWorkspace}
+              title="End the current working session view"
+            >
+              Close Workspace
+            </Button>
             <Button size="sm" variant="secondary" onClick={logout}>
               Logout
             </Button>
