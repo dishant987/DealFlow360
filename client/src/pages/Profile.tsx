@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { roleLabel } from '@/lib/roles'
 import { errText } from '@/lib/errors'
 import { useAuth, type Role } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
@@ -203,7 +204,7 @@ export default function Profile() {
           <section className="rounded-xl border bg-background p-5">
             <h2 className="font-heading font-medium">Your role</h2>
             <span className="mt-2 inline-block rounded bg-primary/10 px-2 py-0.5 text-xs font-medium tracking-wide text-primary uppercase">
-              {user?.role}
+              {roleLabel(user?.role)}
             </span>
             <ul className="mt-4 space-y-2.5">
               {capabilities.map((c) => (

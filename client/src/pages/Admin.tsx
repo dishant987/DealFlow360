@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { ROLE_LABEL, roleLabel } from '@/lib/roles'
 import { useAuth } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
 import AuditLog from '@/components/AuditLog'
@@ -417,12 +418,12 @@ export default function Admin() {
             {isAdmin && <TabsContent value="users">
               <ResourceManager
                 title="User"
-                description="Internal accounts and their role. Self-signup always creates a rep."
+                description={`Internal accounts and their role. Self-signup always creates a ${ROLE_LABEL.rep}.`}
                 endpoint="/config/users"
                 columns={[
                   { key: 'name', label: 'Name' },
                   { key: 'email', label: 'Email' },
-                  { key: 'role', label: 'Role' },
+                  { key: 'role', label: 'Role', render: (u) => roleLabel(u.role) },
                 ]}
                 fields={[
                   { name: 'name', label: 'Name' },
@@ -433,10 +434,10 @@ export default function Admin() {
                     label: 'Role',
                     type: 'select',
                     options: [
-                      { label: 'Rep', value: 'rep' },
-                      { label: 'Manager', value: 'manager' },
-                      { label: 'Finance', value: 'finance' },
-                      { label: 'Admin', value: 'admin' },
+                      { label: ROLE_LABEL.rep, value: 'rep' },
+                      { label: ROLE_LABEL.manager, value: 'manager' },
+                      { label: ROLE_LABEL.finance, value: 'finance' },
+                      { label: ROLE_LABEL.admin, value: 'admin' },
                     ],
                     default: 'rep',
                   },

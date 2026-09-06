@@ -5,6 +5,7 @@ import { LogOut, PanelsTopLeft, RefreshCw, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
+import { roleLabel } from '@/lib/roles'
 import Avatar from '@/components/Avatar'
 import {
   AlertDialog,
@@ -66,7 +67,7 @@ export default function UserMenu({
           </div>
           <div className="px-2 pb-1">
             <span className="inline-block rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium tracking-wide text-primary uppercase">
-              {user?.role}
+              {roleLabel(user?.role)}
             </span>
           </div>
 

@@ -31,7 +31,12 @@ export type Field = {
   default?: string | number | boolean
 }
 
-type Column = { key: string; label: string }
+type Column = {
+  key: string
+  label: string
+  /** custom cell rendering, passed straight through to DataTable */
+  render?: (row: any) => ReactNode
+}
 
 const errMsg = (e: unknown, fallback: string) => errText(e, fallback)
 
@@ -192,7 +197,7 @@ export default function ResourceManager({
   })
 
   const dtColumns: DTColumn<any>[] = [
-    ...columns.map((c) => ({ key: c.key, label: c.label })),
+    ...columns.map((c) => ({ key: c.key, label: c.label, render: c.render })),
     {
       key: '__actions',
       label: '',

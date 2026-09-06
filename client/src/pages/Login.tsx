@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { ROLE_LABEL } from '@/lib/roles'
 import { errText } from '@/lib/errors'
 import AuthLayout from '@/components/AuthLayout'
 import FormField from '@/components/FormField'
@@ -21,10 +22,10 @@ type Form = z.infer<typeof schema>
 // The seeded roles, so a reviewer can switch personas without hunting through
 // the docs for credentials. They all share the seed password.
 const DEMO_ROLES = [
-  { label: 'Rep', email: 'rep@dealflow.com' },
-  { label: 'Manager', email: 'manager@dealflow.com' },
-  { label: 'Finance', email: 'finance@dealflow.com' },
-  { label: 'Admin', email: 'admin@dealflow.com' },
+  { label: ROLE_LABEL.rep, email: 'rep@dealflow.com' },
+  { label: ROLE_LABEL.manager, email: 'manager@dealflow.com' },
+  { label: ROLE_LABEL.finance, email: 'finance@dealflow.com' },
+  { label: ROLE_LABEL.admin, email: 'admin@dealflow.com' },
 ]
 const DEMO_PASSWORD = 'password123'
 

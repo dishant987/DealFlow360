@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
+import { roleLabel } from '@/lib/roles'
 import AppShell from '@/components/AppShell'
 import Panel from '@/components/Panel'
 import StatCard from '@/components/StatCard'
@@ -113,7 +114,7 @@ export default function Dashboard() {
         <div>
           <h1 className="font-heading text-xl font-semibold">Welcome, {user?.name}</h1>
           <p className="text-sm text-muted-foreground">
-            Signed in as <span className="font-medium text-foreground">{user?.role}</span>.
+            Signed in as <span className="font-medium text-foreground">{roleLabel(user?.role)}</span>.
           </p>
         </div>
 

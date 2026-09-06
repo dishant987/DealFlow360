@@ -12,6 +12,35 @@ test.describe('A1 — authentication', () => {
     })
   }
 
+  test('a rep is named "Sales Rep" everywhere the role is shown', async ({ page }) => {
+    // login screen: the demo persona buttons
+    await page.goto('/login')
+    await expect(page.getByRole('button', { name: 'Sales Rep' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Rep', exact: true })).toHaveCount(0)
+
+    await login(page, 'rep')
+    // workspace strapline
+    await expect(page.getByText(/Signed in as\s*Sales Rep/)).toBeVisible()
+    // account menu badge
+    await page.getByRole('button', { name: 'Account menu' }).click()
+    await expect(page.getByText('Sales Rep').first()).toBeVisible()
+    await page.keyboard.press('Escape')
+    // profile card
+    await page.goto('/profile')
+    await expect(page.getByText('Your role')).toBeVisible()
+    await expect(page.getByText('Sales Rep').first()).toBeVisible()
+    // the bare code never leaks through
+    await expect(page.getByText('rep', { exact: true })).toHaveCount(0)
+  })
+
+  test('the admin user list and role picker say "Sales Rep" too', async ({ page }) => {
+    await login(page, 'admin')
+    await page.goto('/admin')
+    await page.getByRole('tab', { name: 'Users' }).click()
+    await expect(page.getByRole('cell', { name: 'Sales Rep' }).first()).toBeVisible()
+    await expect(page.getByRole('cell', { name: 'rep', exact: true })).toHaveCount(0)
+  })
+
   test('bad password is rejected and keeps the user on /login', async ({ page }) => {
     await page.goto('/login')
     await page.getByPlaceholder('you@company.com').fill(ACCOUNTS.rep.email)

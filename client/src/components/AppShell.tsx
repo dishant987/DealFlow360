@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
+import { roleLabel } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
 import UserMenu from '@/components/UserMenu'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
@@ -155,7 +156,7 @@ export default function AppShell({
                 <SheetTitle className="text-primary">DealFlow360</SheetTitle>
                 {user && (
                   <p className="text-xs text-muted-foreground">
-                    {user.name} · <span className="uppercase">{user.role}</span>
+                    {user.name} · <span className="uppercase">{roleLabel(user.role)}</span>
                   </p>
                 )}
               </SheetHeader>
