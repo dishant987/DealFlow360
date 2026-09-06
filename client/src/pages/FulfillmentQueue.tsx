@@ -1,6 +1,7 @@
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { PackagePlus } from 'lucide-react'
+import { PackagePlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { errText } from '@/lib/errors'
 import { useAuth } from '@/hooks/useAuth'
@@ -11,6 +12,7 @@ import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import StatCard from '@/components/StatCard'
 import Panel from '@/components/Panel'
+import { Select } from '@/components/ui/select'
 
 type Row = {
   id: string
@@ -64,6 +66,47 @@ export default function FulfillmentQueue() {
   const proposals = q.data?.replenishment ?? []
   const { user } = useAuth()
   const canAct = !!user && ['finance', 'admin'].includes(user.role)
+
+  // Orders table filters
+  const [state, setState] = useState('')
+  const [dealStatus, setDealStatus] = useState('')
+  const [orderCustomer, setOrderCustomer] = useState('')
+  // Stock table filters
+  const [warehouse, setWarehouse] = useState('')
+  const [product, setProduct] = useState('')
+  const [lowOnly, setLowOnly] = useState(false)
+
+  // Every option list is derived from the rows on screen, so it can never offer
+  // a warehouse or a status that isn't actually in the data.
+  const uniq = (xs: string[]) => [...new Set(xs)].sort((a, b) => a.localeCompare(b))
+  const dealStatuses = useMemo(() => uniq(rows.map((r) => r.status)), [rows])
+  const orderCustomers = useMemo(() => uniq(rows.map((r) => r.customer)), [rows])
+  const warehouses = useMemo(() => uniq(stock.map((r) => r.warehouse)), [stock])
+  const products = useMemo(() => uniq(stock.map((r) => r.product)), [stock])
+
+  const visibleOrders = useMemo(
+    () =>
+      rows.filter(
+        (r) =>
+          (!state || r.state === state) &&
+          (!dealStatus || r.status === dealStatus) &&
+          (!orderCustomer || r.customer === orderCustomer),
+      ),
+    [rows, state, dealStatus, orderCustomer],
+  )
+  const visibleStock = useMemo(
+    () =>
+      stock.filter(
+        (r) =>
+          (!warehouse || r.warehouse === warehouse) &&
+          (!product || r.product === product) &&
+          (!lowOnly || r.belowReorder),
+      ),
+    [stock, warehouse, product, lowOnly],
+  )
+
+  const orderFilters = (state ? 1 : 0) + (dealStatus ? 1 : 0) + (orderCustomer ? 1 : 0)
+  const stockFilters = (warehouse ? 1 : 0) + (product ? 1 : 0) + (lowOnly ? 1 : 0)
 
   const receive = useMutation({
     mutationFn: async (stockId: string) =>
@@ -206,22 +249,137 @@ export default function FulfillmentQueue() {
           description="Available is what the split logic can draw on right now; reserved is already committed to a fulfilled deal. ⚠ marks a line at or below its reorder level."
         >
           <DataTable
-            rows={stock}
+            rows={visibleStock}
             columns={stockColumns}
             loading={q.isLoading}
             searchPlaceholder="Search warehouse or product…"
-            emptyMessage="No stock records yet — add them in Config → Stock."
+            emptyMessage={
+              stockFilters
+                ? 'No stock line matches these filters.'
+                : 'No stock records yet — add them in Config → Stock.'
+            }
+            toolbar={
+              <>
+                <Button
+                  size="sm"
+                  variant={lowOnly ? 'default' : 'outline'}
+                  aria-pressed={lowOnly}
+                  onClick={() => setLowOnly((v) => !v)}
+                >
+                  Below reorder only ({stock.filter((r) => r.belowReorder).length})
+                </Button>
+                <Select
+                  aria-label="Filter stock by warehouse"
+                  className="h-8 w-44 text-xs"
+                  value={warehouse}
+                  onChange={(e) => setWarehouse(e.target.value)}
+                >
+                  <option value="">All warehouses</option>
+                  {warehouses.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  aria-label="Filter stock by product"
+                  className="h-8 w-48 text-xs"
+                  value={product}
+                  onChange={(e) => setProduct(e.target.value)}
+                >
+                  <option value="">All products</option>
+                  {products.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </Select>
+                {stockFilters > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setWarehouse('')
+                      setProduct('')
+                      setLowOnly(false)
+                    }}
+                  >
+                    <X className="size-3.5" />
+                    Clear {stockFilters}
+                  </Button>
+                )}
+              </>
+            }
           />
         </Panel>
 
         <Panel title="Orders awaiting fulfillment">
           <DataTable
-            rows={rows}
+            rows={visibleOrders}
             columns={columns}
             loading={q.isLoading}
             onRowClick={(r) => nav(`/quotations/${r.id}/fulfillment`)}
             searchPlaceholder="Search quote # or customer…"
-            emptyMessage="Nothing approved is waiting on fulfillment."
+            emptyMessage={
+              orderFilters
+                ? 'No order matches these filters.'
+                : 'Nothing approved is waiting on fulfillment.'
+            }
+            toolbar={
+              <>
+                <Select
+                  aria-label="Filter by fulfillment state"
+                  className="h-8 w-44 text-xs"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                >
+                  <option value="">All fulfillment states</option>
+                  <option value="awaiting">Awaiting split ({counts.awaiting})</option>
+                  <option value="partial">Backordered ({counts.partial})</option>
+                  <option value="complete">Fulfilled ({counts.complete})</option>
+                </Select>
+                <Select
+                  aria-label="Filter by deal status"
+                  className="h-8 w-40 text-xs"
+                  value={dealStatus}
+                  onChange={(e) => setDealStatus(e.target.value)}
+                >
+                  <option value="">All deal statuses</option>
+                  {dealStatuses.map((v) => (
+                    <option key={v} value={v}>
+                      {v.replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </Select>
+                <Select
+                  aria-label="Filter orders by customer"
+                  className="h-8 w-44 text-xs"
+                  value={orderCustomer}
+                  onChange={(e) => setOrderCustomer(e.target.value)}
+                >
+                  <option value="">All customers</option>
+                  {orderCustomers.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </Select>
+                {orderFilters > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setState('')
+                      setDealStatus('')
+                      setOrderCustomer('')
+                    }}
+                  >
+                    <X className="size-3.5" />
+                    Clear {orderFilters}
+                  </Button>
+                )}
+              </>
+            }
           />
         </Panel>
       </div>

@@ -164,6 +164,33 @@ export async function acceptSplit(req: Request<{ id: string }>, res: Response) {
   const neededByLine = new Map(lineRows.map((l) => [l.id, l.quantity]))
   const productByLine = new Map(lineRows.map((l) => [l.id, l.productId]))
 
+  // A manual override may move units BETWEEN warehouses, never invent them: the
+  // customer ordered a quantity, not a minimum. Without this a split of 5 against
+  // a line needing 2 was accepted and shipped, silently taking three extra units
+  // out of stock for an order that never asked for them.
+  const requestedByLine = new Map<string, number>()
+  for (const a of allocations) {
+    if (!neededByLine.has(a.lineId))
+      return res.status(400).json({ error: 'That line is not on this quotation.' })
+    requestedByLine.set(a.lineId, (requestedByLine.get(a.lineId) ?? 0) + a.quantity)
+  }
+  const productName = new Map(
+    (
+      await db
+        .select({ id: quoteLines.id, name: products.name })
+        .from(quoteLines)
+        .innerJoin(products, eq(quoteLines.productId, products.id))
+        .where(eq(quoteLines.quotationId, req.params.id))
+    ).map((r) => [r.id, r.name]),
+  )
+  for (const [lineId, total] of requestedByLine) {
+    const needed = neededByLine.get(lineId)!
+    if (total > needed)
+      return res.status(400).json({
+        error: `${productName.get(lineId) ?? 'This line'} only needs ${needed} — you have allocated ${total}. Reduce the split to ${needed} or fewer.`,
+      })
+  }
+
   // Only stock-tracked products can be backordered. Services and subscriptions
   // have no warehouse rows at all — they are not fulfilled from stock, so they
   // must never appear as a shortfall.

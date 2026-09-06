@@ -62,6 +62,14 @@ export default function Fulfillment() {
   const lineAllocated = (l: SugLine) =>
     l.options.reduce((sum, o) => sum + (qty[l.lineId]?.[o.warehouseId] ?? 0), 0)
 
+  // The most this warehouse may take: never more stock than it holds, and never
+  // more than the line still needs once the other warehouses have had their say.
+  // An override moves units between locations — it cannot order extra ones.
+  const headroom = (l: SugLine, whId: string, available: number) => {
+    const elsewhere = lineAllocated(l) - (qty[l.lineId]?.[whId] ?? 0)
+    return Math.max(0, Math.min(available, l.needed - elsewhere))
+  }
+
   const distinctWarehouses = new Set<string>()
   for (const l of suggestion.data?.lines ?? [])
     for (const o of l.options) if ((qty[l.lineId]?.[o.warehouseId] ?? 0) > 0) distinctWarehouses.add(o.warehouseId)
@@ -164,10 +172,20 @@ export default function Fulfillment() {
                         type="number"
                         className="w-24"
                         min={0}
-                        max={o.available}
+                        max={headroom(l, o.warehouseId, o.available)}
                         value={qty[l.lineId]?.[o.warehouseId] ?? 0}
                         onChange={(e) =>
-                          setQ(l.lineId, o.warehouseId, Math.max(0, Math.min(o.available, Number(e.target.value))))
+                          setQ(
+                            l.lineId,
+                            o.warehouseId,
+                            Math.max(
+                              0,
+                              Math.min(
+                                headroom(l, o.warehouseId, o.available),
+                                Number(e.target.value),
+                              ),
+                            ),
+                          )
                         }
                       />
                     </div>

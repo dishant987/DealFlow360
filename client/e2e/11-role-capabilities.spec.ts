@@ -23,8 +23,12 @@ test.describe('Sales Rep', () => {
   test('builds quotations, applies discounts, adds upsell items', async ({ page }) => {
     await login(page, 'rep')
     await page.goto('/quotations')
-    await page.getByRole('combobox').first().selectOption({ label: 'Acme Corp (gold)' })
+    // creation is behind a dialog
     await page.getByRole('button', { name: 'New Quotation' }).click()
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await dialog.getByLabel('Customer').selectOption({ label: 'Acme Corp (gold)' })
+    await dialog.getByRole('button', { name: 'Create quotation' }).click()
     await expect(page).toHaveURL(/\/quotations\/[0-9a-f-]{36}$/)
 
     // add a product

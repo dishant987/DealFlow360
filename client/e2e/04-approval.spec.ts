@@ -119,7 +119,7 @@ test.describe.serial('B4 — discount approval chain', () => {
     await page.goto('/approvals')
     await expect(page.getByRole('columnheader', { name: 'Blended Risk' })).toBeVisible()
     await expect(page.getByRole('columnheader', { name: 'Quotation' })).toBeVisible()
-    await expect(page.getByText('Pending only')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Pending$/ })).toBeVisible()
     const mgr = await apiAs('manager')
     const data = await (await mgr.get('/api/approvals')).json()
     expect(data.summary).toHaveProperty('pending')

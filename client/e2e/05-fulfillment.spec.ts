@@ -109,6 +109,68 @@ test.describe.serial('B6 — warehouse split & backorders', () => {
     expect([400, 422]).toContain(res.status())
   })
 
+  test('a line cannot be allocated more units than it needs', async () => {
+    const rep = await apiAs('rep')
+    const fin = await apiAs('finance')
+    const id = await approvedStockedQuote(rep, 2)
+    const s = await (await fin.get(`/api/quotations/${id}/fulfillment/suggestion`)).json()
+    const line = s.lines[0]
+    expect(line.needed).toBe(2)
+
+    // one warehouse asked for more than the whole line needs
+    const wh = line.options.find((o: any) => o.available >= 5) ?? line.options[0]
+    const over = await fin.post(`/api/quotations/${id}/fulfillment/accept`, {
+      data: { allocations: [{ lineId: line.lineId, warehouseId: wh.warehouseId, quantity: 5 }] },
+    })
+    expect(over.status(), 'over-allocating one warehouse').toBe(400)
+    expect((await over.json()).error).toMatch(/only needs 2/i)
+
+    // and the sneakier case: each warehouse is plausible, the TOTAL is not
+    if (line.options.length > 1) {
+      const split = await fin.post(`/api/quotations/${id}/fulfillment/accept`, {
+        data: {
+          allocations: [
+            { lineId: line.lineId, warehouseId: line.options[0].warehouseId, quantity: 1 },
+            { lineId: line.lineId, warehouseId: line.options[1].warehouseId, quantity: 2 },
+          ],
+        },
+      })
+      expect(split.status(), 'over-allocating across warehouses').toBe(400)
+      expect((await split.json()).error).toMatch(/only needs 2/i)
+    }
+
+    // exactly the needed quantity is fine, and nothing extra left stock
+    const ok = await fin.post(`/api/quotations/${id}/fulfillment/accept`, {
+      data: { allocations: [{ lineId: line.lineId, warehouseId: wh.warehouseId, quantity: 2 }] },
+    })
+    expect(ok.status()).toBe(200)
+    const allocs = await ok.json()
+    expect(allocs.reduce((n: number, a: any) => n + a.quantity, 0)).toBe(2)
+  })
+
+  test('the split inputs cannot be typed above what the line needs', async ({ page }) => {
+    const rep = await apiAs('rep')
+    const id = await approvedStockedQuote(rep, 2)
+    await login(page, 'finance')
+    await page.goto(`/quotations/${id}/fulfillment`)
+    await expect(page.getByText('need 2')).toBeVisible()
+
+    const inputs = page.locator('input[type="number"]')
+    const first = inputs.first()
+    // clear the suggested split, then try to overfill one warehouse
+    const n = await inputs.count()
+    for (let i = 0; i < n; i++) await inputs.nth(i).fill('0')
+    await first.fill('99')
+    await expect(first, 'clamped to the line need').toHaveValue('2')
+
+    // the second warehouse now has no headroom left
+    if (n > 1) {
+      await inputs.nth(1).fill('5')
+      await expect(inputs.nth(1), 'no headroom once the line is satisfied').toHaveValue('0')
+    }
+    await expect(page.getByText('Allocated 2/2')).toBeVisible()
+  })
+
   test('a shortfall produces a backorder row, and consolidate clears it once stock arrives', async () => {
     const rep = await apiAs('rep')
     const fin = await apiAs('finance')

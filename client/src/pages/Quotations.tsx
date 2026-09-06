@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -7,11 +7,20 @@ import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import KanbanBoard, { type Quote } from '@/components/KanbanBoard'
-import { Trash2 } from 'lucide-react'
+import { Plus, Trash2, X } from 'lucide-react'
 import { errText } from '@/lib/errors'
 import ConfirmButton from '@/components/ConfirmButton'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import FormField from '@/components/FormField'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type Customer = { id: string; name: string; tier: string }
 
@@ -19,6 +28,11 @@ export default function Quotations() {
   const nav = useNavigate()
   const qc = useQueryClient()
   const [customerId, setCustomerId] = useState('')
+  const [createOpen, setCreateOpen] = useState(false)
+  // filters — applied to the table AND the kanban, so both views agree
+  const [status, setStatus] = useState('')
+  const [customerFilter, setCustomerFilter] = useState('')
+  const [flaggedOnly, setFlaggedOnly] = useState(false)
   // remembered per browser so the rep keeps their preferred view
   const [view, setView] = useState<'table' | 'kanban'>(
     () => (localStorage.getItem('quotations.view') as 'table' | 'kanban') ?? 'table',
@@ -41,6 +55,8 @@ export default function Quotations() {
     mutationFn: async () => (await api.post('/quotations', { customerId })).data as { id: string },
     onSuccess: (q) => {
       qc.invalidateQueries({ queryKey: ['quotations'] })
+      setCreateOpen(false)
+      setCustomerId('')
       nav(`/quotations/${q.id}`)
     },
     onError: () => toast.error('Could not create quotation'),
@@ -55,6 +71,28 @@ export default function Quotations() {
     },
     onError: (e) => toast.error(errText(e, 'Could not delete this quotation')),
   })
+
+  const all = useMemo(() => quotes.data ?? [], [quotes.data])
+  const uniq = (xs: string[]) => [...new Set(xs)].sort((a, b) => a.localeCompare(b))
+  const statuses = useMemo(() => uniq(all.map((q) => q.status)), [all])
+  const customerNames = useMemo(() => uniq(all.map((q) => q.customer)), [all])
+
+  const rows = useMemo(
+    () =>
+      all.filter(
+        (q) =>
+          (!status || q.status === status) &&
+          (!customerFilter || q.customer === customerFilter) &&
+          (!flaggedOnly || Number(q.riskScore) > 0),
+      ),
+    [all, status, customerFilter, flaggedOnly],
+  )
+  const activeFilters = (status ? 1 : 0) + (customerFilter ? 1 : 0) + (flaggedOnly ? 1 : 0)
+  const clearFilters = () => {
+    setStatus('')
+    setCustomerFilter('')
+    setFlaggedOnly(false)
+  }
 
   const columns: Column<Quote>[] = [
     {
@@ -133,37 +171,113 @@ export default function Quotations() {
   )
 
   const newQuote = (
+    <Button onClick={() => setCreateOpen(true)}>
+      <Plus className="size-4" />
+      New Quotation
+    </Button>
+  )
+
+  const filters = (
     <>
       <Select
-        value={customerId}
-        onChange={(e) => setCustomerId(e.target.value)}
+        aria-label="Filter by status"
+        className="h-8 w-40 text-xs"
+        value={status}
+        onChange={(e) => setStatus(e.target.value)}
       >
-        <option value="">Select customer…</option>
-        {(customers.data ?? []).map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name} ({c.tier})
+        <option value="">All statuses</option>
+        {statuses.map((v) => (
+          <option key={v} value={v}>
+            {v.replace(/_/g, ' ')}
           </option>
         ))}
       </Select>
-      <Button disabled={!customerId || create.isPending} onClick={() => create.mutate()}>
-        New Quotation
+      <Select
+        aria-label="Filter by customer"
+        className="h-8 w-44 text-xs"
+        value={customerFilter}
+        onChange={(e) => setCustomerFilter(e.target.value)}
+      >
+        <option value="">All customers</option>
+        {customerNames.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </Select>
+      <Button
+        size="sm"
+        variant={flaggedOnly ? 'default' : 'outline'}
+        aria-pressed={flaggedOnly}
+        onClick={() => setFlaggedOnly((v) => !v)}
+      >
+        Over ceiling only
       </Button>
+      {activeFilters > 0 && (
+        <Button size="sm" variant="ghost" onClick={clearFilters}>
+          <X className="size-3.5" />
+          Clear {activeFilters}
+        </Button>
+      )}
     </>
+  )
+
+  const createDialog = (
+    <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New quotation</DialogTitle>
+          <DialogDescription>
+            Pick the customer this deal is for. Their tier sets the price list and the discount
+            ceiling every line is judged against.
+          </DialogDescription>
+        </DialogHeader>
+        <FormField id="new-quote-customer" label="Customer">
+          <Select
+            id="new-quote-customer"
+            autoFocus
+            value={customerId}
+            onChange={(e) => setCustomerId(e.target.value)}
+          >
+            <option value="">Select customer…</option>
+            {(customers.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.tier})
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            Cancel
+          </Button>
+          <Button disabled={!customerId || create.isPending} onClick={() => create.mutate()}>
+            {create.isPending ? 'Creating…' : 'Create quotation'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 
   return (
     <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Quotations' }]}>
+      {createDialog}
       {view === 'table' ? (
         <DataTable
-          rows={quotes.data ?? []}
+          rows={rows}
           columns={columns}
           loading={quotes.isLoading}
           onRowClick={(r) => nav(`/quotations/${r.id}`)}
           searchPlaceholder="Search quote #, customer or status…"
-          emptyMessage="No quotations yet — pick a customer and create one."
+          emptyMessage={
+            activeFilters
+              ? 'No quotation matches these filters.'
+              : 'No quotations yet — create one to get started.'
+          }
           toolbar={
             <>
               {newQuote}
+              {filters}
               <div className="ml-auto">{viewToggle}</div>
             </>
           }
@@ -172,13 +286,14 @@ export default function Quotations() {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             {newQuote}
+            {filters}
             <div className="ml-auto">{viewToggle}</div>
           </div>
           <p className="text-xs text-muted-foreground">
             Drag a deal to move it forward — the system applies the right action and blocks moves
             that need approval or the customer.
           </p>
-          <KanbanBoard quotes={quotes.data ?? []} loading={quotes.isLoading} />
+          <KanbanBoard quotes={rows} loading={quotes.isLoading} />
         </div>
       )}
     </AppShell>
