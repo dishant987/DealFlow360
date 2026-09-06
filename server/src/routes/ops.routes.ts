@@ -9,6 +9,7 @@ import {
   getWorkspaceSummary,
 } from '../controllers/ops.controller.js'
 import { receiveStock } from '../controllers/fulfillment.controller.js'
+import { listNotifications } from '../controllers/notification.controller.js'
 
 // Cross-quotation operational views (mockup screens #7, #9, #12, #13).
 const router = Router()
@@ -17,6 +18,8 @@ router.use(requireAuth)
 // The workspace summary is already scoped per role inside the handler — a rep
 // gets their own deals counted, everyone else gets the pipeline.
 router.get('/summary', getWorkspaceSummary)
+// scoped per role inside the handler, like the summary above
+router.get('/notifications', listNotifications)
 
 // Everything below spans EVERY rep's deals: other customers, their amounts and
 // their outstanding balances. A rep is scoped to their own deals everywhere else

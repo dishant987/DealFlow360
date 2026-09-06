@@ -22,6 +22,7 @@ import { api } from '@/lib/api'
 import { roleLabel } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
 import UserMenu from '@/components/UserMenu'
+import NotificationBell from '@/components/NotificationBell'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
 export type Crumb = { label: string; to?: string }
@@ -241,6 +242,7 @@ export default function AppShell({
               <PanelsTopLeft className="size-4" />
               <span className="sr-only min-[1700px]:not-sr-only">Close Workspace</span>
             </Button>
+            <NotificationBell />
             <span aria-hidden className="mx-1 hidden h-5 w-px bg-white/20 xl:block" />
             <UserMenu onReloadData={reloadData} onCloseWorkspace={closeWorkspace} />
           </div>
