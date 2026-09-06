@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
@@ -18,7 +19,10 @@ type Row = {
   stage: string
   outcome: Outcome
   assignedTo: string
+  /** can I act on it right now */
   yourStep: 'manager' | 'finance' | null
+  /** is my role part of this approval chain at all */
+  involvesMe: boolean
 }
 type Payload = {
   rows: Row[]
@@ -28,6 +32,8 @@ type Payload = {
     approved: number
     rejected: number
     actionable: number
+    mine: number
+    total: number
   }
 }
 
@@ -46,12 +52,32 @@ const chipStyle: Record<Outcome, string> = {
 
 export default function Approvals() {
   const nav = useNavigate()
+  const { user } = useAuth()
 
   const [outcome, setOutcome] = useState<Outcome | 'all'>('all')
   const [stage, setStage] = useState('')
   const [risk, setRisk] = useState('')
   const [customer, setCustomer] = useState('')
-  const [mineOnly, setMineOnly] = useState(false)
+  // An approver opens on THEIR queue. The endpoint deliberately returns the
+  // whole pipeline — finance can look at what the manager step is sitting on —
+  // but landing on all of it buries finance's own decisions among the manager's.
+  // Admin oversees, so admin still opens on all.
+  //
+  // Three scopes, because two different questions matter to an approver:
+  //   todo  — what can I decide RIGHT NOW (their actual work queue)
+  //   mine  — everything my step is part of, including deals the other step
+  //           still holds, so a two-signature deal is visible to both
+  //   all   — the whole pipeline
+  // Defaulting to `mine` made the manager and finance lists look identical,
+  // because nearly every deal here clears the finance threshold and so carries
+  // both steps. `todo` is the queue; `mine` is one click away.
+  //
+  // null = not chosen yet, so fall back to the role default. A plain
+  // useState(user?.role === …) would latch the WRONG value: the session query is
+  // still in flight on first render, so `user` is null.
+  const [scope, setScope] = useState<'todo' | 'mine' | 'all' | null>(null)
+  const isApprover = user?.role === 'manager' || user?.role === 'finance'
+  const view = scope ?? (isApprover ? 'todo' : 'all')
 
   const list = useQuery({
     queryKey: ['approvals'],
@@ -81,20 +107,25 @@ export default function Approvals() {
           (!stage || r.stage === stage) &&
           (!risk || r.riskLabel === risk) &&
           (!customer || r.customer === customer) &&
-          (!mineOnly || r.yourStep !== null),
+          (view === 'all' ||
+            (view === 'mine' ? r.involvesMe : r.yourStep !== null)),
       ),
-    [all, outcome, stage, risk, customer, mineOnly],
+    [all, outcome, stage, risk, customer, view],
   )
 
   const active =
-    (outcome !== 'all' ? 1 : 0) + (stage ? 1 : 0) + (risk ? 1 : 0) + (customer ? 1 : 0) + (mineOnly ? 1 : 0)
+    (outcome !== 'all' ? 1 : 0) +
+    (stage ? 1 : 0) +
+    (risk ? 1 : 0) +
+    (customer ? 1 : 0) +
+    (view !== 'all' ? 1 : 0)
 
   const clearAll = () => {
     setOutcome('all')
     setStage('')
     setRisk('')
     setCustomer('')
-    setMineOnly(false)
+    setScope('all')
   }
 
   const columns: Column<Row>[] = [
@@ -121,9 +152,17 @@ export default function Approvals() {
       label: '',
       sortable: false,
       render: (r) => (
-        <Button size="sm" variant={r.yourStep ? 'default' : 'ghost'}>
-          {r.yourStep ? 'Review' : 'View'}
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          {/* in my chain, but the other step still has it */}
+          {!r.yourStep && r.involvesMe && r.outcome === 'pending' && view !== 'todo' && (
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              waiting on {r.stage}
+            </span>
+          )}
+          <Button size="sm" variant={r.yourStep ? 'default' : 'ghost'}>
+            {r.yourStep ? 'Review' : 'View'}
+          </Button>
+        </div>
       ),
     },
   ]
@@ -136,7 +175,12 @@ export default function Approvals() {
       <button
         type="button"
         aria-pressed={on}
-        onClick={() => setOutcome(on ? 'all' : key)}
+        onClick={() => {
+          // the counts describe my own approvals, so a chip lands in that scope
+          // rather than dumping the whole pipeline on screen
+          setOutcome(on ? 'all' : key)
+          if (!on) setScope(isApprover ? 'mine' : 'all')
+        }}
         className={`rounded px-2 py-1 text-xs font-medium transition-colors ${chipStyle[key]} ${
           on ? 'ring-2 ring-current ring-offset-1' : ''
         }`}
@@ -155,9 +199,13 @@ export default function Approvals() {
         onRowClick={(r) => nav(`/approvals/${r.id}`)}
         searchPlaceholder="Search quote #, customer or stage…"
         emptyMessage={
-          active
-            ? 'No quotation matches these filters.'
-            : 'No quotation has been through approval yet.'
+          view === 'todo'
+            ? 'Nothing is waiting on your decision right now.'
+            : view === 'mine'
+              ? 'No quotation has come through your approval step yet.'
+            : active
+              ? 'No quotation matches these filters.'
+              : 'No quotation has been through approval yet.'
         }
         toolbar={
           <>
@@ -167,14 +215,22 @@ export default function Approvals() {
             {chip('rejected', 'Rejected', s?.rejected)}
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                variant={mineOnly ? 'default' : 'outline'}
-                aria-pressed={mineOnly}
-                onClick={() => setMineOnly((v) => !v)}
+              <Select
+                aria-label="Approval scope"
+                className="h-8 w-52 text-xs"
+                value={view}
+                onChange={(e) => {
+                  const next = e.target.value as 'todo' | 'mine' | 'all'
+                  // a scope is a whole view; an outcome filter on top of "todo"
+                  // would only ever empty the table
+                  if (next !== 'all') setOutcome('all')
+                  setScope(next)
+                }}
               >
-                Needs my decision{s?.actionable != null && ` (${s.actionable})`}
-              </Button>
+                <option value="todo">Needs my decision{s ? ` (${s.actionable})` : ''}</option>
+                <option value="mine">My approvals{s ? ` (${s.mine})` : ''}</option>
+                <option value="all">All approvals{s ? ` (${s.total})` : ''}</option>
+              </Select>
 
               <Select
                 aria-label="Filter by stage"

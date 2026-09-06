@@ -117,22 +117,43 @@ export async function listApprovals(req: Request, res: Response) {
         // nobody is pre-assigned a step in this model — show who last acted instead
         assignedTo: acted?.approver ?? '—',
         updatedAt: q.updatedAt,
+        // Can I act on it RIGHT NOW? Gates the Review button.
         yourStep: stepForRole(
           role,
           mine.map((s) => ({ step: s.step, action: s.action })),
         ),
+        // Is my role part of this chain AT ALL? A quote needing both signatures
+        // belongs in both queues — finance should see what is coming while the
+        // manager still has it, not have it appear from nowhere once it lands.
+        involvesMe:
+          role === 'admin'
+            ? mine.length > 0
+            : mine.some((st) => st.step === (role === 'finance' ? 'finance' : 'manager')),
       }
     })
     .sort((a, b) => +new Date(b.updatedAt) - +new Date(a.updatedAt))
 
+  // The outcome counts describe THIS approver's work, not the whole company.
+  // Pipeline-wide totals sat above a per-person table and were identical for the
+  // manager and for finance, which said nothing about either of their queues.
+  // Admin oversees everything, so for admin the two populations are the same.
+  // Admin's default scope is the whole pipeline, so their counts describe that —
+  // otherwise the chips would total 332 above a table showing 413.
+  const ofMine = role === 'admin' ? rows : rows.filter((r) => r.involvesMe)
+
   res.json({
     rows,
     summary: {
-      pending: rows.filter((r) => r.outcome === 'pending').length,
-      returned: rows.filter((r) => r.outcome === 'returned').length,
-      approved: rows.filter((r) => r.outcome === 'approved').length,
-      rejected: rows.filter((r) => r.outcome === 'rejected').length,
+      pending: ofMine.filter((r) => r.outcome === 'pending').length,
+      returned: ofMine.filter((r) => r.outcome === 'returned').length,
+      approved: ofMine.filter((r) => r.outcome === 'approved').length,
+      rejected: ofMine.filter((r) => r.outcome === 'rejected').length,
+      // what I can act on right now
       actionable: rows.filter((r) => r.yourStep !== null).length,
+      // every quote whose chain includes me, whether or not it is my turn yet
+      mine: ofMine.length,
+      // the whole pipeline, for the "All approvals" scope
+      total: rows.length,
     },
   })
 }

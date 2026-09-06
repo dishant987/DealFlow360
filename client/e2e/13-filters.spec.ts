@@ -69,7 +69,7 @@ test.describe('Quotations — filters and create dialog', () => {
     await dialog.getByLabel('Customer').selectOption({ label: 'Beta Industries (silver)' })
     await dialog.getByRole('button', { name: 'Create quotation' }).click()
     await expect(page).toHaveURL(/\/quotations\/[0-9a-f-]{36}$/)
-    await expect(page.getByText('Beta Industries')).toBeVisible()
+    await expect(page.getByText('Beta Industries').first()).toBeVisible()
   })
 
   test('the create dialog can be cancelled without creating anything', async ({ page }) => {
@@ -88,7 +88,8 @@ test.describe('Quotations — filters and create dialog', () => {
 
 test.describe('Approvals — filters', () => {
   test('the count chips filter by outcome and toggle off again', async ({ page }) => {
-    await login(page, 'manager')
+    // admin opens on the whole pipeline; manager/finance open on their own queue
+    await login(page, 'admin')
     await page.goto('/approvals')
     await expect(page.getByRole('columnheader', { name: 'Blended Risk' })).toBeVisible()
     const total = Number((await page.getByText(/of \d+/).first().textContent())!.match(/of (\d+)/)![1])
@@ -107,7 +108,7 @@ test.describe('Approvals — filters', () => {
   })
 
   test('risk, stage and customer filters combine, and Clear resets all', async ({ page }) => {
-    await login(page, 'manager')
+    await login(page, 'admin')
     await page.goto('/approvals')
 
     await page.getByLabel('Filter by risk').selectOption('LOW')
@@ -121,12 +122,54 @@ test.describe('Approvals — filters', () => {
     await expect(page.getByRole('button', { name: /Clear \d/ })).toHaveCount(0)
   })
 
-  test('"Needs my decision" shows only rows this approver can act on', async ({ page }) => {
+  test('an approver opens on their OWN queue, not the whole pipeline', async ({ page }) => {
     await login(page, 'manager')
     await page.goto('/approvals')
-    await page.getByRole('button', { name: /Needs my decision/ }).click()
-    const rows = await page.getByRole('row').filter({ hasNotText: 'Quotation' }).all()
-    for (const r of rows) await expect(r.getByRole('button', { name: 'Review' })).toBeVisible()
+    const scope = page.getByRole('button', { name: /Needs my decision/ })
+    await expect(scope, 'scoped by default').toHaveAttribute('aria-pressed', 'true')
+
+    // every row on screen is one this approver can actually decide
+    for (const r of await page.getByRole('row').filter({ hasNotText: 'Quotation' }).all())
+      await expect(r.getByRole('button', { name: 'Review' })).toBeVisible()
+
+    // and it can be widened to the full pipeline
+    const mine = Number((await page.getByText(/of \d+/).first().textContent())!.match(/of (\d+)/)![1])
+    await scope.click()
+    await expect(scope).toHaveAttribute('aria-pressed', 'false')
+    const everything = Number(
+      (await page.getByText(/of \d+/).first().textContent())!.match(/of (\d+)/)![1],
+    )
+    expect(everything).toBeGreaterThan(mine)
+  })
+
+  test('manager and finance see different queues', async ({ page }) => {
+    const numbers = async (role: 'manager' | 'finance') => {
+      await login(page, role)
+      await page.goto('/approvals')
+      await expect(page.getByRole('columnheader', { name: 'Quotation' })).toBeVisible()
+      const cells = await page.getByRole('row').filter({ hasNotText: 'Quotation' }).all()
+      const out: string[] = []
+      for (const r of cells) out.push(((await r.textContent()) ?? '').slice(0, 14))
+      return out
+    }
+    const mgr = await numbers('manager')
+    const fin = await numbers('finance')
+    expect(mgr.length, 'manager has work').toBeGreaterThan(0)
+    expect(fin.length, 'finance has work').toBeGreaterThan(0)
+    // the two queues must not be the same list of quotations
+    expect(fin, 'finance is not just looking at the manager queue').not.toEqual(mgr)
+  })
+
+  test('the two queues are each at their own approval step', async ({ page }) => {
+    await login(page, 'finance')
+    await page.goto('/approvals')
+    for (const r of await page.getByRole('row').filter({ hasNotText: 'Quotation' }).all())
+      await expect(r, 'finance only decides finance-stage deals').toContainText('Finance')
+
+    await login(page, 'manager')
+    await page.goto('/approvals')
+    for (const r of await page.getByRole('row').filter({ hasNotText: 'Quotation' }).all())
+      await expect(r, 'the manager only decides manager-stage deals').toContainText('Sales Manager')
   })
 })
 
