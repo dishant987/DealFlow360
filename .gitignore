@@ -5,3 +5,8 @@ build/
 .env.local
 *.log
 .DS_Store
+
+# playwright
+test-results/
+playwright-report/
+e2e-results.json
