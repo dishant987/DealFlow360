@@ -11,17 +11,24 @@ import {
 import { receiveStock } from '../controllers/fulfillment.controller.js'
 
 // Cross-quotation operational views (mockup screens #7, #9, #12, #13).
-// Read-only for any internal user; the actions still live on the detail screens
-// and remain restricted to Finance/Ops.
 const router = Router()
 router.use(requireAuth)
 
+// The workspace summary is already scoped per role inside the handler — a rep
+// gets their own deals counted, everyone else gets the pipeline.
 router.get('/summary', getWorkspaceSummary)
-router.get('/invoices', listInvoices)
-router.get('/invoices/:id', getInvoice)
-router.get('/invoices/:id/pdf', invoicePdf)
-router.get('/fulfillment-queue', listFulfillmentQueue)
-router.get('/subscriptions', listSubscriptions)
+
+// Everything below spans EVERY rep's deals: other customers, their amounts and
+// their outstanding balances. A rep is scoped to their own deals everywhere else
+// (quotationAccessParam, listQuotations), so these must not be the one hole that
+// hands them the whole book. The nav never offered a rep these screens either.
+const crossPipeline = requireRole('manager', 'finance', 'admin')
+
+router.get('/invoices', crossPipeline, listInvoices)
+router.get('/invoices/:id', crossPipeline, getInvoice)
+router.get('/invoices/:id/pdf', crossPipeline, invoicePdf)
+router.get('/fulfillment-queue', crossPipeline, listFulfillmentQueue)
+router.get('/subscriptions', crossPipeline, listSubscriptions)
 
 // A4: booking in a delivery against a warehouse's reorder rule. Same duty as
 // accepting a split, so the same roles.

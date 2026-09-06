@@ -47,13 +47,36 @@ test.describe('§3 — role-based access', () => {
 
   test('rep is bounced from manager-only routes', async ({ page }) => {
     await login(page, 'rep')
-    for (const route of ['/approvals', '/deal-health', '/reports', '/admin']) {
+    for (const route of [
+      '/approvals',
+      '/deal-health',
+      '/reports',
+      '/admin',
+      // cross-quotation screens: these span every rep's deals
+      '/invoices',
+      '/fulfillment',
+      '/subscriptions',
+    ]) {
       await page.goto(route)
       // the client renders an in-place 403 rather than redirecting
       await expect(
         page.getByText(/403 — you don't have access/),
         `rep should be blocked at ${route}`,
       ).toBeVisible()
+    }
+  })
+
+  test('a rep still reaches their OWN deal\'s fulfillment and billing screens', async ({ page }) => {
+    const rep = await apiAs('rep')
+    const mine = await (await rep.get('/api/quotations')).json()
+    const q = mine[0]
+    await login(page, 'rep')
+    for (const route of [`/quotations/${q.id}/fulfillment`, `/quotations/${q.id}/billing`]) {
+      await page.goto(route)
+      await expect(
+        page.getByText(/403 — you don't have access/),
+        `rep should reach ${route}`,
+      ).toHaveCount(0)
     }
   })
 

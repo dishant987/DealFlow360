@@ -156,6 +156,7 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
       riskScore: quotations.riskScore,
       requiresManager: quotations.requiresManager,
       requiresFinance: quotations.requiresFinance,
+      portalToken: quotations.portalToken,
       createdAt: quotations.createdAt,
       updatedAt: quotations.updatedAt,
     })
@@ -185,8 +186,16 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
 
   const risk = await scoreQuotation(req.params.id)
   const ceilingByLine = new Map((risk?.byLine ?? []).map((b) => [b.lineId, b.ceiling]))
+  // The rep needs the portal link back after a reload, not just in the response
+  // to /send — otherwise the only copy of it is gone the moment they navigate
+  // away. Hand back the built URL and drop the raw token: nothing internal has a
+  // use for it on its own, and the link is the thing you share.
+  const { portalToken, ...rest } = quote
   res.json({
-    ...quote,
+    ...rest,
+    portalUrl: portalToken
+      ? `${process.env.CLIENT_URL || 'http://localhost:5173'}/portal/${portalToken}`
+      : null,
     quoteNumber: quoteNumber(quote.seqNo, quote.createdAt),
     // ceiling = min(tier, category) for this line. The client re-checks it live as
     // the rep types, so a breach shows before submit rather than after.
@@ -477,26 +486,45 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
     .returning()
   if (!q) return res.status(404).json({ error: 'not found' })
 
-  // email the magic link to the customer (console fallback when SMTP isn't set)
+  // Email the magic link (console fallback when SMTP isn't set). The link is
+  // already live the moment the token is stored, so the rep must NOT wait on the
+  // mail server — a slow or unreachable SMTP host used to block this response for
+  // seconds. Hand off in the background and record how it went when it settles.
   const portalUrl = `${CLIENT_URL}/portal/${token}`
   const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId))
-  let emailed = false
   if (customer?.email) {
-    try {
-      await sendPortalLink(customer.email, portalUrl, customer.name)
-      emailed = true
-    } catch (e) {
-      console.error('portal link email failed:', (e as Error).message)
-    }
+    void sendPortalLink(customer.email, portalUrl, customer.name)
+      .then(() =>
+        db.insert(auditLog).values({
+          quotationId: q.id,
+          action: 'portal_link_emailed',
+          detail: { to: customer.email },
+        }),
+      )
+      .catch((e: Error) => {
+        console.error('portal link email failed:', e.message)
+        return db.insert(auditLog).values({
+          quotationId: q.id,
+          action: 'portal_link_email_failed',
+          detail: { to: customer.email, error: e.message },
+        })
+      })
   }
 
   await db.insert(auditLog).values({
     quotationId: q.id,
     userId: req.user!.id,
     action: 'sent_to_customer',
-    detail: { emailed, to: customer?.email ?? null },
+    detail: { to: customer?.email ?? null },
   })
-  res.json({ portalToken: token, portalUrl, emailed, sentTo: customer?.email ?? null })
+  // `emailed` reports that delivery was STARTED, not that it landed — the
+  // portal_link_emailed / _failed audit entry carries the real outcome.
+  res.json({
+    portalToken: token,
+    portalUrl,
+    emailed: !!customer?.email,
+    sentTo: customer?.email ?? null,
+  })
 }
 
 /* ---- rep view of customer negotiation requests ---- */

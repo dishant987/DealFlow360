@@ -177,7 +177,10 @@ export default function Reports() {
                 <XAxis dataKey="status" fontSize={11} />
                 <YAxis allowDecimals={false} fontSize={11} />
                 <Tooltip />
-                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {/* recharts 3.x stalls this bar's entry animation partway on
+                    a percentage-height ResponsiveContainer, leaving every bar a
+                    few pixels tall regardless of its value. Draw them outright. */}
+                <Bar dataKey="count" radius={[4, 4, 0, 0]} isAnimationActive={false}>
                   {chartData.map((d) => (
                     <Cell key={d.raw} fill={statusColor(d.raw)} />
                   ))}

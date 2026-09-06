@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CalendarClock, Check, MessageSquare, Percent } from 'lucide-react'
+import { CalendarClock, Check, Copy, MessageSquare, Percent } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { errText } from '@/lib/errors'
@@ -83,6 +83,8 @@ type Quote = {
   orderDiscountPct: string
   lines: Line[]
   risk: Risk | null
+  // set once the quote has been sent — the customer's magic link
+  portalUrl: string | null
 }
 
 const marginColor = (pct: number) =>
@@ -106,6 +108,23 @@ export default function QuotationBuilder() {
   const [status, setStatus] = useState('draft')
   const [submitting, setSubmitting] = useState(false)
   const [portalUrl, setPortalUrl] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  // navigator.clipboard needs a secure context, which localhost is but a plain
+  // http:// LAN address is not — fall back to selecting the field so the link is
+  // still copyable by hand rather than silently doing nothing.
+  const copyPortalLink = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+      toast.success('Portal link copied')
+    } catch {
+      document.querySelector<HTMLInputElement>('input[aria-label="Customer portal link"]')?.select()
+      toast.error('Could not copy automatically — the link is selected, press Ctrl+C')
+    }
+  }
+
   // everything persists as you edit — this just makes that visible
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const track = async <T,>(fn: () => Promise<T>): Promise<T> => {
@@ -165,6 +184,8 @@ export default function QuotationBuilder() {
     }
     setRisk(quote.data.risk)
     setStatus(quote.data.status)
+    // survives a reload, unlike the copy handed back by /send
+    setPortalUrl(quote.data.portalUrl ?? '')
   }, [quote.data])
 
   const submit = async () => {
@@ -722,8 +743,29 @@ export default function QuotationBuilder() {
             )}
             {portalUrl && (
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">Customer portal link:</p>
-                <Input readOnly value={portalUrl} onFocus={(e) => e.currentTarget.select()} />
+                <p className="text-[11px] text-muted-foreground">Customer portal link</p>
+                <div className="flex gap-1">
+                  <Input
+                    readOnly
+                    aria-label="Customer portal link"
+                    className="font-mono text-[11px]"
+                    value={portalUrl}
+                    onFocus={(e) => e.currentTarget.select()}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    aria-label="Copy portal link"
+                    onClick={() => copyPortalLink(portalUrl)}
+                  >
+                    {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Anyone with this link can view and negotiate the quotation — no sign-in needed.
+                </p>
               </div>
             )}
           </div>

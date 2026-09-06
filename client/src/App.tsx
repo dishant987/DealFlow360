@@ -39,12 +39,14 @@ export default function App() {
         <Route path="/quotations/:id" element={<QuotationBuilder />} />
         <Route path="/quotations/:id/fulfillment" element={<Fulfillment />} />
         <Route path="/quotations/:id/billing" element={<Billing />} />
+      </Route>
+      {/* Cross-quotation screens span every rep's deals — a rep tracks their own
+          progress from the deal itself, not from these. */}
+      <Route element={<ProtectedRoute roles={['manager', 'finance', 'admin']} />}>
         <Route path="/fulfillment" element={<FulfillmentQueue />} />
         <Route path="/subscriptions" element={<Subscriptions />} />
         <Route path="/invoices" element={<Invoices />} />
         <Route path="/invoices/:id" element={<InvoiceDetail />} />
-      </Route>
-      <Route element={<ProtectedRoute roles={['manager', 'finance', 'admin']} />}>
         <Route path="/approvals" element={<Approvals />} />
         <Route path="/approvals/:id" element={<ApprovalDetail />} />
         <Route path="/deal-health" element={<DealHealth />} />

@@ -6,6 +6,7 @@ import {
   quotations,
   quoteLines,
   products,
+  productVariants,
   customers,
   negotiationRequests,
   approvals,
@@ -34,10 +35,16 @@ export async function getPortalQuote(req: Request<{ token: string }>, res: Respo
   if (!q) return res.status(404).json({ error: 'invalid link' })
 
   const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId))
+  // The variant is part of WHAT the customer is buying and can carry its own
+  // extra price, so leaving it off turned a "27 inch" line into a bare product
+  // name at a price the catalogue does not show — and made two variants of the
+  // same product read as two identical lines at different prices.
   const lines = await db
     .select({
       id: quoteLines.id,
       product: products.name,
+      variantAttribute: productVariants.attribute,
+      variantValue: productVariants.value,
       quantity: quoteLines.quantity,
       unitPrice: quoteLines.unitPrice,
       unitCost: quoteLines.unitCost, // used only for totals below, not returned
@@ -46,6 +53,7 @@ export async function getPortalQuote(req: Request<{ token: string }>, res: Respo
     })
     .from(quoteLines)
     .innerJoin(products, eq(quoteLines.productId, products.id))
+    .leftJoin(productVariants, eq(quoteLines.variantId, productVariants.id))
     .where(eq(quoteLines.quotationId, q.id))
 
   const totals = computeQuoteTotals(lines, q.orderDiscountPct)
@@ -63,6 +71,8 @@ export async function getPortalQuote(req: Request<{ token: string }>, res: Respo
     lines: lines.map((l) => ({
       id: l.id,
       product: l.product,
+      variantAttribute: l.variantAttribute,
+      variantValue: l.variantValue,
       quantity: l.quantity,
       unitPrice: l.unitPrice,
       discountPct: l.discountPct,
@@ -121,8 +131,18 @@ export async function submitNegotiation(req: Request<{ token: string }>, res: Re
   res.json({ ok: true })
 }
 
-// Confirm: apply any counter discount, re-score. Over thresholds → re-enter approval (B4),
-// otherwise the order is approved for fulfillment.
+// Confirm: apply any counter discount, then decide whether the deal still has a
+// valid sign-off.
+//
+// A quote can only be sent once it is approved, and it is locked against rep
+// edits from then on — so the ONLY thing that can move the terms after that is
+// the customer's own counter-offer. §5 is explicit that it is a CHANGE that
+// re-opens the chain: "if terms change beyond thresholds during negotiation, the
+// quote re-enters the approval flow automatically".
+//
+// Re-scoring unconditionally therefore bounced every discounted deal straight
+// back to the manager who had just signed it off, for a decision they had
+// already made on exactly these numbers. Only a counter re-opens the chain.
 export async function confirmPortal(req: Request<{ token: string }>, res: Response) {
   const q = await findByToken(req.params.token)
   if (!q) return res.status(404).json({ error: 'invalid link' })
@@ -138,6 +158,11 @@ export async function confirmPortal(req: Request<{ token: string }>, res: Respon
   const counters = openCounters.filter(
     (n) => n.type === 'counter_discount' && n.counterDiscountPct != null && n.status === 'open',
   )
+  // did the customer actually move the terms?
+  const termsChanged =
+    counters.length > 0 &&
+    Math.max(...counters.map((c) => Number(c.counterDiscountPct))) !== Number(q.orderDiscountPct)
+
   if (counters.length) {
     const maxCounter = Math.max(...counters.map((c) => Number(c.counterDiscountPct)))
     await db.update(quotations).set({ orderDiscountPct: String(maxCounter) }).where(eq(quotations.id, q.id))
@@ -148,7 +173,9 @@ export async function confirmPortal(req: Request<{ token: string }>, res: Respon
   }
 
   const risk = await scoreQuotation(q.id)
-  const needsApproval = risk ? risk.level !== 'none' : false
+  // the sign-off the quote already carries still stands unless the customer moved
+  // the numbers out from under it
+  const needsApproval = termsChanged && !!risk && risk.level !== 'none'
   const status = needsApproval ? 'pending_approval' : 'confirmed'
 
   await db

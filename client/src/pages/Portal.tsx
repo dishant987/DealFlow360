@@ -1,7 +1,7 @@
 import { Fragment, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, Lock, MessageSquarePlus } from 'lucide-react'
+import { CheckCircle2, Clock, Lock, MessageSquarePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import StatusBadge from '@/components/StatusBadge'
@@ -19,6 +19,8 @@ import {
 type Line = {
   id: string
   product: string
+  variantAttribute: string | null
+  variantValue: string | null
   quantity: number
   unitPrice: string
   discountPct: string
@@ -146,6 +148,11 @@ export default function Portal() {
 
   const q = quote.data
   const confirmed = q.status === 'confirmed'
+  // The customer may only act while the quote is genuinely open to them — the
+  // same two statuses the server accepts. Anything else (a counter-offer sent
+  // back for internal review, a cancelled deal) must not keep offering buttons
+  // that can only fail.
+  const open = q.status === 'sent' || q.status === 'under_negotiation'
   const orderDiscount = Number(q.orderDiscountPct)
 
   return (
@@ -180,6 +187,24 @@ export default function Portal() {
           </div>
         )}
 
+        {!open && !confirmed && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <Clock className="mt-0.5 size-5 shrink-0 text-amber-600" />
+            <div>
+              <p className="font-medium text-amber-900">
+                {q.status === 'pending_approval'
+                  ? "Thanks — we're reviewing the discount you asked for"
+                  : 'This quotation is no longer open for changes'}
+              </p>
+              <p className="text-sm text-amber-800/80">
+                {q.status === 'pending_approval'
+                  ? 'Your request went beyond what your account manager can sign off alone, so it is with our team for review. We will come back to you shortly — nothing more is needed from you right now.'
+                  : 'Please contact your account manager for an up-to-date quotation.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[1fr_19rem] lg:items-start">
           <section className="space-y-6">
             <div className="rounded-xl border bg-background">
@@ -195,7 +220,7 @@ export default function Portal() {
                       <TableHead className="w-16 text-right">Qty</TableHead>
                       <TableHead className="w-24 text-right">Unit</TableHead>
                       <TableHead className="w-20 text-right">Disc</TableHead>
-                      {!confirmed && <TableHead className="w-24" />}
+                      {open && <TableHead className="w-24" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -204,6 +229,11 @@ export default function Portal() {
                         <TableRow>
                           <TableCell className="font-medium">
                             {l.product}
+                            {l.variantValue && (
+                              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                                ({l.variantAttribute}: {l.variantValue})
+                              </span>
+                            )}
                             {l.lineType === 'subscription' && (
                               <span className="ml-1.5 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-normal text-primary">
                                 recurring
@@ -223,7 +253,7 @@ export default function Portal() {
                               <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
-                          {!confirmed && (
+                          {open && (
                             <TableCell className="text-right">
                               <Button
                                 size="sm"
@@ -268,7 +298,7 @@ export default function Portal() {
               </div>
             </div>
 
-            {!confirmed && (
+            {open && (
               <div className="rounded-xl border bg-background p-4">
                 <h2 className="font-heading font-medium">Not quite right?</h2>
                 <p className="mt-0.5 mb-3 text-sm text-muted-foreground">
@@ -381,7 +411,7 @@ export default function Portal() {
               </div>
             </dl>
 
-            {!confirmed ? (
+            {open ? (
               <>
                 <Button className="mt-4 w-full" onClick={confirm} disabled={busy}>
                   {busy ? 'Working…' : 'Confirm quotation'}
@@ -393,7 +423,11 @@ export default function Portal() {
               </>
             ) : (
               <p className="mt-4 rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-                Confirmed — thank you. Your account manager will follow up.
+                {confirmed
+                  ? 'Confirmed — thank you. Your account manager will follow up.'
+                  : q.status === 'pending_approval'
+                    ? 'With our team for review — no action needed from you.'
+                    : 'This quotation is no longer open. Your account manager will follow up.'}
               </p>
             )}
           </aside>

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { and, eq, asc, isNull } from 'drizzle-orm'
+import { and, eq, asc, desc, inArray, isNull } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { quotations, approvals, auditLog, customers, users, appSettings } from '../models/schema.js'
 import { scoreQuotation } from './quotation.controller.js'
@@ -197,10 +197,36 @@ export async function getApprovalDetail(req: Request<{ id: string }>, res: Respo
 }
 
 /* ---- approve / reject / return ---- */
-const actionSchema = z.object({
-  action: z.enum(['approve', 'reject', 'return']),
-  reason: z.string().optional(),
-})
+// A3: every rejection or return must carry a reason, so the audit trail says WHY
+// a deal was turned back. The approval screen enforces this too, but the rule
+// belongs here — otherwise any direct API call walks straight past it.
+const actionSchema = z
+  .object({
+    action: z.enum(['approve', 'reject', 'return']),
+    reason: z.string().optional(),
+  })
+  .refine((d) => d.action === 'approve' || !!d.reason?.trim(), {
+    path: ['reason'],
+    message: 'A reason is required to reject or return a quotation.',
+  })
+
+/** Did the pending review start because the customer confirmed a counter-offer,
+ *  rather than because the rep submitted the quote? Whichever of the two events
+ *  happened last is the one that opened the chain now being decided. */
+async function openedByCustomerConfirmation(quotationId: string) {
+  const [latest] = await db
+    .select({ action: auditLog.action })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.quotationId, quotationId),
+        inArray(auditLog.action, ['submitted', 'customer_confirm_reapproval']),
+      ),
+    )
+    .orderBy(desc(auditLog.createdAt))
+    .limit(1)
+  return latest?.action === 'customer_confirm_reapproval'
+}
 
 export async function actOnApproval(req: Request<{ id: string }>, res: Response) {
   const parsed = actionSchema.safeParse(req.body)
@@ -222,7 +248,7 @@ export async function actOnApproval(req: Request<{ id: string }>, res: Response)
     .where(eq(approvals.id, target.id))
 
   // recompute quote status
-  let status: 'approved' | 'rejected' | 'pending_approval' | 'draft'
+  let status: 'approved' | 'rejected' | 'pending_approval' | 'draft' | 'confirmed'
   if (action === 'reject') status = 'rejected'
   else if (action === 'return') status = 'draft'
   else {
@@ -230,7 +256,17 @@ export async function actOnApproval(req: Request<{ id: string }>, res: Response)
       .select()
       .from(approvals)
       .where(and(eq(approvals.quotationId, req.params.id), isNull(approvals.action)))
-    status = remaining.length === 0 ? 'approved' : 'pending_approval'
+    // A chain the CUSTOMER opened by confirming a counter-offer ends in
+    // 'confirmed', not 'approved'. They already accepted these terms — §3 gives
+    // them one click, not two — and the portal closes to them while the review
+    // runs, so landing on 'approved' would strand the deal with nobody able to
+    // move it: the customer cannot confirm again and the rep has to re-send.
+    status =
+      remaining.length === 0
+        ? (await openedByCustomerConfirmation(req.params.id))
+          ? 'confirmed'
+          : 'approved'
+        : 'pending_approval'
   }
 
   const [q] = await db

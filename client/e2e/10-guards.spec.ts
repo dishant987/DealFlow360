@@ -2,9 +2,12 @@ import { test, expect, type APIRequestContext } from '@playwright/test'
 import { apiAs } from './helpers'
 
 /**
- * Gaps found during the E2E audit. Each test asserts the behaviour the brief
- * calls for, so it goes green the moment the gap is closed. Kept in their own
- * file so a known gap never aborts an unrelated serial chain.
+ * Regression guards for four defects found in the E2E audit and since fixed:
+ *   1. the ops endpoints leaked every rep's deals to any rep
+ *   2. the API accepted a reject/return with no reason (A3 requires one)
+ *   3. POST /send blocked on the SMTP handshake (3.5s-25.5s)
+ *   4. the auth rate limiter was commented out
+ * Each asserts the behaviour the brief calls for, so a re-regression fails here.
  */
 
 async function highRiskQuote(rep: APIRequestContext) {
@@ -20,8 +23,8 @@ async function highRiskQuote(rep: APIRequestContext) {
   return q.id as string
 }
 
-test.describe('Known gaps', () => {
-  // GAP 1 — ops.routes.ts mounts these behind requireAuth only, so a rep reads
+test.describe('Regression guards', () => {
+  // FIXED — ops.routes.ts mounted these behind requireAuth only, so a rep read
   // every other rep's deals. Everywhere else a rep is scoped to their own.
   test('a rep should not read other reps deals through the ops endpoints', async () => {
     const rep = await apiAs('rep')
@@ -46,8 +49,8 @@ test.describe('Known gaps', () => {
     expect(foreign.map((i: any) => i.invoiceNumber)).toEqual([])
   })
 
-  // GAP 2 — A3 requires every approval/rejection to carry a reason. The UI
-  // enforces it; the API does not, so any direct call bypasses the rule.
+  // FIXED — A3 requires every rejection to carry a reason. The UI enforced it;
+  // the API did not, so a direct call walked straight past the rule.
   test('the API should require a reason to reject', async () => {
     const rep = await apiAs('rep')
     const mgr = await apiAs('manager')
@@ -64,8 +67,8 @@ test.describe('Known gaps', () => {
     expect(res.status()).toBe(400)
   })
 
-  // GAP 3 — sendToCustomer awaits the SMTP send, so the rep's request blocks
-  // for as long as the mail server takes. Observed 3.5s typical, 25.5s worst.
+  // FIXED — sendToCustomer awaited the SMTP send, blocking the rep's request for
+  // as long as the mail server took. Observed 3.5s typical, 25.5s worst.
   test('sending a quote to the customer should not block on the mail server', async () => {
     const rep = await apiAs('rep')
     const customers = await (await rep.get('/api/customers')).json()
@@ -85,14 +88,17 @@ test.describe('Known gaps', () => {
     expect(elapsed, `POST /send took ${elapsed}ms`).toBeLessThan(1000)
   })
 
-  // GAP 4 — auth.routes.ts has its rate limiter commented out, so the
-  // credential endpoints accept unlimited attempts.
-  test('repeated bad logins should eventually be throttled', async () => {
+  // FIXED — auth.routes.ts had its limiter commented out, so the credential
+  // endpoints accepted unlimited guesses. Only FAILED attempts count now.
+  test('repeated bad logins are throttled', async () => {
     const ctx = await apiAs('rep')
+    // A throwaway address, because the budget is per account: hammering a real
+    // fixture account would lock it out for the rest of the run.
+    const target = `brute-${Date.now()}@dealflow.com`
     let throttled = false
     for (let i = 0; i < 60; i++) {
       const res = await ctx.post('/api/auth/login', {
-        data: { email: 'rep@dealflow.com', password: `wrong-${i}` },
+        data: { email: target, password: `wrong-${i}` },
       })
       if (res.status() === 429) {
         throttled = true
@@ -100,5 +106,22 @@ test.describe('Known gaps', () => {
       }
     }
     expect(throttled, '60 bad logins in a row were all accepted for processing').toBe(true)
+  })
+
+  test('throttling one account under attack never locks out anybody else', async () => {
+    const ctx = await apiAs('rep')
+    const victim = `brute-${Date.now()}@dealflow.com`
+    for (let i = 0; i < 40; i++)
+      await ctx.post('/api/auth/login', { data: { email: victim, password: `wrong-${i}` } })
+    expect(
+      (await ctx.post('/api/auth/login', { data: { email: victim, password: 'x' } })).status(),
+      'the attacked account is throttled',
+    ).toBe(429)
+
+    // …while a genuine sign-in from the same IP still works
+    const ok = await ctx.post('/api/auth/login', {
+      data: { email: 'rep@dealflow.com', password: 'password123' },
+    })
+    expect(ok.status(), 'an unrelated account is unaffected').toBe(200)
   })
 })
