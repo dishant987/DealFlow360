@@ -125,8 +125,11 @@ test.describe('Sales Rep', () => {
     await page.goto(`/quotations/${id}`)
     await expect(page.getByText('Customer requests')).toBeVisible()
     await expect(page.getByText('Can we get this by Friday?')).toBeVisible()
-    await page.getByRole('button', { name: 'Mark addressed' }).first().click()
-    await expect(page.getByText('addressed').first()).toBeVisible({ timeout: 10_000 })
+    // wait for the update itself (getByText('addressed') also matched the button)
+    await Promise.all([
+      page.waitForResponse((r) => r.url().includes('/negotiations/') && r.request().method() === 'PATCH' && r.ok()),
+      page.getByRole('button', { name: 'Mark addressed' }).first().click(),
+    ])
 
     // and can re-send the revised quote
     await expect(page.getByRole('button', { name: /Re-send to Customer/i })).toBeVisible()

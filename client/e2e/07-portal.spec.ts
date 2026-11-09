@@ -176,8 +176,12 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     await login(page, 'rep')
     await page.goto(`/quotations/${id}`)
     await expect(page.getByText('Customer requests')).toBeVisible()
-    await page.getByRole('button', { name: 'Mark addressed' }).first().click()
-    await expect(page.getByText('addressed').first()).toBeVisible({ timeout: 10_000 })
+    // wait for the update itself: getByText('addressed') also matched the "Mark addressed"
+    // button, so it passed before the click had done anything
+    await Promise.all([
+      page.waitForResponse((r) => r.url().includes('/negotiations/') && r.request().method() === 'PATCH' && r.ok()),
+      page.getByRole('button', { name: 'Mark addressed' }).first().click(),
+    ])
 
     const requests = await (await rep.get(`/api/quotations/${id}/negotiations`)).json()
     expect(requests[0].status).toBe('addressed')

@@ -123,7 +123,7 @@ export async function deleteContact(req: Request<{ id: string }>, res: Response)
 /** Where a quote's portal link goes: the primary contact if set, else the customer's own email. */
 export async function quoteRecipient(customerId: string) {
   const [primary] = await db
-    .select({ email: contacts.email, name: contacts.name })
+    .select({ id: contacts.id, email: contacts.email, name: contacts.name })
     .from(contacts)
     .where(and(eq(contacts.customerId, customerId), eq(contacts.isPrimary, true)))
   return primary?.email ? primary : null

@@ -280,6 +280,12 @@ and shipping addresses, a tax/GST ID, payment terms, notes, an **owner** (a rep)
 the customer's own email. Reps own the customers they create and can edit only those; managers
 and admins edit any customer and set its tier and owner; finance can view.
 
+**Quote details** — every quotation carries who it's addressed to (a customer contact, defaulting
+to the primary), a **valid-until** date (30 days by default; the customer can't confirm an expired
+quote), the customer's PO number, **payment terms** (copied from the customer; invoices fall due on
+them), notes to the customer, terms & conditions, and **internal notes** that never reach the
+portal. Customer-facing details lock once the quote leaves draft; internal notes stay editable.
+
 **Sales Rep** — builds quotations, applies line and order discounts, adds upsell items,
 tracks approval and fulfilment progress on their own deals, and answers customer
 negotiation requests. A rep is scoped to their own pipeline everywhere: another rep's

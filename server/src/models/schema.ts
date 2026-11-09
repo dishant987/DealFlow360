@@ -306,6 +306,14 @@ export const quotations = pgTable('quotations', {
   portalToken: text('portal_token').unique(), // magic-link token for customer portal
   // links stop working after this; a missing value counts as expired (fail closed)
   portalTokenExpiresAt: timestamp('portal_token_expires_at', { withTimezone: true }),
+  // quote details (step 12). validUntil: the customer can't confirm after it.
+  validUntil: timestamp('valid_until', { withTimezone: true }),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  customerPo: text('customer_po'),
+  paymentTermsDays: integer('payment_terms_days').notNull().default(30), // copied from the customer; sets invoice due dates
+  notesToCustomer: text('notes_to_customer'),
+  internalNotes: text('internal_notes'), // never sent to the portal
+  terms: text('terms'), // terms & conditions shown to the customer
   lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).defaultNow().notNull(), // stalled-deal detection
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

@@ -13,6 +13,7 @@ import {
   approvals,
   auditLog,
 } from '../models/schema.js'
+import { contacts } from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { scoreQuotation } from './quotation.controller.js'
 import { quoteNumber } from '../services/quoteNumber.js'
@@ -42,6 +43,9 @@ export function portalScope(req: Request, res: Response, next: NextFunction, tok
     })
     .catch(next)
 }
+
+/** A quote with no valid-until date (made before step 12) never expires. */
+export const quoteExpired = (validUntil: Date | null, now = new Date()) => !!validUntil && validUntil < now
 
 /** A link with no expiry counts as expired (fail closed). */
 export const portalLinkLive = (expiresAt: Date | null, now = new Date()) => !!expiresAt && expiresAt > now
@@ -90,6 +94,16 @@ export async function getPortalQuote(req: Request<{ token: string }>, res: Respo
     quoteNumber: quoteNumber(q.seqNo, q.createdAt),
     customer: customer?.name,
     status: q.status,
+    // customer-facing details only: internal notes never leave the server
+    validUntil: q.validUntil,
+    expired: quoteExpired(q.validUntil),
+    contactName: q.contactId
+      ? (await db.select({ n: contacts.name }).from(contacts).where(eq(contacts.id, q.contactId)))[0]?.n ?? null
+      : null,
+    customerPo: q.customerPo,
+    paymentTermsDays: q.paymentTermsDays,
+    notesToCustomer: q.notesToCustomer,
+    terms: q.terms,
     orderDiscountPct: q.orderDiscountPct,
     // strip cost — customers only see selling price
     lines: lines.map((l) => ({
@@ -173,6 +187,10 @@ export async function confirmPortal(req: Request<{ token: string }>, res: Respon
 
   if (!OPEN_TO_CUSTOMER.includes(q.status))
     return res.status(400).json({ error: closedMsg(q.status) })
+  if (quoteExpired(q.validUntil))
+    return res.status(400).json({
+      error: `This quotation expired on ${q.validUntil!.toDateString()}. Please ask for an updated quote.`,
+    })
 
   // apply the largest open counter-discount as the order discount
   const openCounters = await db
