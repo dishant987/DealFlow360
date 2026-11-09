@@ -263,6 +263,11 @@ notes and payments.
 specific lines, counters the discount, requests a delivery date, and confirms in one
 click. Cost and margin never reach this view.
 
+**Bulk import** — managers and admins can load customers and products from a CSV or Excel
+file (Config → Customers / Products → Import). Download the template, upload, check the
+per-row preview (new / update / skip / error), then import. Existing records are matched by
+email or SKU; an import with any bad row writes nothing.
+
 **Admin** — everything above, plus user management: create users, change roles, and
 **block / unblock** accounts. A blocked user can't sign in and any open session stops on
 its next request (the server re-reads the account on every request). Admins can't block,
@@ -447,6 +452,7 @@ session cookie.
 | Dashboard | `GET /dashboard`, `POST /dashboard/quotations/:id/nudge·escalate` |
 | Reports | `GET /reports·/filters·/export?format=pdf\|xls` |
 | Config | `GET·POST·PATCH·DELETE /config/{products,categories,customers,variants,price-list,pairings,warehouses,stock,subscription-plans,discount-tiers,category-ceilings,users}`, `GET·PATCH /config/settings`, `GET /config/products/:id/stock·/config/categories-list·/config/audit` |
+| Bulk import | `GET /config/import/{customers,products}/template`, `POST /config/import/{customers,products}` (`{ filename, data: base64, mode: update\|skip, commit }`, manager + admin) |
 
 ---
 

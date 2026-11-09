@@ -23,6 +23,9 @@ export const app = express()
 if (isProd) app.set('trust proxy', 1)
 app.use(helmet())
 app.use(cors({ origin: corsOrigins(), credentials: true }))
+// imports carry a base64 spreadsheet; every other route keeps the 100 kB default.
+// Registered first: body-parser marks the body parsed, so the general parser skips it.
+app.use('/api/config/import', express.json({ limit: '8mb' }))
 app.use(express.json())
 app.use(cookieParser())
 

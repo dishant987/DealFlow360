@@ -118,6 +118,7 @@ export default function ResourceManager({
   columns,
   fields,
   rowActions,
+  headerExtra,
 }: {
   title: string
   /** plural heading; defaults to title + "s", which is wrong for "Category" */
@@ -129,6 +130,8 @@ export default function ResourceManager({
   fields: Field[]
   /** extra per-row buttons, rendered before Edit/Delete */
   rowActions?: (row: any) => ReactNode
+  /** extra header controls, rendered before the Add button (e.g. Import) */
+  headerExtra?: ReactNode
 }) {
   const qc = useQueryClient()
   const heading = plural ?? `${title}s`
@@ -239,9 +242,12 @@ export default function ResourceManager({
         bodyClassName="pt-0"
         className="[&>header]:pb-2"
         action={
-          <Button size="sm" onClick={startCreate}>
-            <Plus className="size-4" /> Add {title.toLowerCase()}
-          </Button>
+          <div className="flex items-center gap-2">
+            {headerExtra}
+            <Button size="sm" onClick={startCreate}>
+              <Plus className="size-4" /> Add {title.toLowerCase()}
+            </Button>
+          </div>
         }
       >
         <DataTable
