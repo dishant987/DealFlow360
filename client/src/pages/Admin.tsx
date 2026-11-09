@@ -9,6 +9,7 @@ import AuditLog from '@/components/AuditLog'
 import StockPanel from '@/components/StockPanel'
 import ResourceManager, { type Field } from '@/components/ResourceManager'
 import StatusBadge from '@/components/StatusBadge'
+import ImportDialog from '@/components/ImportDialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -185,6 +186,7 @@ export default function Admin() {
                 title="Product"
                 description="The catalogue reps sell from. Price and cost drive every margin figure in the app."
                 endpoint="/config/products"
+                headerExtra={<ImportDialog kind="products" endpoint="/config/products" />}
                 columns={[
                   { key: 'name', label: 'Name' },
                   { key: 'sku', label: 'SKU' },
@@ -220,6 +222,7 @@ export default function Admin() {
                 title="Customer"
                 description="Accounts and their tier. Tier sets both the price list and the discount ceiling."
                 endpoint="/config/customers"
+                headerExtra={<ImportDialog kind="customers" endpoint="/config/customers" />}
                 columns={[
                   { key: 'name', label: 'Name' },
                   { key: 'email', label: 'Email' },

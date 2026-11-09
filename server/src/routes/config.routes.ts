@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { db } from '../config/db.js'
 import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
 import { crud, num, tier } from '../utils/crud.js'
+import { importRows, importTemplate } from '../controllers/import.controller.js'
 import {
   categories,
   products,
@@ -51,6 +52,10 @@ const adminOnly = requireRole('admin')
 const managerConfig = requireRole('manager', 'admin')
 // catalogue and warehouses: managers run them day to day, not only the admin
 const catalogue = managerConfig
+
+// bulk import: an onboarding job for managers and admins (reps add customers one at a time)
+router.get('/import/:kind/template', managerConfig, importTemplate)
+router.post('/import/:kind', managerConfig, importRows)
 
 router.use('/categories', catalogue, crud(categories, z.object({ name: z.string().min(1) })))
 
