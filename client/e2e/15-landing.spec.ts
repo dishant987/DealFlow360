@@ -27,7 +27,7 @@ test.describe('Landing page', () => {
   test('a signed-in user at / gets the dashboard', async ({ page }) => {
     await login(page, 'rep')
     await page.goto('/')
-    await expect(page.getByText('Pending Approvals')).toBeVisible()
+    await expect(page.getByText('Needs your attention')).toBeVisible()
     await expect(page.getByRole('link', { name: /Start free/ })).toHaveCount(0)
   })
 

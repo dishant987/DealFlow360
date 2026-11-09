@@ -5,7 +5,7 @@ test.describe('Live updates', () => {
   test('a burst of mutations triggers ONE refetch, not one per mutation', async ({ page }) => {
     await login(page, 'rep')
     await page.goto('/')
-    await expect(page.getByText('Pending Approvals')).toBeVisible()
+    await expect(page.getByText('Needs your attention')).toBeVisible()
 
     // count summary refetches on this idle tab
     await page.evaluate(() => {
