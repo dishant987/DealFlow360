@@ -12,8 +12,9 @@ recurring and one-time billing reconciled on a single order, and gives the custo
 living document instead of a static PDF.
 
 **What's new:** a public landing page at `/` for visitors (signed-in users go straight to their
-dashboard), and light and dark themes — light by default, switch with the moon/sun icon in any
-header; the choice is remembered per device.
+dashboard), light and dark themes (light by default; switch with the moon/sun icon in any header,
+remembered per device), and a new app layout: a grouped, collapsible sidebar (Sell · Operate ·
+Finance · Insights · Settings) and a **Ctrl/⌘ K** command palette to jump anywhere.
 
 ---
 
@@ -326,7 +327,7 @@ client/                          React 19 · Vite 8 · Tailwind 4 · TanStack Qu
   src/pages/                     one file per screen (Landing.tsx is the public home)
   src/components/ThemeToggle.tsx light/dark switch; index.html applies it before first paint
   src/index.css                  design tokens for both themes (warm neutrals, indigo accent)
-  src/components/                AppShell, DataTable, KanbanBoard, NotificationBell…
+  src/components/                AppShell (sidebar + top bar), CommandPalette, DataTable, KanbanBoard…
   src/hooks/useLiveUpdates.ts    socket subscription, debounced
   src/lib/                       api client, pricing mirror, role labels
 
@@ -423,10 +424,10 @@ cd client && npm run test:e2e  # end-to-end, all roles, real browser
 billing maths and proration, replenishment, anomaly detection, auth, mail templates,
 production env checks and socket cookie parsing.
 
-**End-to-end** (14 spec files) drive the real UI in Chrome and cover every role: auth and
+**End-to-end** (16 spec files) drive the real UI in Chrome and cover every role: auth and
 RBAC, the quotation builder, the approval chain, fulfilment and backorders, hybrid billing
 and payments, the customer portal, configuration and reporting, notifications, filters,
-live updates, plus a smoke pass that opens every screen for every role and fails on any
+live updates, the landing page, themes, the app shell and command palette, plus a smoke pass that opens every screen for every role and fails on any
 console error or 5xx. A `10-guards.spec.ts` file holds regression guards for defects found
 during the audit.
 

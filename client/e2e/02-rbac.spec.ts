@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { apiAs, login, type Role } from './helpers'
 
-// What each role should see in the top nav (§3 User Roles).
+// What each role should see in the sidebar nav (§3 User Roles).
 // Matched by href — the Approvals link's accessible name carries a count badge.
 const NAV: Record<Role, { visible: string[]; hidden: string[] }> = {
   rep: {
@@ -30,8 +30,8 @@ test.describe('§3 — role-based access', () => {
   for (const role of Object.keys(NAV) as Role[]) {
     test(`${role} sees the right navigation`, async ({ page }) => {
       await login(page, role)
-      // the desktop nav inside the purple app header (mobile sheet is portaled out)
-      const nav = page.locator('header nav')
+      // the desktop sidebar (the mobile drawer is portaled out and closed)
+      const nav = page.getByRole('navigation', { name: 'Main' })
       for (const href of NAV[role].visible)
         await expect(
           nav.locator(`a[href="${href}"]`).first(),
