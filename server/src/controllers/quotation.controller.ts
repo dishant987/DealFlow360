@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { z } from 'zod'
 import { and, eq, inArray } from 'drizzle-orm'
 import { db, runInTenant } from '../config/db.js'
+import { quoteRecipient } from './customer.controller.js'
 import {
   quotations,
   quoteLines,
@@ -498,7 +499,9 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
   // mail server — a slow or unreachable SMTP host used to block this response for
   // seconds. Hand off in the background and record how it went when it settles.
   const portalUrl = `${CLIENT_URL}/portal/${token}`
-  const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId))
+  const [account] = await db.select().from(customers).where(eq(customers.id, q.customerId))
+  const contact = account ? await quoteRecipient(account.id) : null
+  const customer = account && { name: contact?.name ?? account.name, email: contact?.email ?? account.email }
   if (customer?.email) {
     // runs after the response, when the request's company transaction is closed
     const orgId = req.orgId!

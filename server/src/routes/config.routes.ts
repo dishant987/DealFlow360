@@ -1,9 +1,10 @@
-import { Router, type NextFunction, type Request, type Response } from 'express'
+import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../config/db.js'
 import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
 import { crud, num, tier } from '../utils/crud.js'
 import { importRows, importTemplate } from '../controllers/import.controller.js'
+import { customerAccess } from '../controllers/customer.controller.js'
 import {
   categories,
   products,
@@ -36,15 +37,6 @@ import {
 
 const router = Router()
 
-// shortcut: customers have no owner yet, so any rep can edit any customer's name/email; add ownership with the permissions engine
-export function repCustomerTier(req: Request, res: Response, next: NextFunction) {
-  if (req.user?.role === 'rep') {
-    if (req.method === 'POST') req.body = { ...req.body, tier: 'bronze' }
-    if (req.method === 'PATCH' && req.body?.tier !== undefined)
-      return res.status(403).json({ error: "Only a manager or admin can change a customer's tier." })
-  }
-  next()
-}
 router.use(requireAuth)
 
 const adminOnly = requireRole('admin')
@@ -66,13 +58,21 @@ router.delete('/customers/:id', adminOnly)
 router.use(
   '/customers',
   requireRole('rep', 'manager', 'admin'),
-  repCustomerTier,
+  customerAccess, // reps own what they create and edit only their own (customer.controller.ts)
   crud(
     customers,
     z.object({
-      name: z.string().min(1),
-      email: z.string().email(),
+      name: z.string().trim().min(1),
+      email: z.string().trim().email(),
       tier: z.enum(['bronze', 'silver', 'gold']),
+      phone: z.string().trim().max(40).nullable().optional(),
+      website: z.string().trim().max(200).nullable().optional(),
+      billingAddress: z.string().trim().max(500).nullable().optional(),
+      shippingAddress: z.string().trim().max(500).nullable().optional(),
+      taxId: z.string().trim().max(40).nullable().optional(),
+      paymentTermsDays: z.coerce.number().int().min(0).max(365).optional(),
+      notes: z.string().trim().max(2000).nullable().optional(),
+      ownerId: z.string().uuid().nullable().optional(),
     }),
   ),
 )

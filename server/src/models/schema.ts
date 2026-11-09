@@ -102,6 +102,31 @@ export const customers = pgTable('customers', {
   name: text('name').notNull(),
   email: text('email').notNull(),
   tier: tierEnum('tier').notNull().default('bronze'),
+  phone: text('phone'),
+  website: text('website'),
+  billingAddress: text('billing_address'),
+  shippingAddress: text('shipping_address'),
+  taxId: text('tax_id'), // GST / VAT number
+  paymentTermsDays: integer('payment_terms_days').notNull().default(30), // Net 30
+  notes: text('notes'),
+  // the rep who owns the account: reps may edit only their own customers.
+  // users aren't under RLS, so the API checks the owner is in the same company.
+  ownerId: uuid('owner_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/** People at a customer; the primary contact receives quote links. */
+export const contacts = pgTable('contacts', {
+  id: pk(),
+  organizationId: tenantId(),
+  customerId: uuid('customer_id')
+    .notNull()
+    .references(() => customers.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  email: text('email'),
+  phone: text('phone'),
+  jobTitle: text('job_title'),
+  isPrimary: boolean('is_primary').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 

@@ -7,7 +7,6 @@ test.describe('A3/A7 — configuration and reporting', () => {
     await page.goto('/admin')
     for (const section of [
       'Products',
-      'Customers',
       'Categories',
       'Variants',
       'Warehouses',

@@ -300,7 +300,6 @@ test.describe('Admin', () => {
     for (const tab of [
       'Products',
       'Categories',
-      'Customers',
       'Variants',
       'Warehouses',
       'Stock',

@@ -41,9 +41,12 @@ test.describe.serial('B7 — hybrid billing, subscriptions and payment', () => {
 
     await login(page, 'finance')
     await page.goto(`/quotations/${id}/billing`)
-    await page.getByRole('button', { name: /Generate Billing/i }).click()
-    // the section headings always render; the button relabels only once billing exists
-    await expect(page.getByRole('button', { name: 'Regenerate Billing' })).toBeVisible({ timeout: 15_000 })
+    // exact name: /Generate Billing/i also matched "Regenerate Billing", and the
+    // label is only meaningful once billing has loaded
+    await page.getByRole('button', { name: 'Generate Billing', exact: true }).click()
+    // the success toast means the request finished; only then read the API
+    await expect(page.getByText('Billing generated')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByRole('button', { name: 'Regenerate Billing' })).toBeVisible()
     await expect(page.getByText('One-time invoices')).toBeVisible()
     await expect(page.getByText('Recurring subscriptions')).toBeVisible()
 

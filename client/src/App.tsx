@@ -57,6 +57,8 @@ const ApprovalDetail = page(() => import('@/pages/ApprovalDetail'))
 const DealHealth = page(() => import('@/pages/DealHealth'))
 const Reports = page(() => import('@/pages/Reports'))
 const Landing = page(() => import('@/pages/Landing'))
+const Customers = page(() => import('@/pages/Customers'))
+const CustomerDetail = page(() => import('@/pages/CustomerDetail'))
 
 // '/' is the marketing page for visitors and the dashboard once signed in.
 function Home() {
@@ -80,6 +82,8 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="/profile" element={<Profile />} />
         <Route path="/quotations" element={<Quotations />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/quotations/:id" element={<QuotationBuilder />} />
         <Route path="/quotations/:id/fulfillment" element={<Fulfillment />} />
         <Route path="/quotations/:id/billing" element={<Billing />} />

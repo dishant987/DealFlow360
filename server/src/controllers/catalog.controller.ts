@@ -1,11 +1,16 @@
 import type { Request, Response } from 'express'
 import { eq } from 'drizzle-orm'
 import { db } from '../config/db.js'
-import { customers, products, categories, productVariants } from '../models/schema.js'
+import { customers, products, categories, productVariants, users } from '../models/schema.js'
 
 // read-only catalog for the rep workspace (any authenticated internal user)
 export async function listCustomers(_req: Request, res: Response) {
-  res.json(await db.select().from(customers))
+  const rows = await db
+    .select({ customer: customers, ownerName: users.name })
+    .from(customers)
+    .leftJoin(users, eq(users.id, customers.ownerId))
+    .orderBy(customers.name)
+  res.json(rows.map((r) => ({ ...r.customer, ownerName: r.ownerName })))
 }
 
 export async function listProducts(_req: Request, res: Response) {
