@@ -12,10 +12,13 @@ import FormField from '@/components/FormField'
 import PasswordInput from '@/components/PasswordInput'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select } from '@/components/ui/select'
+import { CURRENCIES } from '@/lib/format'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
   company: z.string().max(120).optional(),
+  currency: z.string().length(3),
   email: z.string().email('Enter a valid email'),
   password: z.string().min(6, 'At least 6 characters'),
 })
@@ -26,7 +29,7 @@ export default function Signup() {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<Form>({ resolver: zodResolver(schema) })
+  } = useForm<Form>({ resolver: zodResolver(schema), defaultValues: { currency: 'USD' } })
   const nav = useNavigate()
   const qc = useQueryClient()
 
@@ -60,6 +63,17 @@ export default function Signup() {
 
         <FormField id="company" label="Company name">
           <Input id="company" autoComplete="organization" placeholder="Acme Inc." {...register('company')} />
+        </FormField>
+
+        <FormField id="currency" label="Currency">
+          {/* every amount in the company is shown in this; an admin can change it later in Settings */}
+          <Select id="currency" {...register('currency')}>
+            {CURRENCIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </Select>
         </FormField>
 
         <FormField id="email" label="Work email" error={errors.email?.message}>

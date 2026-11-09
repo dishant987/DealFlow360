@@ -14,7 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { humanize } from '@/lib/format'
+import { CURRENCIES, humanize } from '@/lib/format'
+import { Select } from '@/components/ui/select'
 
 const tierOpts = [
   { label: 'Bronze', value: 'bronze' },
@@ -41,10 +42,13 @@ function SettingsForm() {
           financeThreshold: form.financeThreshold,
           minUpsellMarginPct: form.minUpsellMarginPct,
           stalledDays: Number(form.stalledDays),
+          currency: form.currency,
         })
       ).data,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['/config/settings'] })
+      // the session carries the currency every amount is formatted in
+      qc.invalidateQueries({ queryKey: ['me'] })
       toast.success('Settings saved')
     },
     onError: () => toast.error('Save failed'),
@@ -71,6 +75,23 @@ function SettingsForm() {
       {field('financeThreshold', 'Finance threshold (risk score)')}
       {field('minUpsellMarginPct', 'Min upsell margin %')}
       {field('stalledDays', 'Stalled deal after (days)')}
+      <div className="space-y-1">
+        <Label className="text-xs" htmlFor="settings-currency">
+          Currency (all amounts are shown in this)
+        </Label>
+        <Select
+          id="settings-currency"
+          className="w-48"
+          value={form.currency ?? 'USD'}
+          onChange={(e) => setForm((s) => ({ ...s, currency: e.target.value }))}
+        >
+          {CURRENCIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </Select>
+      </div>
       <Button onClick={() => save.mutate()} disabled={save.isPending}>
         Save settings
       </Button>

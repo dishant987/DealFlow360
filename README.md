@@ -109,6 +109,11 @@ Dealwise hosts many companies in one database. Signing up creates a **new compan
 its admin (default settings and discount tiers included); teammates are added by that admin and
 join the same company. Existing data from before multi-tenancy lives in "Default company".
 
+**Currency.** Each company picks its currency when signing up (USD by default; managers and admins
+can change it under Config → Thresholds). Every amount in the app, the customer portal and the
+invoice/report PDFs is shown in it, with proper grouping (`$1,000.00`, `₹1,00,000.00`). One company
+uses one currency; quoting different customers in different currencies is not supported yet.
+
 Isolation is enforced by Postgres, not by remembering a filter in every query:
 
 - every company table has `organization_id`, defaulted from the request's company;
@@ -488,7 +493,8 @@ session cookie.
 ## Testing
 
 CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: type-check, unit tests,
-migrate + seed a fresh Postgres, lint + build the client, then the full e2e suite.
+migrate + seed a fresh Postgres, lint + build the client, then the full e2e suite. (The Docker
+image check is switched off for now; the `Dockerfile` is still there and the job can be added back.)
 
 ```bash
 cd server && npm test          # unit tests — pure business logic

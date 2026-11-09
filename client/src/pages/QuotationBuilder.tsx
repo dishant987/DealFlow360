@@ -375,9 +375,10 @@ export default function QuotationBuilder() {
         </div>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+      {/* minmax(0,1fr)/min-w-0: on a phone the wide lines table scrolls in its own box instead of widening the page */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* cart */}
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           {/* B8: the customer's side of the conversation, and the rep's reply to it */}
           {requests.length > 0 && (
             <div className="rounded-xl border bg-background">
