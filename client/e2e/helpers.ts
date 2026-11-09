@@ -1,6 +1,6 @@
 import { expect, type Page, type APIRequestContext, request } from '@playwright/test'
 
-export const API = 'http://localhost:4000'
+export const API = process.env.E2E_API_URL || 'http://localhost:4000'
 export const PASSWORD = 'password123'
 
 export const ACCOUNTS = {
@@ -18,7 +18,7 @@ export async function login(page: Page, role: Role) {
   await page.getByPlaceholder('you@company.com').fill(ACCOUNTS[role].email)
   await page.locator('input[type="password"]').fill(PASSWORD)
   await page.getByRole('button', { name: 'Sign in' }).click()
-  await expect(page).toHaveURL(/localhost:5173\/(?!login)/, { timeout: 15_000 })
+  await expect(page).not.toHaveURL(/\/login/, { timeout: 15_000 })
 }
 
 /** A cookie-authenticated API context for the given role — used to assert the

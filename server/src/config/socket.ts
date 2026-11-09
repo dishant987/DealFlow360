@@ -1,11 +1,35 @@
 import { Server as IOServer } from 'socket.io'
 import type { Server as HttpServer } from 'http'
+import { corsOrigins } from './env.js'
+import { cookieName, verifyToken } from '../utils/token.js'
+
+// Read the session cookie straight from the handshake headers.
+export function tokenFromCookie(header: string | undefined): string | null {
+  for (const part of (header ?? '').split(';')) {
+    const [k, ...v] = part.trim().split('=')
+    if (k === cookieName) return decodeURIComponent(v.join('='))
+  }
+  return null
+}
 
 let io: IOServer | null = null
 
 export function initSocket(server: HttpServer) {
   io = new IOServer(server, {
-    cors: { origin: 'http://localhost:5173', credentials: true },
+    cors: { origin: corsOrigins(), credentials: true },
+  })
+  // Only signed-in staff get live updates; the public portal and anonymous
+  // visitors are refused at the handshake.
+  io.use((socket, next) => {
+    try {
+      // inside the try: a malformed %-escape makes decodeURIComponent throw
+      const token = tokenFromCookie(socket.handshake.headers.cookie)
+      if (!token) throw new Error('no session')
+      verifyToken(token)
+      next()
+    } catch {
+      next(new Error('unauthenticated'))
+    }
   })
   io.on('connection', (socket) => {
     socket.on('disconnect', () => {})

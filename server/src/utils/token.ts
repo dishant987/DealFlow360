@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { isProd } from '../config/env.js'
 
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me'
 
@@ -8,7 +9,7 @@ export const cookieName = 'token'
 export const cookieOpts = {
   httpOnly: true,
   sameSite: 'lax' as const,
-  secure: false, // set true behind HTTPS in prod
+  secure: isProd, // HTTPS-only in production; plain http on localhost
   maxAge: 7 * 24 * 3600 * 1000,
 }
 

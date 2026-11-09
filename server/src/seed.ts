@@ -74,6 +74,9 @@ const plusHours = (d: Date, h: number) => new Date(d.getTime() + h * 3_600_000)
 const money = (n: number) => String(Math.round(n * 100) / 100)
 
 async function seed() {
+  // destructive: never wipe a production database by accident
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DESTRUCTIVE_SEED !== 'true')
+    throw new Error('Refusing to seed: NODE_ENV=production wipes every table. Set ALLOW_DESTRUCTIVE_SEED=true to override.')
   await wipe()
 
   /* ------------------------------------------------------------------ */

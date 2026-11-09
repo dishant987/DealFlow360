@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { io } from 'socket.io-client'
-import { useQueryClient } from '@tanstack/react-query'
+import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { User } from '@/hooks/useAuth'
 
 // The server broadcasts one coarse event per successful mutation, to every
 // connected client. Refetching on each one turned a burst of edits into a burst
@@ -15,9 +16,16 @@ const BURST_MS = 400
 
 export function useLiveUpdates() {
   const qc = useQueryClient()
+  // the server refuses anonymous sockets, so connect only once signed in and
+  // reconnect when the session changes (login, logout, switch user)
+  // Observe the session cache without fetching it: calling /auth/me from here
+  // would 401 on every public page (login, portal).
+  const userId = useQuery<User | null>({ queryKey: ['me'], queryFn: skipToken }).data?.id
 
   useEffect(() => {
-    const socket = io('http://localhost:4000', { withCredentials: true })
+    if (!userId) return
+    // same origin: Vite proxies /socket.io in dev, the reverse proxy does in prod
+    const socket = io({ withCredentials: true })
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const refresh = () => {
@@ -40,5 +48,5 @@ export function useLiveUpdates() {
       clearTimeout(timer)
       socket.close()
     }
-  }, [qc])
+  }, [qc, userId])
 }

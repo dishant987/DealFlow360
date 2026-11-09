@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import { pool } from './config/db.js'
 import { friendlyDbError } from './utils/dbError.js'
 import { emitChange } from './config/socket.js'
+import { corsOrigins, isProd } from './config/env.js'
 import authRouter from './routes/auth.routes.js'
 import configRouter from './routes/config.routes.js'
 import quotationRouter from './routes/quotation.routes.js'
@@ -17,8 +18,10 @@ import reportRouter from './routes/report.routes.js'
 import opsRouter from './routes/ops.routes.js'
 
 export const app = express()
+// behind a load balancer / reverse proxy: needed for secure cookies and per-IP rate limits
+if (isProd) app.set('trust proxy', 1)
 app.use(helmet())
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
+app.use(cors({ origin: corsOrigins(), credentials: true }))
 app.use(express.json())
 app.use(cookieParser())
 

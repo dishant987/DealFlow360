@@ -4,6 +4,13 @@ import { app } from './app.js'
 import { pool } from './config/db.js'
 import { initSocket } from './config/socket.js'
 import { startCron } from './services/cron.js'
+import { prodEnvProblems } from './config/env.js'
+
+const problems = prodEnvProblems()
+if (problems.length) {
+  for (const p of problems) console.error(`✖ ${p}`)
+  process.exit(1)
+}
 
 const port = Number(process.env.PORT) || 4000
 const server = createServer(app)

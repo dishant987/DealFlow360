@@ -64,6 +64,20 @@ npm run dev                 # http://localhost:5173
 | `JWT_SECRET` | Signs the session cookie. Use a long random string. |
 | `CLIENT_URL` | Used to build customer portal links. |
 | `SMTP_*` | Optional. Without it, portal and password-reset links print to the server console. |
+| `MAIL_ENABLED` | Set to `false` to print links to the console even when SMTP is configured — use it while testing. |
+| `NODE_ENV` | `production` turns on HTTPS-only cookies and `trust proxy`, and the server refuses to boot with a weak `JWT_SECRET` (< 32 chars), a localhost `CLIENT_URL` or no `DATABASE_URL`. |
+| `CORS_ORIGINS` | Optional comma-separated allow-list for the API and socket. Defaults to `CLIENT_URL`. |
+| `DB_SSL_ALLOW_SELF_SIGNED` | Set to `true` only if your hosted Postgres uses a self-signed certificate; otherwise the certificate is verified. |
+| `ALLOW_DESTRUCTIVE_SEED` | `db:seed` refuses to run with `NODE_ENV=production` unless this is `true`. |
+
+Client build settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_SHOW_DEMO_LOGINS` | The demo-account buttons show in `npm run dev` only. Set to `true` for an internal staging build that should show them. |
+| `VITE_API_TARGET` | Dev-server proxy target for `/api` and `/socket.io` (default `http://localhost:4000`). |
+
+In production, serve the client and API from one origin (a reverse proxy routing `/api` and `/socket.io` to the server); the client calls both with relative URLs.
 
 `npm run db:seed` is destructive — it clears every table and rebuilds a full demo
 pipeline: 6 users, 12 customers across all three tiers, 11 products (hardware, services,
@@ -75,7 +89,7 @@ approvals, negotiations, fulfilments, invoices and payments.
 
 ## Demo accounts
 
-All share the password `password123`. The login screen has one-click buttons for each.
+All share the password `password123`. For internal testing only: the login screen shows one-click buttons for each in `npm run dev`. Production builds hide them unless built with `VITE_SHOW_DEMO_LOGINS=true`.
 
 | Role | Email | Sees |
 | --- | --- | --- |
@@ -323,7 +337,8 @@ detection take plain inputs and return plain outputs. They never touch the datab
 they are tested directly and the rules can be read in one sitting.
 
 **Live updates.** Every successful mutation broadcasts one coarse `data:changed` event and
-clients refetch their active queries. Both ends coalesce bursts — 250 ms on the server,
+clients refetch their active queries. Only signed-in users can open the socket — the
+handshake checks the session cookie. Both ends coalesce bursts — 250 ms on the server,
 400 ms on the client — so twenty rapid edits cost one refetch rather than twenty. A
 backgrounded tab marks its data stale instead of polling.
 
@@ -384,10 +399,10 @@ session cookie.
 | Fulfilment | `GET /quotations/:id/fulfillment/suggestion·allocations`, `POST /:id/fulfillment/accept·consolidate`, `POST /stock/:id/receive` |
 | Billing | `GET·POST /quotations/:id/billing[/generate]`, `POST /:id/billing/subscriptions/:lineId/change·cancel·pause·resume`, `POST /invoices/:id/pay` |
 | Portal *(public)* | `GET /portal/:token`, `POST /portal/:token/negotiate·confirm` |
-| Ops | `GET /summary·notifications·invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id/pdf` |
+| Ops | `GET /summary·notifications` (scoped per role), `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf]` (manager, finance, admin only) |
 | Dashboard | `GET /dashboard`, `POST /dashboard/quotations/:id/nudge·escalate` |
 | Reports | `GET /reports·/filters·/export?format=pdf\|xls` |
-| Config | `GET·POST·PATCH·DELETE /config/{products,categories,customers,variants,price-list,pairings,warehouses,stock,subscription-plans,discount-tiers,category-ceilings,users,settings}` |
+| Config | `GET·POST·PATCH·DELETE /config/{products,categories,customers,variants,price-list,pairings,warehouses,stock,subscription-plans,discount-tiers,category-ceilings,users}`, `GET·PATCH /config/settings`, `GET /config/products/:id/stock·/config/categories-list·/config/audit` |
 
 ---
 
@@ -398,8 +413,9 @@ cd server && npm test          # unit tests — pure business logic
 cd client && npm run test:e2e  # end-to-end, all roles, real browser
 ```
 
-**Unit** (8 files) cover the pure services: risk scoring, pricing, warehouse splitting,
-billing maths and proration, replenishment, anomaly detection, auth and mail templates.
+**Unit** (10 files) cover the pure services: risk scoring, pricing, warehouse splitting,
+billing maths and proration, replenishment, anomaly detection, auth, mail templates,
+production env checks and socket cookie parsing.
 
 **End-to-end** (14 spec files) drive the real UI in Chrome and cover every role: auth and
 RBAC, the quotation builder, the approval chain, fulfilment and backorders, hybrid billing
@@ -409,7 +425,8 @@ console error or 5xx. A `10-guards.spec.ts` file holds regression guards for def
 during the audit.
 
 Playwright drives the locally installed Chrome (`channel: 'chrome'`) rather than
-downloading its own browser.
+downloading its own browser. If ports 4000/5173 are taken, run the servers elsewhere and point
+the suite at them with `E2E_BASE_URL` and `E2E_API_URL`.
 
 ---
 

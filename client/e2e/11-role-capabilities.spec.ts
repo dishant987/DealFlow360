@@ -68,7 +68,8 @@ test.describe('Sales Rep', () => {
     await login(page, 'rep')
     // status is visible on the pipeline...
     await page.goto('/quotations')
-    await expect(page.getByText('pending approval').first()).toBeVisible()
+    // skip the hidden <option> of the same name in the status filter
+    await expect(page.getByText('pending approval').filter({ visible: true }).first()).toBeVisible()
     // ...and on the deal itself
     await page.goto(`/quotations/${id}`)
     await expect(page.getByText(/Locked — this quotation is pending approval/)).toBeVisible()
