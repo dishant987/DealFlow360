@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import ThemeToggle from '@/components/ThemeToggle'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 const PITCH = [
@@ -28,7 +29,7 @@ export default function AuthLayout({
   return (
     <div className="min-h-svh lg:grid lg:grid-cols-[1.05fr_1fr]">
       <aside className="relative hidden overflow-hidden bg-primary p-12 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
-        {/* soft light source, keeps the flat purple from reading as a solid block */}
+        {/* soft light source, keeps the flat brand colour from reading as a solid block */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 opacity-70"
@@ -38,8 +39,8 @@ export default function AuthLayout({
           }}
         />
         <div className="relative">
-          <Link to="/login" className="text-2xl font-semibold tracking-tight">
-            DealFlow360
+          <Link to="/" className="text-2xl font-semibold tracking-tight">
+            Dealwise
           </Link>
           <p className="mt-1 text-sm text-primary-foreground/70">
             Quotation to cash, self-governing
@@ -68,11 +69,12 @@ export default function AuthLayout({
         </p>
       </aside>
 
-      <main className="flex min-h-svh flex-col items-center justify-center bg-muted/30 px-4 py-10 lg:min-h-0">
+      <main className="relative flex min-h-svh flex-col items-center justify-center bg-muted/30 px-4 py-10 lg:min-h-0">
+        <ThemeToggle className="absolute top-3 right-3" />
         <div className="w-full max-w-sm space-y-5">
           {/* compact brand — only shown when the panel above is hidden */}
           <div className="text-center lg:hidden">
-            <span className="font-heading text-xl font-semibold text-primary">DealFlow360</span>
+            <Link to="/" className="font-heading text-xl font-semibold text-primary">Dealwise</Link>
           </div>
 
           <Card className="shadow-sm">

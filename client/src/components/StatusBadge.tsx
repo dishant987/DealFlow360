@@ -56,6 +56,6 @@ const CHART: Record<string, string> = {
   under_negotiation: '#8b5cf6',
   confirmed: '#14b8a6',
   fulfilled: '#10b981',
-  invoiced: '#714B67',
+  invoiced: '#4652C8',
 }
 export const statusColor = (status: string) => CHART[status] ?? '#94a3b8'

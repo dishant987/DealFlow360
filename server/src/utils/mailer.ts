@@ -16,13 +16,13 @@ const transport =
       })
     : null
 
-const FROM = MAIL_FROM || 'DealFlow360 <no-reply@dealflow360.app>'
+const FROM = MAIL_FROM || 'Dealwise <no-reply@dealwise.app>'
 
 /* ------------------------------------------------------------------ */
 /* Template                                                            */
 /* ------------------------------------------------------------------ */
 
-const BRAND = '#714B67'
+const BRAND = '#4652C8'
 const INK = '#1c1917'
 const MUTED = '#6b7280'
 const BORDER = '#e5e7eb'
@@ -98,7 +98,7 @@ function renderHtml({ heading, preheader, paragraphs, cta, footnote }: Template)
           <tr>
             <td style="background:${BRAND};padding:20px 28px;">
               <span style="font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:18px;font-weight:600;color:#ffffff;letter-spacing:-0.2px;">
-                DealFlow360
+                Dealwise
               </span>
             </td>
           </tr>
@@ -124,7 +124,7 @@ function renderHtml({ heading, preheader, paragraphs, cta, footnote }: Template)
           }
         </table>
         <p style="margin:16px 0 0;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:12px;color:${MUTED};">
-          Sent by DealFlow360
+          Sent by Dealwise
         </p>
       </td>
     </tr>
@@ -175,7 +175,7 @@ export const previewMail = (template: Template) => ({
 // A1: customers reach their quotation through this magic link
 export function sendPortalLink(to: string, link: string, customer: string) {
   return send(to, {
-    heading: 'Your DealFlow360 quotation is ready',
+    heading: 'Your Dealwise quotation is ready',
     preheader: 'Review the pricing, ask a question, or confirm — no account needed.',
     paragraphs: [
       `Hi ${customer},`,
@@ -189,10 +189,10 @@ export function sendPortalLink(to: string, link: string, customer: string) {
 
 export function sendPasswordReset(to: string, link: string) {
   return send(to, {
-    heading: 'Reset your DealFlow360 password',
+    heading: 'Reset your Dealwise password',
     preheader: 'This link is valid for one hour.',
     paragraphs: [
-      'We received a request to reset the password on your DealFlow360 account.',
+      'We received a request to reset the password on your Dealwise account.',
       'Choose a new password using the button below. The link is valid for one hour and can only be used once.',
     ],
     cta: { label: 'Set a new password', url: link },

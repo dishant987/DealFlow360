@@ -1,4 +1,4 @@
-# DealFlow360 — client
+# Dealwise — client
 
 React 19 · Vite 8 · Tailwind 4 · TanStack Query. Setup, flows and architecture are in the
 [root README](../README.md).

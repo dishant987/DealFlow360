@@ -180,7 +180,7 @@ export async function getReportFilters(_req: Request, res: Response) {
   })
 }
 
-const PURPLE = '#714B67'
+const BRAND = '#4652C8'
 const LIGHT = '#F3EEF2'
 const BORDER = '#D9CED6'
 
@@ -201,7 +201,7 @@ function statusChartSvg(byStatus: Record<string, number>): string {
       const y = baseY - h
       const label = status.replace(/_/g, ' ')
       return `
-        <rect x="${x}" y="${y}" width="${bw}" height="${h}" fill="${PURPLE}" rx="3"/>
+        <rect x="${x}" y="${y}" width="${bw}" height="${h}" fill="${BRAND}" rx="3"/>
         <text x="${x + bw / 2}" y="${y - 5}" font-size="10" text-anchor="middle" fill="#333">${count}</text>
         <text x="${x + bw / 2}" y="${baseY + 14}" font-size="8" text-anchor="middle" fill="#666"
           transform="rotate(-25 ${x + bw / 2} ${baseY + 14})">${label}</text>`
@@ -239,7 +239,7 @@ export async function exportReport(req: Request, res: Response) {
     })
 
     const kpi = (label: string, value: string) => ({
-      table: { widths: ['*'], body: [[{ text: label, fontSize: 8, color: '#777' }], [{ text: value, fontSize: 15, bold: true, color: PURPLE }]] },
+      table: { widths: ['*'], body: [[{ text: label, fontSize: 8, color: '#777' }], [{ text: value, fontSize: 15, bold: true, color: BRAND }]] },
       layout: 'noBorders',
       fillColor: LIGHT,
       margin: [0, 0, 0, 0],
@@ -283,13 +283,13 @@ export async function exportReport(req: Request, res: Response) {
       pageMargins: [40, 55, 40, 45],
       defaultStyle: { font: 'Helvetica', fontSize: 9 },
       styles: {
-        th: { bold: true, color: 'white', fillColor: PURPLE },
-        h2: { fontSize: 12, bold: true, color: PURPLE, margin: [0, 14, 0, 6] },
+        th: { bold: true, color: 'white', fillColor: BRAND },
+        h2: { fontSize: 12, bold: true, color: BRAND, margin: [0, 14, 0, 6] },
       },
       header: {
         margin: [40, 18, 40, 0],
         columns: [
-          { text: 'DealFlow360', color: PURPLE, bold: true },
+          { text: 'Dealwise', color: BRAND, bold: true },
           { text: 'Sales Report', alignment: 'right', color: '#999' },
         ],
       },
