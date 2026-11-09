@@ -96,7 +96,7 @@ export default function UserMenu({
       <AlertDialog open={confirmLogout} onOpenChange={setConfirmLogout}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Log out of DealFlow360?</AlertDialogTitle>
+            <AlertDialogTitle>Log out of Dealwise?</AlertDialogTitle>
             <AlertDialogDescription>
               You'll need to sign in again to return to your workspace. Any unsaved edits on this
               screen will be lost.

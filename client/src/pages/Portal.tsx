@@ -161,7 +161,7 @@ export default function Portal() {
       <header className="bg-primary text-primary-foreground">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-5">
           <div>
-            <div className="font-heading text-lg font-semibold">DealFlow360</div>
+            <div className="font-heading text-lg font-semibold">Dealwise</div>
             <div className="text-sm text-primary-foreground/80">
               Quotation {q.quoteNumber} for {q.customer}
             </div>

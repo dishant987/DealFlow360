@@ -62,47 +62,51 @@ export async function generateBilling(req: Request<{ id: string }>, res: Respons
     .leftJoin(subscriptionPlans, eq(quoteLines.subscriptionPlanId, subscriptionPlans.id))
     .where(eq(quoteLines.quotationId, req.params.id))
 
-  // regenerate cleanly
-  await db.delete(invoices).where(eq(invoices.quotationId, req.params.id))
-  await db.delete(billingSchedules).where(eq(billingSchedules.quotationId, req.params.id))
+  // One transaction: a failure (or a second finance user regenerating at the
+  // same moment) must never leave an invoice without its subscription schedule.
+  await db.transaction(async (tx) => {
+    // regenerate cleanly
+    await tx.delete(invoices).where(eq(invoices.quotationId, req.params.id))
+    await tx.delete(billingSchedules).where(eq(billingSchedules.quotationId, req.params.id))
 
-  const now = new Date()
-  const oneTimeTotal = lines
-    .filter((l) => l.lineType === 'onetime')
-    .reduce((sum, l) => sum + computeLine(l).net, 0)
+    const now = new Date()
+    const oneTimeTotal = lines
+      .filter((l) => l.lineType === 'onetime')
+      .reduce((sum, l) => sum + computeLine(l).net, 0)
 
-  if (oneTimeTotal > 0) {
-    const due = new Date(now)
-    due.setDate(due.getDate() + 14)
-    await db.insert(invoices).values({
+    if (oneTimeTotal > 0) {
+      const due = new Date(now)
+      due.setDate(due.getDate() + 14)
+      await tx.insert(invoices).values({
+        quotationId: req.params.id,
+        type: 'onetime',
+        status: 'sent',
+        amount: String(round2(oneTimeTotal)),
+        dueAt: due,
+      })
+    }
+
+    for (const l of lines.filter((x) => x.lineType === 'subscription' && x.subscriptionPlanId)) {
+      await tx.insert(billingSchedules).values({
+        quotationId: req.params.id,
+        quoteLineId: l.id,
+        subscriptionPlanId: l.subscriptionPlanId!,
+        nextBillingDate: nextBillingDate(now, (l.interval ?? 'monthly') as Interval),
+        amount: String(computeLine(l).net),
+        status: 'scheduled',
+      })
+    }
+
+    await tx
+      .update(quotations)
+      .set({ status: 'invoiced', updatedAt: now, lastActivityAt: now })
+      .where(eq(quotations.id, req.params.id))
+    await tx.insert(auditLog).values({
       quotationId: req.params.id,
-      type: 'onetime',
-      status: 'sent',
-      amount: String(round2(oneTimeTotal)),
-      dueAt: due,
+      userId: req.user!.id,
+      action: 'billing_generated',
+      detail: { oneTimeTotal: round2(oneTimeTotal) },
     })
-  }
-
-  for (const l of lines.filter((x) => x.lineType === 'subscription' && x.subscriptionPlanId)) {
-    await db.insert(billingSchedules).values({
-      quotationId: req.params.id,
-      quoteLineId: l.id,
-      subscriptionPlanId: l.subscriptionPlanId!,
-      nextBillingDate: nextBillingDate(now, (l.interval ?? 'monthly') as Interval),
-      amount: String(computeLine(l).net),
-      status: 'scheduled',
-    })
-  }
-
-  await db
-    .update(quotations)
-    .set({ status: 'invoiced', updatedAt: now, lastActivityAt: now })
-    .where(eq(quotations.id, req.params.id))
-  await db.insert(auditLog).values({
-    quotationId: req.params.id,
-    userId: req.user!.id,
-    action: 'billing_generated',
-    detail: { oneTimeTotal: round2(oneTimeTotal) },
   })
 
   res.json(await billingView(req.params.id))

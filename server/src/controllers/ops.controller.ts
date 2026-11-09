@@ -160,7 +160,7 @@ export async function listInvoices(req: Request, res: Response) {
 
 const round2 = (x: number) => Math.round(x * 100) / 100
 const require = createRequire(import.meta.url)
-const PURPLE = '#714B67'
+const BRAND = '#4652C8'
 const LIGHT = '#F3EEF2'
 
 /* ---- #13 Invoice detail ---- */
@@ -533,20 +533,20 @@ export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
     pageMargins: [40, 50, 40, 50],
     defaultStyle: { font: 'Helvetica', fontSize: 10 },
     styles: {
-      th: { bold: true, color: 'white', fillColor: PURPLE },
+      th: { bold: true, color: 'white', fillColor: BRAND },
       label: { fontSize: 8, color: '#888' },
     },
     footer: (current: number, total: number) => ({
       margin: [40, 0, 40, 20],
       columns: [
-        { text: 'DealFlow360', fontSize: 7, color: '#999' },
+        { text: 'Dealwise', fontSize: 7, color: '#999' },
         { text: `Page ${current} of ${total}`, alignment: 'right', fontSize: 7, color: '#999' },
       ],
     }),
     content: [
       {
         columns: [
-          { text: 'DealFlow360', fontSize: 16, bold: true, color: PURPLE },
+          { text: 'Dealwise', fontSize: 16, bold: true, color: BRAND },
           { text: 'INVOICE', fontSize: 16, bold: true, alignment: 'right', color: '#333' },
         ],
       },

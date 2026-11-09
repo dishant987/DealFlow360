@@ -7,7 +7,7 @@ test.describe('A1 — authentication', () => {
   for (const role of ROLES) {
     test(`${role} can log in and lands in the app`, async ({ page }) => {
       await login(page, role)
-      await expect(page.getByRole('link', { name: 'DealFlow360' })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Dealwise' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible()
     })
   }
@@ -67,7 +67,7 @@ test.describe('A1 — authentication', () => {
     await page.getByRole('button', { name: 'Account menu' }).click()
     await page.getByRole('menuitem', { name: 'Log out' }).click()
     // logout is behind a confirmation dialog
-    await expect(page.getByText('Log out of DealFlow360?')).toBeVisible()
+    await expect(page.getByText('Log out of Dealwise?')).toBeVisible()
     await page.getByRole('button', { name: 'Log out' }).click()
     await expect(page).toHaveURL(/\/login/)
     await page.goto('/quotations')

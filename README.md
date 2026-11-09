@@ -1,4 +1,4 @@
-# DealFlow360
+# Dealwise
 
 An intelligent, self-governing B2B sales operations platform — from quotation to cash.
 
@@ -7,9 +7,13 @@ teams work in messier conditions — multi-level discount approvals, partial sto
 across warehouses, subscriptions bundled with one-time hardware, customers who want to
 negotiate rather than email, and managers who find out a deal stalled only after it died.
 
-DealFlow360 enforces pricing discipline on its own, reacts to live inventory, keeps
+Dealwise enforces pricing discipline on its own, reacts to live inventory, keeps
 recurring and one-time billing reconciled on a single order, and gives the customer a
 living document instead of a static PDF.
+
+**What's new:** a public landing page at `/` for visitors (signed-in users go straight to their
+dashboard), and light and dark themes — light by default, switch with the moon/sun icon in any
+header; the choice is remembered per device.
 
 ---
 
@@ -34,7 +38,7 @@ living document instead of a static PDF.
 **Prerequisites:** Node 20+, PostgreSQL 13+ (the schema uses `gen_random_uuid()`).
 
 ```bash
-createdb dealflow360
+createdb dealwise
 ```
 
 **Server**
@@ -319,7 +323,9 @@ rather than fanned out into a second table.
 
 ```
 client/                          React 19 · Vite 8 · Tailwind 4 · TanStack Query
-  src/pages/                     one file per screen
+  src/pages/                     one file per screen (Landing.tsx is the public home)
+  src/components/ThemeToggle.tsx light/dark switch; index.html applies it before first paint
+  src/index.css                  design tokens for both themes (warm neutrals, indigo accent)
   src/components/                AppShell, DataTable, KanbanBoard, NotificationBell…
   src/hooks/useLiveUpdates.ts    socket subscription, debounced
   src/lib/                       api client, pricing mirror, role labels

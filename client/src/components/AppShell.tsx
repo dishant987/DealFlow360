@@ -22,6 +22,7 @@ import { api } from '@/lib/api'
 import { roleLabel } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
 import UserMenu from '@/components/UserMenu'
+import ThemeToggle from '@/components/ThemeToggle'
 import NotificationBell from '@/components/NotificationBell'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 
@@ -137,7 +138,7 @@ export default function AppShell({
 
   return (
     <div className="min-h-svh bg-muted/20">
-      {/* Odoo-style purple top bar. Single row that never wraps: the nav collapses
+      {/* Brand top bar. Single row that never wraps: the nav collapses
           into a sheet below lg, and the workspace actions shed their labels first. */}
       <header className="bg-primary text-primary-foreground">
         <div className="flex h-12 items-center gap-3 px-4 sm:px-6">
@@ -154,7 +155,7 @@ export default function AppShell({
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <SheetHeader className="border-b px-5 py-4">
-                <SheetTitle className="text-primary">DealFlow360</SheetTitle>
+                <SheetTitle className="text-primary">Dealwise</SheetTitle>
                 {user && (
                   <p className="text-xs text-muted-foreground">
                     {user.name} · <span className="uppercase">{roleLabel(user.role)}</span>
@@ -210,7 +211,7 @@ export default function AppShell({
             to="/"
             className="shrink-0 font-semibold tracking-tight whitespace-nowrap lg:border-r lg:border-white/20 lg:pr-4"
           >
-            DealFlow360
+            Dealwise
           </Link>
 
           <nav className="hidden min-w-0 items-center gap-0.5 lg:flex">
@@ -242,6 +243,7 @@ export default function AppShell({
               <PanelsTopLeft className="size-4" />
               <span className="sr-only min-[1700px]:not-sr-only">Close Workspace</span>
             </Button>
+            <ThemeToggle className="text-primary-foreground hover:bg-white/10 hover:text-primary-foreground" />
             <NotificationBell />
             <span aria-hidden className="mx-1 hidden h-5 w-px bg-white/20 xl:block" />
             <UserMenu onReloadData={reloadData} onCloseWorkspace={closeWorkspace} />

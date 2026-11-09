@@ -13,7 +13,7 @@ export default class ErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[DealFlow360] render error:', error, info.componentStack)
+    console.error('[Dealwise] render error:', error, info.componentStack)
   }
 
   render() {
