@@ -10,10 +10,12 @@ import { useAuth } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
 import PageSkeleton from '@/components/PageSkeleton'
 import StatusBadge from '@/components/StatusBadge'
+import ConfirmButton from '@/components/ConfirmButton'
 import FormField from '@/components/FormField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 
 type Contact = { id: string; name: string; email: string | null; phone: string | null; jobTitle: string | null; isPrimary: boolean }
 type Customer = {
@@ -97,6 +99,15 @@ export default function CustomerDetail() {
     },
     onError: (e) => toast.error(errText(e, 'Could not save')),
   })
+  const remove = useMutation({
+    mutationFn: () => api.delete(`/config/customers/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['customers'] })
+      toast.success('Customer deleted')
+      nav('/customers')
+    },
+    onError: (e) => toast.error(errText(e, 'Could not delete the customer')),
+  })
   const addContact = useMutation({
     mutationFn: async () => (await api.post(`/customers/${id}/contacts`, { ...person, isPrimary: !cust.data?.contacts.length })).data,
     onSuccess: () => {
@@ -150,6 +161,18 @@ export default function CustomerDetail() {
         {!canEdit && (
           <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">Read-only — owned by {c.ownerName ?? 'nobody'}</span>
         )}
+        {user?.role === 'admin' && (
+          <ConfirmButton
+            size="sm"
+            variant="outline"
+            confirmLabel="Delete customer"
+            title={`Delete ${c.name}?`}
+            description="Their contacts go too. A customer with quotations can't be deleted."
+            onConfirm={() => remove.mutate()}
+          >
+            Delete customer
+          </ConfirmButton>
+        )}
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -199,14 +222,16 @@ export default function CustomerDetail() {
                   </Select>
                 </FormField>
                 <FormField id="c-owner" label="Owner">
-                  <Select id="c-owner" value={form.ownerId ?? ''} onChange={(e) => setForm({ ...form, ownerId: e.target.value || null })}>
-                    <option value="">No owner</option>
-                    {(reps.data?.reps ?? []).map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <Combobox
+                    id="c-owner"
+                    value={form.ownerId ?? ''}
+                    onChange={(v) => setForm({ ...form, ownerId: v || null })}
+                    clearLabel="No owner"
+                    placeholder="No owner"
+                    searchPlaceholder="Search people…"
+                    loading={reps.isLoading}
+                    options={(reps.data?.reps ?? []).map((r) => ({ value: r.id, label: r.name }))}
+                  />
                 </FormField>
               </>
             )}

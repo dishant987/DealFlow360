@@ -1,4 +1,4 @@
-import { expect, test, type Page, type APIRequestContext, request } from '@playwright/test'
+import { expect, test, type Page, type Locator, type APIRequestContext, request } from '@playwright/test'
 
 export const API = process.env.E2E_API_URL || 'http://localhost:4000'
 export const PASSWORD = 'password123'
@@ -101,4 +101,15 @@ export async function addLine(
 
 export async function listProducts(ctx: APIRequestContext) {
   return (await (await ctx.get('/api/products')).json()) as any[]
+}
+
+/** Choose from a searchable picker (ui/combobox): open it, type, click the match. */
+export async function pick(scope: Page | Locator, label: string, option: string) {
+  const trigger = scope.getByRole('combobox', { name: label, exact: true })
+  await trigger.click()
+  const id = await trigger.getAttribute('aria-controls')
+  const page = 'page' in scope ? scope.page() : scope
+  await page.locator(`input[aria-controls="${id}"]`).fill(option)
+  await page.locator(`[id="${id}"]`).getByRole('option', { name: option }).first().click()
+  await expect(trigger).toContainText(option)
 }

@@ -1,10 +1,8 @@
 import { Server as IOServer } from 'socket.io'
 import type { Server as HttpServer } from 'http'
 import { corsOrigins } from './env.js'
-import { cookieName, verifyToken } from '../utils/token.js'
-import { eq } from 'drizzle-orm'
-import { db } from './db.js'
-import { users } from '../models/schema.js'
+import { cookieName } from '../utils/token.js'
+import { loadSession } from '../utils/session.js'
 
 // Read the session cookie straight from the handshake headers.
 export function tokenFromCookie(header: string | undefined): string | null {
@@ -24,27 +22,28 @@ export function initSocket(server: HttpServer) {
   // Only signed-in staff get live updates; the public portal and anonymous
   // visitors are refused at the handshake.
   io.use((socket, next) => {
+    // inside the try: a malformed %-escape makes decodeURIComponent throw
+    let token: string | null = null
     try {
-      // inside the try: a malformed %-escape makes decodeURIComponent throw
-      const token = tokenFromCookie(socket.handshake.headers.cookie)
-      if (!token) throw new Error('no session')
-      const { id } = verifyToken(token)
-      // join the company's room so change signals never cross companies
-      void db
-        .select({ org: users.organizationId, blocked: users.blocked })
-        .from(users)
-        .where(eq(users.id, id))
-        .then(([u]) => {
-          if (!u || u.blocked) return next(new Error('unauthenticated'))
-          socket.data.orgId = u.org
-          next()
-        }, () => next(new Error('unauthenticated')))
+      token = tokenFromCookie(socket.handshake.headers.cookie)
     } catch {
-      next(new Error('unauthenticated'))
+      /* treated as no session */
     }
+    if (!token) return next(new Error('unauthenticated'))
+    // same check as requireAuth: blocked users and signed-out devices are refused
+    void loadSession(token).then((s) => {
+      if (!s) return next(new Error('unauthenticated'))
+      socket.data.orgId = s.orgId
+      socket.data.userId = s.claims.id
+      socket.data.sid = s.claims.sid
+      next()
+    }, () => next(new Error('unauthenticated')))
   })
   io.on('connection', (socket) => {
+    // join the company's room so change signals never cross companies
     socket.join(`org:${socket.data.orgId}`)
+    socket.join(`user:${socket.data.userId}`)
+    if (socket.data.sid) socket.join(`session:${socket.data.sid}`)
   })
   return io
 }
@@ -71,4 +70,12 @@ export function emitChange(payload: { path: string; method: string }, orgId: str
     for (const [org, p] of pending) io?.to(`org:${org}`).emit('data:changed', p)
     pending.clear()
   }, BURST_MS)
+}
+
+/** Close live connections when a device is signed out or a user is blocked. */
+export function disconnectSockets(userId: string, keepSid?: string, onlySid?: string) {
+  if (!io) return
+  if (onlySid) return void io.in(`session:${onlySid}`).disconnectSockets(true)
+  const room = io.in(`user:${userId}`)
+  void (keepSid ? room.except(`session:${keepSid}`) : room).disconnectSockets(true)
 }

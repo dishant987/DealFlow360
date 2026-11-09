@@ -18,6 +18,8 @@ function Select({ className, children, ...props }: ComponentProps<'select'>) {
           'focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50',
           'disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50',
           'md:text-sm',
+          // the browser's own option list follows the theme (it was light-on-white in dark mode)
+          '[&_option]:bg-popover [&_option]:text-popover-foreground [&_optgroup]:bg-popover [&_optgroup]:text-muted-foreground',
           className,
         )}
         {...props}

@@ -1,3 +1,4 @@
+import { getUser, inviteUser, signOutUser, transferUserWork } from '../controllers/team.controller.js'
 import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../config/db.js'
@@ -159,6 +160,10 @@ router.use('/users', adminOnly, (() => {
   const r = Router()
   r.get('/', listUsers)
   r.post('/', createUser)
+  r.post('/invite', inviteUser)
+  r.get('/:id', getUser)
+  r.post('/:id/sign-out', signOutUser)
+  r.post('/:id/transfer', transferUserWork)
   r.patch('/:id', updateUser)
   r.delete('/:id', deleteUser)
   return r

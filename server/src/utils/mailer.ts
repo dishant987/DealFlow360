@@ -200,3 +200,23 @@ export function sendPasswordReset(to: string, link: string) {
       "If you didn't request this, you can ignore this email — your password stays as it is.",
   })
 }
+
+export function sendVerifyEmail(to: string, link: string) {
+  return send(to, {
+    heading: 'Confirm your email for Dealwise',
+    preheader: 'One click to confirm this address is yours.',
+    paragraphs: ['Thanks for signing up. Please confirm this is your email address so we can reach you about your account.'],
+    cta: { label: 'Confirm my email', url: link },
+    footnote: "The link is valid for 3 days. If you didn't create a Dealwise account, you can ignore this email.",
+  })
+}
+
+export function sendInvite(to: string, link: string, inviter: string, company: string) {
+  return send(to, {
+    heading: `${inviter} invited you to ${company} on Dealwise`,
+    preheader: 'Set a password to join your team.',
+    paragraphs: [`${inviter} added you to ${company} on Dealwise.`, 'Choose a password to activate your account. The link is valid for 7 days.'],
+    cta: { label: 'Join your team', url: link },
+    footnote: "If you weren't expecting this, you can ignore this email.",
+  })
+}

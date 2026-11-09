@@ -10,6 +10,8 @@ export interface User {
   email: string
   role: Role
   mfaEnabled?: boolean
+  /** false until they click the link in the confirmation email */
+  emailVerified?: boolean
   /** the company's display currency (ISO code) */
   currency?: string
 }

@@ -1,20 +1,11 @@
-import type { LucideIcon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import {
-  Activity,
-  BadgeCheck,
-  BarChart3,
-  FileText,
-  Receipt,
-  RefreshCcw,
-  Settings2,
-  Truck,
-} from 'lucide-react'
+import { ArrowRight, CheckCircle2, Circle } from 'lucide-react'
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
-import { roleLabel } from '@/lib/roles'
+import { humanize, money } from '@/lib/format'
 import AppShell from '@/components/AppShell'
 import Panel from '@/components/Panel'
 import StatCard from '@/components/StatCard'
@@ -22,176 +13,199 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 type Summary = {
   pendingApprovals: number
-  openQuotations: number
-  atRisk: number
   scope: 'yours' | 'all'
-  activity: {
-    id: string
-    action: string
-    customer: string
-    user: string
-    createdAt: string
-    quotationId: string
-    quoteNumber: string
-  }[]
+  overview: {
+    kpis: {
+      openPipeline: number
+      openCount: number
+      wonThisMonth: number
+      wonLastMonth: number
+      winRate90d: number | null
+      avgDiscountPct: number | null
+    }
+    pipeline: { stage: string; count: number; value: number }[]
+    revenue: { month: string; amount: number }[]
+  }
+  tasks: { key: string; label: string; count: number; to: string }[]
+  checklist: { products: boolean; customers: boolean; quotes: boolean; sent: boolean } | null
+  activity: { id: string; action: string; customer: string; user: string; createdAt: string; quotationId: string; quoteNumber: string }[]
+}
+
+const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 })
+const monthLabel = (ym: string) => new Date(`${ym}-01T00:00:00`).toLocaleDateString(undefined, { month: 'short' })
+const greeting = () => {
+  const h = new Date().getHours()
+  return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
+}
+
+function ChangeHint({ now, before }: { now: number; before: number }) {
+  if (!before) return <>{now ? 'nothing won last month' : 'no wins yet this month'}</>
+  const pct = Math.round(((now - before) / before) * 100)
+  return (
+    <span className={pct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+      {pct >= 0 ? '▲' : '▼'} {Math.abs(pct)}% vs last month
+    </span>
+  )
+}
+
+/** First-run checklist: shown only until a new company has done the basics. */
+function Checklist({ steps, canConfigure }: { steps: NonNullable<Summary['checklist']>; canConfigure: boolean }) {
+  const items = [
+    { done: steps.products, label: 'Add your products', to: canConfigure ? '/admin' : null },
+    { done: steps.customers, label: 'Add a customer', to: '/customers' },
+    { done: steps.quotes, label: 'Create your first quotation', to: '/quotations' },
+    { done: steps.sent, label: 'Send it to the customer', to: '/quotations' },
+  ]
+  return (
+    <Panel title="Get set up" description="Four steps to your first quote. This disappears once you're done.">
+      <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {items.map((i, n) => (
+          <li key={i.label} className="flex items-center gap-2 rounded-lg border p-3 text-sm">
+            {i.done ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" aria-hidden /> : <Circle className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+            <span className={i.done ? 'text-muted-foreground line-through' : ''}>
+              {n + 1}. {i.to && !i.done ? <Link to={i.to} className="font-medium text-primary hover:underline">{i.label}</Link> : i.label}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </Panel>
+  )
 }
 
 export default function Dashboard() {
   const { user } = useAuth()
-  const isMgr = !!user && ['manager', 'finance', 'admin'].includes(user.role)
   const summary = useQuery({
     queryKey: ['summary'],
     queryFn: async () => (await api.get('/summary')).data as Summary,
   })
-
-  const scope = summary.data?.scope === 'yours' ? 'yours' : 'across the team'
-
-  const tiles: { title: string; desc: string; to: string; icon: LucideIcon; show: boolean }[] = [
-    {
-      title: 'Quotations',
-      desc: 'Build and track deals',
-      to: '/quotations',
-      icon: FileText,
-      show: true,
-    },
-    {
-      title: 'Approvals',
-      desc: 'Review flagged discounts',
-      to: '/approvals',
-      icon: BadgeCheck,
-      show: isMgr,
-    },
-    {
-      title: 'Fulfillment',
-      desc: 'Orders awaiting warehouse split',
-      to: '/fulfillment',
-      icon: Truck,
-      show: isMgr,
-    },
-    {
-      title: 'Invoices',
-      desc: 'Outstanding & paid invoices',
-      to: '/invoices',
-      icon: Receipt,
-      show: isMgr,
-    },
-    {
-      title: 'Subscriptions',
-      desc: 'Recurring plans & renewals',
-      to: '/subscriptions',
-      icon: RefreshCcw,
-      show: isMgr,
-    },
-    {
-      title: 'Deal Health',
-      desc: 'Stalled deals & anomalies',
-      to: '/deal-health',
-      icon: Activity,
-      show: isMgr,
-    },
-    {
-      title: 'Reports',
-      desc: 'Performance & exports',
-      to: '/reports',
-      icon: BarChart3,
-      show: isMgr,
-    },
-    {
-      title: user?.role === 'admin' ? 'Backend Config' : 'Discount Config',
-      desc:
-        user?.role === 'admin'
-          ? 'Products, tiers, warehouses'
-          : 'Discount tiers & approval chain',
-      to: '/admin',
-      icon: Settings2,
-      show: user?.role === 'admin' || user?.role === 'manager',
-    },
-  ]
+  const d = summary.data
+  const k = d?.overview.kpis
+  const mine = d?.scope === 'yours'
+  const tasks = (d?.tasks ?? []).filter((t) => t.count > 0)
 
   return (
     <AppShell crumbs={[{ label: 'Workspace' }]}>
       <div className="space-y-6">
         <div>
-          <h1 className="font-heading text-xl font-semibold">Welcome, {user?.name}</h1>
+          <h1 className="font-heading text-2xl font-semibold">
+            {greeting()}, {user?.name?.split(' ')[0]}
+          </h1>
           <p className="text-sm text-muted-foreground">
-            Signed in as <span className="font-medium text-foreground">{roleLabel(user?.role)}</span>.
+            {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} ·{' '}
+            {mine ? 'your deals' : "the whole team's deals"}
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <StatCard
-            label="Pending Approvals"
-            value={summary.data?.pendingApprovals ?? 0}
-            hint={`waiting on a decision ${scope}`}
-            to={isMgr ? '/approvals' : '/quotations'}
-            tone="primary"
-            loading={summary.isLoading}
-          />
-          <StatCard
-            label="Open Quotations"
-            value={summary.data?.openQuotations ?? 0}
-            hint={`active deals ${scope}`}
-            to="/quotations"
-            tone="primary"
-            loading={summary.isLoading}
-          />
-          <StatCard
-            label="At-Risk Deals"
-            value={summary.data?.atRisk ?? 0}
-            hint="stalled, anomalous or backordered"
-            to={isMgr ? '/deal-health' : '/quotations'}
-            tone={summary.data && summary.data.atRisk > 0 ? 'warning' : 'primary'}
-            loading={summary.isLoading}
-          />
-        </div>
+        {d?.checklist && <Checklist steps={d.checklist} canConfigure={user?.role === 'admin' || user?.role === 'manager'} />}
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {tiles
-            .filter((t) => t.show)
-            .map((t) => (
-              <Link
-                key={t.to}
-                to={t.to}
-                className="group flex items-start gap-3 rounded-xl border bg-background p-4 transition-colors hover:border-primary/40 hover:bg-muted/30"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                  <t.icon className="size-4.5" />
-                </span>
-                <div className="min-w-0">
-                  <div className="font-medium">{t.title}</div>
-                  <div className="mt-0.5 text-sm text-muted-foreground">{t.desc}</div>
-                </div>
-              </Link>
-            ))}
-        </div>
-
-        {/* recent activity — straight off the audit trail */}
-        <Panel title="Recent Activity">
+        {/* 1. what needs me */}
+        <Panel title="Needs your attention">
           {summary.isLoading ? (
-            <Skeleton className="h-20 w-full" />
-          ) : (summary.data?.activity ?? []).length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing has happened yet.</p>
+            <Skeleton className="h-16 w-full" />
+          ) : tasks.length === 0 ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <CheckCircle2 className="size-4 text-emerald-600" aria-hidden /> You're all caught up.
+            </p>
           ) : (
-            <ul className="divide-y text-sm">
-              {(summary.data?.activity ?? []).map((a) => (
-                <li key={a.id} className="flex flex-wrap items-baseline gap-x-2 py-2 first:pt-0 last:pb-0">
-                  <Link
-                    to={`/quotations/${a.quotationId}`}
-                    className="font-mono text-xs font-medium text-primary hover:underline"
-                  >
-                    {a.quoteNumber}
+            <ul className="divide-y" aria-label="Tasks">
+              {tasks.map((t) => (
+                <li key={t.key}>
+                  <Link to={t.to} className="group flex items-center gap-3 py-2.5 text-sm">
+                    <span className="grid min-w-9 place-items-center rounded-full bg-primary/10 px-2 py-0.5 text-sm font-semibold text-primary tabular-nums">
+                      {t.count}
+                    </span>
+                    <span className="flex-1">{t.label}</span>
+                    <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden />
                   </Link>
-                  <span>
-                    {a.customer} — {a.action}
-                  </span>
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {a.user} · {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
-                  </span>
                 </li>
               ))}
             </ul>
           )}
         </Panel>
+
+        {/* 2. how are we doing */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Open pipeline" value={k ? money(k.openPipeline) : '—'} hint={`${k?.openCount ?? 0} deals not yet won or lost`} to="/quotations" tone="primary" loading={summary.isLoading} />
+          <StatCard label="Won this month" value={k ? money(k.wonThisMonth) : '—'} hint={k ? <ChangeHint now={k.wonThisMonth} before={k.wonLastMonth} /> : null} loading={summary.isLoading} />
+          <StatCard label="Win rate" value={k?.winRate90d != null ? `${k.winRate90d}%` : '—'} hint="won ÷ decided, last 90 days" loading={summary.isLoading} />
+          <StatCard label="Average discount" value={k?.avgDiscountPct != null ? `${k.avgDiscountPct}%` : '—'} hint="off list price, last 90 days" loading={summary.isLoading} />
+        </div>
+
+        {/* 3. where the deals are · and what just happened */}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          <div className="min-w-0 space-y-6">
+            <Panel title="Pipeline by stage" description="Value of the deals sitting at each step.">
+              {/* horizontal bars: stage names stay readable at phone width */}
+              <div className="h-60" role="img" aria-label="Bar chart of pipeline value by stage">
+                {d && !d.overview.pipeline.some((p) => p.value) ? (
+                  <p className="text-sm text-muted-foreground">No open deals yet — they'll show here by stage.</p>
+                ) : d && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart layout="vertical" data={d.overview.pipeline.map((p) => ({ ...p, name: humanize(p.stage) }))}>
+                      <XAxis type="number" tickFormatter={(v) => compact.format(v)} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
+                      <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} width={120} interval={0} />
+                      <Tooltip
+                        cursor={{ fill: 'var(--muted)' }}
+                        contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8 }}
+                        formatter={(v, _n, item) => [
+                          `${money(Number(v))} · ${(item as { payload?: { count?: number } }).payload?.count ?? 0} deals`,
+                          'Value',
+                        ]}
+                      />
+                      <Bar dataKey="value" fill="var(--chart-1)" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </Panel>
+            <Panel title="Revenue invoiced" description="Last six months.">
+              <div className="h-48" role="img" aria-label="Bar chart of invoiced revenue by month">
+                {d && !d.overview.revenue.some((r) => r.amount) ? (
+                  <p className="text-sm text-muted-foreground">No invoices yet in the last six months.</p>
+                ) : d && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={d.overview.revenue.map((r) => ({ ...r, name: monthLabel(r.month) }))}>
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} />
+                      <YAxis tickFormatter={(v) => compact.format(v)} tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} width={48} />
+                      <Tooltip
+                        cursor={{ fill: 'var(--muted)' }}
+                        contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8 }}
+                        formatter={(v) => [money(Number(v)), 'Invoiced']}
+                      />
+                      <Bar dataKey="amount" fill="var(--chart-2)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </Panel>
+          </div>
+
+          <Panel title="Recent activity">
+            {summary.isLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : (d?.activity ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nothing has happened yet.</p>
+            ) : (
+              <ul className="space-y-3 text-sm">
+                {(d?.activity ?? []).map((a) => (
+                  <li key={a.id} className="min-w-0">
+                    <div className="truncate">
+                      <span className="font-medium">{a.customer}</span> — {a.action}
+                    </div>
+                    <div className="flex gap-2 text-xs text-muted-foreground">
+                      <Link to={`/quotations/${a.quotationId}`} className="font-mono text-primary hover:underline">
+                        {a.quoteNumber}
+                      </Link>
+                      <span className="truncate">
+                        {a.user} · {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
+                      </span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
       </div>
     </AppShell>
   )

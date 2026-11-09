@@ -14,6 +14,7 @@ import StatCard from '@/components/StatCard'
 import Panel from '@/components/Panel'
 import { Select } from '@/components/ui/select'
 import { humanize } from '@/lib/format'
+import { Combobox } from '@/components/ui/combobox'
 
 type Row = {
   id: string
@@ -269,19 +270,16 @@ export default function FulfillmentQueue() {
                 >
                   Below reorder only ({stock.filter((r) => r.belowReorder).length})
                 </Button>
-                <Select
+                <Combobox
                   aria-label="Filter stock by warehouse"
                   className="h-8 w-44 text-xs"
                   value={warehouse}
-                  onChange={(e) => setWarehouse(e.target.value)}
-                >
-                  <option value="">All warehouses</option>
-                  {warehouses.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </Select>
+                  onChange={setWarehouse}
+                  clearLabel="All warehouses"
+                  placeholder="All warehouses"
+                  searchPlaceholder="Search warehouses…"
+                  options={warehouses.map((v) => ({ value: v, label: v }))}
+                />
                 <Select
                   aria-label="Filter stock by product"
                   className="h-8 w-48 text-xs"

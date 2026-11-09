@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { apiAs, login } from './helpers'
+import { apiAs, login, pick } from './helpers'
 
 // §9 steps 2-4 + B3/B5: build a quote in the real UI, breach a ceiling,
 // watch the live risk routing, accept an upsell.
@@ -13,7 +13,7 @@ test.describe.serial('B3/B5 — quotation builder', () => {
     await page.getByRole('button', { name: 'New Quotation' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await dialog.getByLabel('Customer').selectOption({ label: 'Acme Corp (gold)' })
+    await pick(dialog, 'Customer', 'Acme Corp')
     await dialog.getByRole('button', { name: 'Create quotation' }).click()
     await expect(page).toHaveURL(/\/quotations\/[0-9a-f-]{36}$/, { timeout: 15_000 })
     quoteUrl = page.url()
@@ -23,15 +23,9 @@ test.describe.serial('B3/B5 — quotation builder', () => {
   test('adding a product line shows price, margin and its own ceiling', async ({ page }) => {
     await login(page, 'rep')
     await page.goto(quoteUrl)
-    const picker = page.getByRole('combobox').first()
-    await expect(picker).toBeVisible()
-    // Business Laptop is the anchor of four seeded pairings, so the upsell
-    // panel below has something to suggest.
-    const laptop = await picker
-      .locator('option', { hasText: 'Business Laptop' })
-      .first()
-      .getAttribute('value')
-    await picker.selectOption(laptop!)
+    // Business Laptop anchors four seeded pairings, so the upsell panel has something to suggest
+
+    await pick(page, 'Add product', 'Business Laptop')
     await page.getByRole('button', { name: 'Add', exact: true }).click()
 
     const row = page.getByRole('row').nth(1)

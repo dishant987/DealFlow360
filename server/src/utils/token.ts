@@ -18,6 +18,8 @@ export interface JwtUser {
   id: string
   role: Role
   email: string
+  /** sessions.id; lets one device be signed out. Tokens issued before step 16 have none. */
+  sid?: string
 }
 
 // Password (or Google) accepted but MFA still owed: a 5-minute token that can
@@ -34,6 +36,19 @@ export function verifyMfaPending(t: string): string | null {
   }
 }
 
+// Email verification link: proves the address it was sent to. Carries the email,
+// so it stops working if the account's email ever changes.
+export const signVerifyEmail = (id: string, email: string) =>
+  jwt.sign({ id, email, purpose: 'verify-email' }, SECRET, { expiresIn: '3d' })
+export function readVerifyEmail(t: string): { id: string; email: string } | null {
+  try {
+    const p = jwt.verify(t, SECRET) as { id?: string; email?: string; purpose?: string }
+    return p.purpose === 'verify-email' && p.id && p.email ? { id: p.id, email: p.email } : null
+  } catch {
+    return null
+  }
+}
+
 export const hashPassword = (p: string) => bcrypt.hash(p, 10)
 export const verifyPassword = (p: string, hash: string) => bcrypt.compare(p, hash)
 export const signToken = (u: JwtUser) => jwt.sign(u, SECRET, { expiresIn: '7d' })
@@ -44,7 +59,8 @@ export const verifyToken = (t: string) =>
 export const resetTokenTtlMs = 60 * 60 * 1000 // 1 hour
 export const hashResetToken = (token: string) =>
   crypto.createHash('sha256').update(token).digest('hex')
-export function generateResetToken() {
+export function generateResetToken(ttlMs = resetTokenTtlMs) {
   const token = crypto.randomBytes(32).toString('hex')
-  return { token, hash: hashResetToken(token), expiresAt: new Date(Date.now() + resetTokenTtlMs) }
+  return { token, hash: hashResetToken(token), expiresAt: new Date(Date.now() + ttlMs) }
 }
+export const inviteTtlMs = 7 * 24 * 3600 * 1000 // an invite link lasts a week

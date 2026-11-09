@@ -1,3 +1,4 @@
+import { useDebounced } from '@/hooks/useDebounced'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { SearchX } from 'lucide-react'
 import { Input } from '@/components/ui/input'
@@ -23,15 +24,6 @@ export type Column<T> = {
   render?: (row: T) => ReactNode
 }
 
-// debounce any fast-changing value (used for the search box)
-function useDebounced<T>(value: T, ms = 300) {
-  const [v, setV] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms)
-    return () => clearTimeout(t)
-  }, [value, ms])
-  return v
-}
 
 export default function DataTable<T extends Record<string, any>>({
   rows,

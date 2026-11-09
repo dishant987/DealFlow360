@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test'
-import { apiAs, login } from './helpers'
+import { apiAs, login, pick } from './helpers'
 
 /** rows currently rendered in the table body */
 const rowCount = async (page: Page) => (await page.getByRole('row').count()) - 1
@@ -28,7 +28,7 @@ test.describe('Quotations — filters and create dialog', () => {
     expect(back).toBe(total)
 
     // customer
-    await page.getByLabel('Filter by customer').selectOption('Acme Corp')
+    await pick(page, 'Filter by customer', 'Acme Corp')
     await expect(page.getByRole('cell', { name: 'Acme Corp' }).first()).toBeVisible()
     const rows = await rowCount(page)
     expect(rows).toBeGreaterThan(0)
@@ -47,7 +47,7 @@ test.describe('Quotations — filters and create dialog', () => {
     await page.goto('/quotations')
     await page.getByRole('button', { name: 'kanban' }).click()
     await expect(page.getByText('Drag a deal to move it forward')).toBeVisible()
-    await page.getByLabel('Filter by customer').selectOption('Acme Corp')
+    await pick(page, 'Filter by customer', 'Acme Corp')
     // every card on the board is now that customer
     const cards = page.locator('[data-slot="card"], .rounded-lg').filter({ hasText: 'QT-' })
     if ((await cards.count()) > 0)
@@ -66,7 +66,7 @@ test.describe('Quotations — filters and create dialog', () => {
     // nothing picked yet → cannot submit
     await expect(dialog.getByRole('button', { name: 'Create quotation' })).toBeDisabled()
 
-    await dialog.getByLabel('Customer').selectOption({ label: 'Beta Industries (silver)' })
+    await pick(dialog, 'Customer', 'Beta Industries')
     await dialog.getByRole('button', { name: 'Create quotation' }).click()
     await expect(page).toHaveURL(/\/quotations\/[0-9a-f-]{36}$/)
     await expect(page.getByText('Beta Industries').first()).toBeVisible()
@@ -115,7 +115,7 @@ test.describe('Approvals — filters', () => {
     for (const r of await page.getByRole('row').filter({ hasNotText: 'Quotation' }).all())
       await expect(r).toContainText('LOW')
 
-    await page.getByLabel('Filter by customer').selectOption('Acme Corp')
+    await pick(page, 'Filter by customer', 'Acme Corp')
     await expect(page.getByRole('button', { name: /Clear 2/ })).toBeVisible()
 
     await page.getByRole('button', { name: /Clear 2/ }).click()
@@ -179,7 +179,7 @@ test.describe('Fulfillment queue — filters', () => {
     await page.goto('/fulfillment')
     await expect(page.getByText('Stock by warehouse')).toBeVisible()
 
-    await page.getByLabel('Filter stock by warehouse').selectOption('East Depot')
+    await pick(page, 'Filter stock by warehouse', 'East Depot')
     const stock = page.getByText('Stock by warehouse').locator('..').locator('..')
     for (const r of await stock.getByRole('row').filter({ hasNotText: 'Warehouse' }).all())
       await expect(r).toContainText('East Depot')

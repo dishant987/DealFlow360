@@ -27,6 +27,8 @@ type Form = z.infer<typeof schema>
 export default function ResetPassword() {
   const [params] = useSearchParams()
   const token = params.get('token') ?? ''
+  // the same link joins an invited teammate: they choose their first password
+  const invite = params.get('invite') === '1'
   const nav = useNavigate()
   const {
     register,
@@ -37,7 +39,7 @@ export default function ResetPassword() {
   const onSubmit = async (data: Form) => {
     try {
       await api.post('/auth/reset-password', { token, password: data.password })
-      toast.success('Password updated — please sign in.')
+      toast.success(invite ? "You're in — sign in with your new password." : 'Password updated — please sign in.')
       nav('/login', { replace: true })
     } catch (e) {
       toast.error(errText(e, 'Reset failed'))
@@ -63,7 +65,10 @@ export default function ResetPassword() {
     )
 
   return (
-    <AuthLayout title="Set a new password" description="Choose something you haven't used before.">
+    <AuthLayout
+      title={invite ? 'Join your team' : 'Set a new password'}
+      description={invite ? 'Choose a password for your Dealwise account.' : "Choose something you haven't used before."}
+    >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <FormField id="password" label="New password" error={errors.password?.message}>
           <PasswordInput
@@ -85,7 +90,7 @@ export default function ResetPassword() {
         </FormField>
 
         <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? 'Saving…' : 'Reset password'}
+          {isSubmitting ? 'Saving…' : invite ? 'Join team' : 'Reset password'}
         </Button>
 
         <p className="text-center text-sm text-muted-foreground">

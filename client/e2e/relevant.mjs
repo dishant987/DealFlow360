@@ -60,6 +60,15 @@ if (code.some((f) => EVERYTHING.some((re) => re.test(f)))) {
 }
 
 if (process.env.E2E_DRY) process.exit(0) // just show the selection
-// --no-deps: a shared-state spec must not drag in the whole parallel project it depends on
-const r = spawnSync('npx', ['playwright', 'test', ...(specs.length ? ['--no-deps', ...specs] : []), ...process.argv.slice(3)], { stdio: 'inherit', shell: true })
-process.exit(r.status ?? 1)
+const pw = (args) => spawnSync('npx', ['playwright', 'test', ...args, ...process.argv.slice(3)], { stdio: 'inherit', shell: true }).status ?? 1
+if (!specs.length) process.exit(pw([]))
+
+// Same rule as playwright.config.ts: shared-state specs must not overlap anything,
+// so run the parallel ones first, then those alone. --no-deps stops a shared-state
+// spec from dragging in the whole parallel project it depends on.
+const SHARED_STATE = /(05-fulfillment|08-config-reports|12-live-updates|13-filters|14-notifications)\.spec\.ts$/
+const parallel = specs.filter((s) => !SHARED_STATE.test(s))
+const shared = specs.filter((s) => SHARED_STATE.test(s))
+let status = parallel.length ? pw(['--no-deps', ...parallel]) : 0
+if (shared.length) status = pw(['--no-deps', ...shared]) || status
+process.exit(status)

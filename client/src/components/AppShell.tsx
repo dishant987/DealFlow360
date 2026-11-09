@@ -328,10 +328,38 @@ export default function AppShell({
           </div>
         )}
 
+        {user && user.emailVerified === false && <VerifyEmailBanner email={user.email} />}
+
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
 
       <CommandPalette commands={commands} open={paletteOpen} onOpenChange={setPaletteOpen} />
+    </div>
+  )
+}
+
+/** Soft reminder until the address is confirmed; nothing is locked meanwhile. */
+function VerifyEmailBanner({ email }: { email: string }) {
+  const [sending, setSending] = useState(false)
+  const resend = async () => {
+    setSending(true)
+    try {
+      await api.post('/auth/verify-email/resend')
+      toast.success(`Sent — check ${email}.`)
+    } catch {
+      toast.error("Couldn't send the email. Try again in a minute.")
+    } finally {
+      setSending(false)
+    }
+  }
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-accent px-4 py-2 text-sm sm:px-6">
+      <span>
+        Please confirm your email — we sent a link to <strong className="font-medium">{email}</strong>.
+      </span>
+      <Button size="sm" variant="link" className="h-auto p-0" onClick={resend} disabled={sending}>
+        {sending ? 'Sending…' : 'Send it again'}
+      </Button>
     </div>
   )
 }

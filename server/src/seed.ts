@@ -97,14 +97,14 @@ async function seed() {
   const [riya, manoj, farah, aditi, dev, sana] = await db
     .insert(s.users)
     .values([
-      { name: 'Riya Rep', email: 'rep@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG },
-      { name: 'Manoj Manager', email: 'manager@dealflow.com', passwordHash: pw, role: 'manager', organizationId: DEMO_ORG },
-      { name: 'Farah Finance', email: 'finance@dealflow.com', passwordHash: pw, role: 'finance', organizationId: DEMO_ORG },
-      { name: 'Aditi Admin', email: 'admin@dealflow.com', passwordHash: pw, role: 'admin', organizationId: DEMO_ORG },
+      { name: 'Riya Rep', email: 'rep@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG, emailVerifiedAt: new Date() },
+      { name: 'Manoj Manager', email: 'manager@dealflow.com', passwordHash: pw, role: 'manager', organizationId: DEMO_ORG, emailVerifiedAt: new Date() },
+      { name: 'Farah Finance', email: 'finance@dealflow.com', passwordHash: pw, role: 'finance', organizationId: DEMO_ORG, emailVerifiedAt: new Date() },
+      { name: 'Aditi Admin', email: 'admin@dealflow.com', passwordHash: pw, role: 'admin', organizationId: DEMO_ORG, emailVerifiedAt: new Date() },
       // a second and third rep: needed for per-rep report filters, and so the
       // discount-anomaly detector has more than one baseline to compare against
-      { name: 'Dev Rep', email: 'dev@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG },
-      { name: 'Sana Rep', email: 'sana@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG },
+      { name: 'Dev Rep', email: 'dev@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG, emailVerifiedAt: new Date() },
+      { name: 'Sana Rep', email: 'sana@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG, emailVerifiedAt: new Date() },
     ])
     .returning()
 

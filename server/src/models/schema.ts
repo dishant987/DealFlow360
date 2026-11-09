@@ -11,6 +11,7 @@ import {
   timestamp,
   jsonb,
   uniqueIndex,
+  index,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core'
 
@@ -93,8 +94,27 @@ export const users = pgTable('users', {
   mfaRecoveryHashes: text('mfa_recovery_hashes').array().notNull().default(sql`'{}'::text[]`),
   resetTokenHash: text('reset_token_hash'),
   resetTokenExpiresAt: timestamp('reset_token_expires_at', { withTimezone: true }),
+  // null until the address is proven (verify link, invite link or Google)
+  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+  // set when an admin invites by email; cleared once they set their password
+  invitedAt: timestamp('invited_at', { withTimezone: true }),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
+
+// One row per sign-in (device). Like `users`, NOT under RLS: it is read on every
+// request before the company is known. Always query it by user id.
+export const sessions = pgTable('sessions', {
+  id: pk(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  userAgent: text('user_agent'),
+  ip: text('ip'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).defaultNow().notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+}, (t) => [index('sessions_user_id_idx').on(t.userId)])
 
 export const customers = pgTable('customers', {
   id: pk(),

@@ -1,3 +1,4 @@
+import { openSession } from '../utils/session.js'
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
@@ -27,16 +28,17 @@ type UserRow = typeof users.$inferSelect
 
 async function publicUser(u: UserRow) {
   const [org] = await db.select({ currency: organizations.currency }).from(organizations).where(eq(organizations.id, u.organizationId))
-  return { id: u.id, name: u.name, email: u.email, role: u.role, mfaEnabled: u.mfaEnabled, currency: org?.currency ?? 'USD' }
+  return { id: u.id, name: u.name, email: u.email, role: u.role, mfaEnabled: u.mfaEnabled, emailVerified: !!u.emailVerifiedAt, currency: org?.currency ?? 'USD' }
 }
 
 /** Finish a sign-in that already proved the password (or Google): open a session, or ask for the MFA code first. */
-export async function completeSignIn(res: Response, u: UserRow, mfaPassed = false) {
+export async function completeSignIn(req: Request, res: Response, u: UserRow, mfaPassed = false) {
   if (u.mfaEnabled && !mfaPassed) {
     res.cookie(mfaCookieName, signMfaPending(u.id), mfaCookieOpts)
     return { mfaRequired: true as const }
   }
-  res.cookie(cookieName, signToken({ id: u.id, role: u.role, email: u.email }), cookieOpts)
+  const sid = await openSession(req, u.id)
+  res.cookie(cookieName, signToken({ id: u.id, role: u.role, email: u.email, sid }), cookieOpts)
   return publicUser(u)
 }
 
@@ -72,7 +74,7 @@ export async function verifyMfa(req: Request, res: Response) {
   if (!ok) return res.status(401).json({ error: 'That code is not valid. Try the latest code from your app.' })
 
   res.clearCookie(mfaCookieName)
-  res.json(await completeSignIn(res, u, true))
+  res.json(await completeSignIn(req, res, u, true))
 }
 
 /* ---- setup / enable / disable (signed in) ---- */

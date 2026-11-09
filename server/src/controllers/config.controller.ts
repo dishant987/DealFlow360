@@ -3,6 +3,9 @@ import { z } from 'zod'
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { hashPassword } from '../utils/token.js'
+import { revokeSessions } from '../utils/session.js'
+import { disconnectSockets } from '../config/socket.js'
+import { memberStatus } from '../services/team.js'
 import { num } from '../utils/crud.js'
 import { currencySchema } from '../utils/format.js'
 import {
@@ -312,10 +315,11 @@ const roleEnum = z.enum(['rep', 'manager', 'finance', 'admin'])
 export async function listUsers(req: Request, res: Response) {
   res.json(
     await db
-      .select({ id: users.id, name: users.name, email: users.email, role: users.role, blocked: users.blocked })
+      .select({ id: users.id, name: users.name, email: users.email, role: users.role, blocked: users.blocked, invitedAt: users.invitedAt, lastLoginAt: users.lastLoginAt })
       .from(users)
       // users aren't under RLS (sign-in finds them by email), so scope by company here
-      .where(eq(users.organizationId, req.orgId!)),
+      .where(eq(users.organizationId, req.orgId!))
+      .then((rows) => rows.map(({ invitedAt, ...r }) => ({ ...r, status: memberStatus({ blocked: r.blocked, invitedAt }) }))),
   )
 }
 export async function createUser(req: Request, res: Response) {
@@ -365,6 +369,8 @@ export async function updateUser(req: Request<{ id: string }>, res: Response) {
     .where(and(eq(users.id, req.params.id), eq(users.organizationId, req.orgId!)))
     .returning({ id: users.id, name: users.name, email: users.email, role: users.role, blocked: users.blocked })
   if (!u) return res.status(404).json({ error: 'not found' })
+  // blocking, or a password set by an admin, ends every open session and live connection
+  if (p.data.blocked || password) await revokeSessions(u.id)
   res.json(u)
 }
 export async function deleteUser(req: Request<{ id: string }>, res: Response) {
@@ -374,5 +380,6 @@ export async function deleteUser(req: Request<{ id: string }>, res: Response) {
     .where(and(eq(users.id, req.params.id), eq(users.organizationId, req.orgId!)))
     .returning()
   if (!u) return res.status(404).json({ error: 'not found' })
+  disconnectSockets(u.id) // their sessions went with the row (cascade)
   res.json({ ok: true })
 }

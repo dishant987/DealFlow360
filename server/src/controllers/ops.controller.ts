@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { and, desc, eq, inArray, type SQL } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import {
   quotations,
@@ -17,12 +17,14 @@ import {
   appSettings,
   warehouses,
   stock,
+  negotiationRequests,
 } from '../models/schema.js'
 import { findDiscountAnomalies } from '../services/anomaly.js'
 import { replenishmentPlan, type StockRule } from '../services/replenishment.js'
 import { createRequire } from 'module'
 import { quoteNumber, invoiceNumber } from '../services/quoteNumber.js'
-import { computeLine } from '../services/pricing.js'
+import { computeLine, computeQuoteTotals } from '../services/pricing.js'
+import { buildOverview } from '../services/overview.js'
 import { money as fmt, orgCurrency } from '../utils/format.js'
 
 const ACTIVE_STATUSES = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
@@ -43,6 +45,9 @@ export async function getWorkspaceSummary(req: Request, res: Response) {
       status: quotations.status,
       riskScore: quotations.riskScore,
       lastActivityAt: quotations.lastActivityAt,
+      updatedAt: quotations.updatedAt,
+      orderDiscountPct: quotations.orderDiscountPct,
+      portalToken: quotations.portalToken,
     })
     .from(quotations)
     .where(mine)
@@ -93,7 +98,69 @@ export async function getWorkspaceSummary(req: Request, res: Response) {
     .orderBy(desc(auditLog.createdAt))
     .limit(8)
 
+  // ---- overview: KPIs and charts, from the same role-scoped quotes ----
+  const ids2 = quotes.map((q) => q.id)
+  const lines = ids2.length ? await db.select().from(quoteLines).where(inArray(quoteLines.quotationId, ids2)) : []
+  const byQuote = new Map<string, typeof lines>()
+  for (const l of lines) byQuote.set(l.quotationId, [...(byQuote.get(l.quotationId) ?? []), l])
+  const invs = await db
+    .select({ amount: invoices.amount, issuedAt: invoices.issuedAt, status: invoices.status, dueAt: invoices.dueAt })
+    .from(invoices)
+    .innerJoin(quotations, eq(invoices.quotationId, quotations.id))
+    .where(mine)
+  const overview = buildOverview(
+    quotes.map((q) => {
+      const ls = byQuote.get(q.id) ?? []
+      return {
+        status: q.status,
+        total: computeQuoteTotals(ls, q.orderDiscountPct).total,
+        gross: ls.reduce((s, l) => s + Number(l.unitPrice) * l.quantity, 0),
+        updatedAt: new Date(q.updatedAt),
+      }
+    }),
+    invs.map((i) => ({ amount: Number(i.amount), issuedAt: new Date(i.issuedAt) })),
+  )
+
+  // ---- my tasks: what is waiting on this person, each with where to go ----
+  const isRep = req.user!.role === 'rep'
+  const stalled = quotes.filter(
+    (q) =>
+      ACTIVE_STATUSES.includes(q.status as (typeof ACTIVE_STATUSES)[number]) &&
+      new Date(q.lastActivityAt).getTime() < cutoff,
+  ).length
+  const [openReq] = await db
+    .select({ n: count() })
+    .from(negotiationRequests)
+    .innerJoin(quotations, eq(negotiationRequests.quotationId, quotations.id))
+    .where(and(eq(negotiationRequests.status, 'open'), mine))
+  const now = Date.now()
+  const overdue = invs.filter((i) => i.status === 'sent' && i.dueAt && new Date(i.dueAt).getTime() < now).length
+  const tasks = [
+    !isRep && { key: 'approvals', label: 'Quotations waiting for approval', count: quotes.filter((q) => q.status === 'pending_approval').length, to: '/approvals' },
+    { key: 'requests', label: 'Customer requests to answer', count: Number(openReq?.n ?? 0), to: '/quotations' },
+    { key: 'stalled', label: `Deals with no activity for ${stalledDays}+ days`, count: stalled, to: isRep ? '/quotations' : '/deal-health' },
+    !isRep && { key: 'overdue', label: 'Overdue invoices', count: overdue, to: '/invoices' },
+    isRep && { key: 'drafts', label: 'Draft quotations to finish', count: quotes.filter((q) => q.status === 'draft').length, to: '/quotations' },
+  ].filter(Boolean)
+
+  // ---- first-run checklist, only while the company is still setting up ----
+  const [[prod], [cust], [allQuotes]] = await Promise.all([
+    db.select({ n: count() }).from(products),
+    db.select({ n: count() }).from(customers),
+    db.select({ n: count() }).from(quotations),
+  ])
+  const steps = {
+    products: Number(prod.n) > 0,
+    customers: Number(cust.n) > 0,
+    quotes: Number(allQuotes.n) > 0,
+    sent: quotes.some((q) => q.portalToken),
+  }
+  const checklist = Object.values(steps).every(Boolean) ? null : steps
+
   res.json({
+    overview,
+    tasks,
+    checklist,
     pendingApprovals: quotes.filter((q) => q.status === 'pending_approval').length,
     openQuotations: quotes.filter((q) =>
       ACTIVE_STATUSES.includes(q.status as (typeof ACTIVE_STATUSES)[number]),
