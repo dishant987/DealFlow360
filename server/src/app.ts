@@ -10,6 +10,7 @@ import { corsOrigins, isProd } from './config/env.js'
 import authRouter from './routes/auth.routes.js'
 import configRouter from './routes/config.routes.js'
 import quotationRouter from './routes/quotation.routes.js'
+import customerRouter from './routes/customer.routes.js'
 import approvalRouter from './routes/approval.routes.js'
 import fulfillmentRouter from './routes/fulfillment.routes.js'
 import billingRouter from './routes/billing.routes.js'
@@ -62,6 +63,7 @@ app.use('/api/config', configRouter)
 // beneath it, which would 401 the customer before they ever reach the portal.
 app.use('/api/portal', portalRouter)
 app.use('/api', quotationRouter)
+app.use('/api', customerRouter)
 app.use('/api/approvals', approvalRouter)
 app.use('/api/quotations', fulfillmentRouter)
 app.use('/api', billingRouter)

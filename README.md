@@ -274,6 +274,18 @@ Two complete flows, quotation to cash.
 
 ## Roles and what each can do
 
+**Customers page** (Sell → Customers, every role) — each customer has contact details, billing
+and shipping addresses, a tax/GST ID, payment terms, notes, an **owner** (a rep) and a list of
+**contacts**. Quote links are emailed to the **primary contact** when there is one, otherwise to
+the customer's own email. Reps own the customers they create and can edit only those; managers
+and admins edit any customer and set its tier and owner; finance can view.
+
+**Quote details** — every quotation carries who it's addressed to (a customer contact, defaulting
+to the primary), a **valid-until** date (30 days by default; the customer can't confirm an expired
+quote), the customer's PO number, **payment terms** (copied from the customer; invoices fall due on
+them), notes to the customer, terms & conditions, and **internal notes** that never reach the
+portal. Customer-facing details lock once the quote leaves draft; internal notes stay editable.
+
 **Sales Rep** — builds quotations, applies line and order discounts, adds upsell items,
 tracks approval and fulfilment progress on their own deals, and answers customer
 negotiation requests. A rep is scoped to their own pipeline everywhere: another rep's
@@ -486,6 +498,7 @@ session cookie.
 | Dashboard | `GET /dashboard`, `POST /dashboard/quotations/:id/nudge·escalate` |
 | Reports | `GET /reports·/filters·/export?format=pdf\|xls` |
 | Config | `GET·POST·PATCH·DELETE /config/{products,categories,customers,variants,price-list,pairings,warehouses,stock,subscription-plans,discount-tiers,category-ceilings,users}`, `GET·PATCH /config/settings`, `GET /config/products/:id/stock·/config/categories-list·/config/audit` |
+| Customers | `GET /customers`, `GET /customers/:id` (with contacts), `POST /customers/:id/contacts`, `PATCH·DELETE /contacts/:id`; edits via `PATCH /config/customers/:id` |
 | Bulk import | `GET /config/import/{customers,products}/template`, `POST /config/import/{customers,products}` (`{ filename, data: base64, mode: update\|skip, commit }`, manager + admin) |
 
 ---

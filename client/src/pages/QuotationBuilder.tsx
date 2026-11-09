@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { humanize, money } from '@/lib/format'
+import QuoteDetails, { type QuoteDetailFields } from '@/components/QuoteDetails'
 
 type Variant = { id: string; attribute: string; value: string; extraPrice: string }
 type Product = {
@@ -86,7 +87,7 @@ type Quote = {
   risk: Risk | null
   // set once the quote has been sent — the customer's magic link
   portalUrl: string | null
-}
+} & QuoteDetailFields
 
 const marginColor = (pct: number) =>
   pct >= 20 ? 'text-emerald-600' : pct >= 10 ? 'text-amber-600' : 'text-red-600'
@@ -350,7 +351,7 @@ export default function QuotationBuilder() {
       crumbs={[
         { label: 'Workspace', to: '/' },
         { label: 'Quotations', to: '/quotations' },
-        { label: `${quote.data.quoteNumber} · ${quote.data.customer} (${quote.data.customerTier})` },
+        { label: `${quote.data.quoteNumber} · ${quote.data.customer} (${humanize(quote.data.customerTier)})` },
       ]}
       actions={
         <div className="flex items-center gap-3">
@@ -591,6 +592,7 @@ export default function QuotationBuilder() {
               )}
             </TableBody>
           </Table>
+          <QuoteDetails quote={quote.data} canEdit={canEdit} />
         </section>
 
         <aside className="space-y-4 h-fit">

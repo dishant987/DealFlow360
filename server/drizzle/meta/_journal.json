@@ -64,6 +64,20 @@
       "when": 1794244868049,
       "tag": "0008_certain_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1794254939737,
+      "tag": "0009_small_switch",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1794255690339,
+      "tag": "0010_amusing_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }

@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { z } from 'zod'
 import { and, eq, inArray } from 'drizzle-orm'
 import { db, runInTenant } from '../config/db.js'
+import { quoteRecipient } from './customer.controller.js'
 import {
   quotations,
   quoteLines,
@@ -19,6 +20,7 @@ import {
   productVariants,
   invoices,
 } from '../models/schema.js'
+import { contacts } from '../models/schema.js'
 import { sendPortalLink } from '../utils/mailer.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { computeBlendedRisk } from '../services/risk.js'
@@ -29,6 +31,7 @@ import { quoteNumber } from '../services/quoteNumber.js'
 // would invalidate the risk score they were routed on. 'Return for revision'
 // puts it back to draft, which is the supported way to reopen it.
 const EDITABLE = ['draft', 'rejected']
+export const QUOTE_VALID_DAYS = 30
 const notEditable = (status: string) =>
   `This quotation is ${status.replace(/_/g, ' ')} — it can no longer be edited. Ask an approver to return it for revision.`
 
@@ -159,9 +162,18 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
       portalToken: quotations.portalToken,
       createdAt: quotations.createdAt,
       updatedAt: quotations.updatedAt,
+      validUntil: quotations.validUntil,
+      contactId: quotations.contactId,
+      contactName: contacts.name,
+      customerPo: quotations.customerPo,
+      paymentTermsDays: quotations.paymentTermsDays,
+      notesToCustomer: quotations.notesToCustomer,
+      terms: quotations.terms,
+      internalNotes: quotations.internalNotes,
     })
     .from(quotations)
     .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .leftJoin(contacts, eq(contacts.id, quotations.contactId))
     .where(eq(quotations.id, req.params.id))
   if (!quote) return res.status(404).json({ error: 'not found' })
 
@@ -246,9 +258,19 @@ export async function submitQuotation(req: Request<{ id: string }>, res: Respons
 export async function createQuotation(req: Request, res: Response) {
   const p = z.object({ customerId: z.string().uuid() }).safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
+  // defaults: valid for 30 days, the customer's payment terms, addressed to their primary contact
+  const [cust] = await db.select().from(customers).where(eq(customers.id, p.data.customerId))
+  if (!cust) return res.status(400).json({ error: 'Customer not found' })
+  const primary = await quoteRecipient(cust.id)
   const [q] = await db
     .insert(quotations)
-    .values({ customerId: p.data.customerId, repId: req.user!.id })
+    .values({
+      customerId: cust.id,
+      repId: req.user!.id,
+      validUntil: new Date(Date.now() + QUOTE_VALID_DAYS * 86_400_000),
+      paymentTermsDays: cust.paymentTermsDays,
+      contactId: primary?.id ?? null,
+    })
     .returning()
   res.status(201).json({ ...q, quoteNumber: quoteNumber(q.seqNo, q.createdAt) })
 }
@@ -498,7 +520,12 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
   // mail server — a slow or unreachable SMTP host used to block this response for
   // seconds. Hand off in the background and record how it went when it settles.
   const portalUrl = `${CLIENT_URL}/portal/${token}`
-  const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId))
+  const [account] = await db.select().from(customers).where(eq(customers.id, q.customerId))
+  const [chosen] = q.contactId
+    ? await db.select({ email: contacts.email, name: contacts.name }).from(contacts).where(eq(contacts.id, q.contactId))
+    : []
+  const contact = chosen?.email ? chosen : account ? await quoteRecipient(account.id) : null
+  const customer = account && { name: contact?.name ?? account.name, email: contact?.email ?? account.email }
   if (customer?.email) {
     // runs after the response, when the request's company transaction is closed
     const orgId = req.orgId!
@@ -595,6 +622,13 @@ export async function updateQuotation(req: Request<{ id: string }>, res: Respons
     .object({
       orderDiscountPct: z.union([z.number(), z.string()]).transform(String),
       reason: z.string(),
+      validUntil: z.coerce.date().nullable(),
+      contactId: z.string().uuid().nullable(),
+      customerPo: z.string().trim().max(80).nullable(),
+      paymentTermsDays: z.coerce.number().int().min(0).max(365),
+      notesToCustomer: z.string().trim().max(4000).nullable(),
+      terms: z.string().trim().max(8000).nullable(),
+      internalNotes: z.string().trim().max(4000).nullable(),
     })
     .partial()
     .safeParse(req.body)
@@ -602,8 +636,17 @@ export async function updateQuotation(req: Request<{ id: string }>, res: Respons
   const { reason, ...patch } = p.data
   const [before] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
   if (!before) return res.status(404).json({ error: 'not found' })
-  if (patch.orderDiscountPct != null && !EDITABLE.includes(before.status))
+  // anything the customer sees is locked once the quote is out of draft; internal notes never are
+  const customerFacing = Object.keys(patch).some((k) => k !== 'internalNotes')
+  if (customerFacing && !EDITABLE.includes(before.status))
     return res.status(400).json({ error: notEditable(before.status) })
+  if (patch.contactId) {
+    const [c] = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(and(eq(contacts.id, patch.contactId), eq(contacts.customerId, before.customerId)))
+    if (!c) return res.status(400).json({ error: "That contact isn't on this customer." })
+  }
   const [q] = await db
     .update(quotations)
     .set({ ...patch, updatedAt: new Date(), lastActivityAt: new Date() })

@@ -7,8 +7,7 @@ const b64 = (s: string) => Buffer.from(s).toString('base64')
 test.describe('Bulk import', () => {
   test('a manager previews customers, sees a bad row block the import, then imports the fixed file', async ({ page }) => {
     await login(page, 'manager')
-    await page.goto('/admin')
-    await page.getByRole('tab', { name: 'Customers' }).click()
+    await page.goto('/customers')
     await page.getByRole('button', { name: 'Import' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog.getByRole('link', { name: 'Download the template' })).toHaveAttribute(

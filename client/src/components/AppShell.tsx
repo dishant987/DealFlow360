@@ -5,6 +5,7 @@ import {
   Activity,
   BadgeCheck,
   BarChart3,
+  Building2,
   FilePlus2,
   FileText,
   LayoutDashboard,
@@ -44,6 +45,7 @@ function navFor(role: string | undefined): NavGroup[] {
       items: [
         { to: '/', label: 'Workspace', icon: LayoutDashboard },
         { to: '/quotations', label: 'Quotations', icon: FileText },
+        { to: '/customers', label: 'Customers', icon: Building2 },
         ...(staff
           ? [{ to: '/approvals', label: 'Approvals', icon: BadgeCheck, badgeKey: 'pendingApprovals' as const }]
           : []),

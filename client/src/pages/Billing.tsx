@@ -77,8 +77,12 @@ export default function Billing() {
             Billing is locked — a payment has been recorded against this quotation.
           </p>
         ) : canAct ? (
-          <Button onClick={() => run(() => api.post(`/quotations/${id}/billing/generate`), 'Billing generated')}>
-            {isEmpty ? 'Generate Billing' : 'Regenerate Billing'}
+          <Button
+            // until billing has loaded we don't know which it is, so don't offer either
+            disabled={!b}
+            onClick={() => run(() => api.post(`/quotations/${id}/billing/generate`), 'Billing generated')}
+          >
+            {!b ? 'Loading…' : isEmpty ? 'Generate Billing' : 'Regenerate Billing'}
           </Button>
         ) : (
           <p className="text-sm text-muted-foreground">

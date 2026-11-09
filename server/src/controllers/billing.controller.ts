@@ -77,7 +77,7 @@ export async function generateBilling(req: Request<{ id: string }>, res: Respons
 
     if (oneTimeTotal > 0) {
       const due = new Date(now)
-      due.setDate(due.getDate() + 14)
+      due.setDate(due.getDate() + q.paymentTermsDays) // the quote's payment terms (Net N)
       await tx.insert(invoices).values({
         quotationId: req.params.id,
         type: 'onetime',

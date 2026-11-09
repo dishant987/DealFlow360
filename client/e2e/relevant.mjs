@@ -33,6 +33,7 @@ const MAP = [
   [/billing|invoice|Invoice|subscription|Subscriptions/i, ['06-billing']],
   [/portal|Portal|mailer/i, ['07-portal']],
   [/config|Admin|ResourceManager|report|Reports/i, ['08-config-reports', '17-permissions']],
+  [/customer|Customers|CustomerDetail|contact/i, ['21-customers', '19-import']],
   [/socket|useLiveUpdates/i, ['12-live-updates']],
   [/notification|NotificationBell/i, ['14-notifications']],
   [/Landing|ThemeToggle|index\.css|theme/i, ['15-landing']],
@@ -59,5 +60,6 @@ if (code.some((f) => EVERYTHING.some((re) => re.test(f)))) {
 }
 
 if (process.env.E2E_DRY) process.exit(0) // just show the selection
-const r = spawnSync('npx', ['playwright', 'test', ...specs, ...process.argv.slice(3)], { stdio: 'inherit', shell: true })
+// --no-deps: a shared-state spec must not drag in the whole parallel project it depends on
+const r = spawnSync('npx', ['playwright', 'test', ...(specs.length ? ['--no-deps', ...specs] : []), ...process.argv.slice(3)], { stdio: 'inherit', shell: true })
 process.exit(r.status ?? 1)

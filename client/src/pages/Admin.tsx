@@ -190,7 +190,6 @@ export default function Admin() {
                 <TabsList className="h-auto flex-wrap bg-transparent p-0">
                   <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
                   <TabsTrigger value="stock">Stock</TabsTrigger>
-                  <TabsTrigger value="customers">Customers</TabsTrigger>
                 </TabsList>
             </>
 
@@ -239,24 +238,6 @@ export default function Admin() {
               />
             </TabsContent>
 
-            <TabsContent value="customers">
-              <ResourceManager
-                title="Customer"
-                description="Accounts and their tier. Tier sets both the price list and the discount ceiling."
-                endpoint="/config/customers"
-                headerExtra={<ImportDialog kind="customers" endpoint="/config/customers" />}
-                columns={[
-                  { key: 'name', label: 'Name' },
-                  { key: 'email', label: 'Email' },
-                  { key: 'tier', label: 'Tier', render: (r) => humanize(r.tier) },
-                ]}
-                fields={[
-                  { name: 'name', label: 'Name' },
-                  { name: 'email', label: 'Email' },
-                  { name: 'tier', label: 'Tier', type: 'select', options: tierOpts, default: 'bronze' },
-                ]}
-              />
-            </TabsContent>
 
             <TabsContent value="tiers">
               <ResourceManager

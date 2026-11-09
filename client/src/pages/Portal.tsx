@@ -29,6 +29,13 @@ type Line = {
 }
 type PortalQuote = {
   currency: string
+  validUntil: string | null
+  expired: boolean
+  contactName: string | null
+  customerPo: string | null
+  paymentTermsDays: number
+  notesToCustomer: string | null
+  terms: string | null
   quoteNumber: string
   customer: string
   status: string
@@ -167,6 +174,7 @@ export default function Portal() {
             <div className="font-heading text-lg font-semibold">Dealwise</div>
             <div className="text-sm text-primary-foreground/80">
               Quotation {q.quoteNumber} for {q.customer}
+              {q.contactName ? ` · Attn: ${q.contactName}` : ''}
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-primary-foreground/70">
@@ -177,6 +185,38 @@ export default function Portal() {
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-6">
+        {q.expired && !confirmed && (
+          <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+            <p className="font-medium">This quotation has expired</p>
+            <p>It was valid until {new Date(q.validUntil!).toLocaleDateString()}. Please ask your account manager for an updated quote.</p>
+          </div>
+        )}
+        <dl className="mb-6 grid gap-3 rounded-xl border bg-background p-4 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-xs text-muted-foreground">Valid until</dt>
+            <dd className="font-medium">{q.validUntil ? new Date(q.validUntil).toLocaleDateString() : '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Payment terms</dt>
+            <dd className="font-medium">Net {q.paymentTermsDays} days</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Your PO number</dt>
+            <dd className="font-medium">{q.customerPo || '—'}</dd>
+          </div>
+          {q.notesToCustomer && (
+            <div className="sm:col-span-3">
+              <dt className="text-xs text-muted-foreground">Notes</dt>
+              <dd className="whitespace-pre-line">{q.notesToCustomer}</dd>
+            </div>
+          )}
+          {q.terms && (
+            <div className="sm:col-span-3">
+              <dt className="text-xs text-muted-foreground">Terms &amp; conditions</dt>
+              <dd className="whitespace-pre-line text-muted-foreground">{q.terms}</dd>
+            </div>
+          )}
+        </dl>
         {confirmed && (
           <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
             <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" />
@@ -414,7 +454,7 @@ export default function Portal() {
               </div>
             </dl>
 
-            {open ? (
+            {open && !q.expired ? (
               <>
                 <Button className="mt-4 w-full" onClick={confirm} disabled={busy}>
                   {busy ? 'Working…' : 'Confirm quotation'}
