@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test'
-import { ACCOUNTS, PASSWORD, apiAs, login, type Role } from './helpers'
+import { ACCOUNTS, PASSWORD, apiAs, login, loginViaForm, type Role } from './helpers'
 
 const ROLES: Role[] = ['rep', 'manager', 'finance', 'admin']
 
 test.describe('A1 — authentication', () => {
   for (const role of ROLES) {
     test(`${role} can log in and lands in the app`, async ({ page }) => {
-      await login(page, role)
+      await loginViaForm(page, role)
       await expect(page.getByRole('link', { name: 'Dealwise' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible()
     })

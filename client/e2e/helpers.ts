@@ -1,4 +1,4 @@
-import { expect, type Page, type APIRequestContext, request } from '@playwright/test'
+import { expect, test, type Page, type APIRequestContext, request } from '@playwright/test'
 
 export const API = process.env.E2E_API_URL || 'http://localhost:4000'
 export const PASSWORD = 'password123'
@@ -12,8 +12,38 @@ export const ACCOUNTS = {
 } as const
 export type Role = keyof typeof ACCOUNTS
 
-/** Log in through the real login form. */
+// One real sign-in per role per worker; every later login reuses the session
+// cookie. Signing in through the form (bcrypt + page render) for each of ~80 tests
+// was the biggest single cost of the suite. The form itself is covered by
+// loginViaForm in 01-auth.
+const sessions = new Map<Role, Promise<string>>()
+function sessionFor(role: Role) {
+  if (!sessions.has(role))
+    sessions.set(
+      role,
+      (async () => {
+        const ctx = await request.newContext({ baseURL: API })
+        const res = await ctx.post('/api/auth/login', { data: { email: ACCOUNTS[role].email, password: PASSWORD } })
+        expect(res.status(), `login as ${role}`).toBe(200)
+        const token = (await ctx.storageState()).cookies.find((c) => c.name === 'token')?.value
+        await ctx.dispose()
+        if (!token) throw new Error(`no session cookie for ${role}`)
+        return token
+      })(),
+    )
+  return sessions.get(role)!
+}
+
+/** Signed-in browser for `role`, landed on the dashboard (fast: reuses the session cookie). */
 export async function login(page: Page, role: Role) {
+  const base = test.info().project.use.baseURL ?? 'http://localhost:5173'
+  await page.context().addCookies([{ name: 'token', value: await sessionFor(role), url: base }])
+  await page.goto('/')
+  await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible({ timeout: 15_000 })
+}
+
+/** Log in through the real login form — for tests that are about signing in. */
+export async function loginViaForm(page: Page, role: Role) {
   await page.goto('/login')
   await page.getByPlaceholder('you@company.com').fill(ACCOUNTS[role].email)
   await page.locator('input[type="password"]').fill(PASSWORD)
@@ -24,12 +54,7 @@ export async function login(page: Page, role: Role) {
 /** A cookie-authenticated API context for the given role — used to assert the
  *  server enforces what the UI merely hides. */
 export async function apiAs(role: Role): Promise<APIRequestContext> {
-  const ctx = await request.newContext({ baseURL: API })
-  const res = await ctx.post('/api/auth/login', {
-    data: { email: ACCOUNTS[role].email, password: PASSWORD },
-  })
-  expect(res.status(), `login as ${role}`).toBe(200)
-  return ctx
+  return request.newContext({ baseURL: API, extraHTTPHeaders: { cookie: `token=${await sessionFor(role)}` } })
 }
 
 /** Collect console errors and failed responses for a page. */

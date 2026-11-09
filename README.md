@@ -492,7 +492,9 @@ migrate + seed a fresh Postgres, lint + build the client, then the full e2e suit
 
 ```bash
 cd server && npm test          # unit tests — pure business logic
-cd client && npm run test:e2e  # end-to-end, all roles, real browser
+cd client && npm run test:e2e  # end-to-end, all roles, real browser (~3 min, 4 workers)
+cd client && npm run test:e2e:relevant   # only the specs for what you changed vs main (seconds)
+# E2E_DRY=1 npm run test:e2e:relevant    # just show which specs it would run
 ```
 
 **Unit** (10 files) cover the pure services: risk scoring, pricing, warehouse splitting,
