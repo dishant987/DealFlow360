@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { humanize } from '@/lib/format'
 
 const tierOpts = [
   { label: 'Bronze', value: 'bronze' },
@@ -191,7 +192,7 @@ export default function Admin() {
                   { key: 'name', label: 'Name' },
                   { key: 'sku', label: 'SKU' },
                   { key: 'category', label: 'Category' },
-                  { key: 'type', label: 'Type' },
+                  { key: 'type', label: 'Type', render: (r) => humanize(r.type) },
                   { key: 'unitPrice', label: 'Price' },
                   { key: 'unitCost', label: 'Cost' },
                   { key: 'stock', label: 'Stock' },
@@ -226,7 +227,7 @@ export default function Admin() {
                 columns={[
                   { key: 'name', label: 'Name' },
                   { key: 'email', label: 'Email' },
-                  { key: 'tier', label: 'Tier' },
+                  { key: 'tier', label: 'Tier', render: (r) => humanize(r.tier) },
                 ]}
                 fields={[
                   { name: 'name', label: 'Name' },
@@ -243,7 +244,7 @@ export default function Admin() {
                 description="The most any customer on that tier may be discounted, before category limits apply."
                 endpoint="/config/discount-tiers"
                 columns={[
-                  { key: 'tier', label: 'Tier' },
+                  { key: 'tier', label: 'Tier', render: (r) => humanize(r.tier) },
                   { key: 'maxDiscountPct', label: 'Max Discount %' },
                 ]}
                 fields={[

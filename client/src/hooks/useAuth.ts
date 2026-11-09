@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { AxiosError } from 'axios'
 import { api } from '@/lib/api'
+import { setCurrency } from '@/lib/format'
 
 export type Role = 'rep' | 'manager' | 'finance' | 'admin'
 export interface User {
@@ -9,6 +10,8 @@ export interface User {
   email: string
   role: Role
   mfaEnabled?: boolean
+  /** the company's display currency (ISO code) */
+  currency?: string
 }
 
 export function useAuth() {
@@ -30,6 +33,8 @@ export function useAuth() {
     refetchOnWindowFocus: false,
   })
 
+  // runs above every protected page, so amounts below render in the company's currency
+  setCurrency(q.data?.currency)
   return {
     user: q.data ?? null,
     // only "loading" before we've ever resolved a session — a background

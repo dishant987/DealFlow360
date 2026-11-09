@@ -2,7 +2,7 @@ import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { db, runInTenant } from '../config/db.js'
-import { auditLog, users } from '../models/schema.js'
+import { auditLog, organizations, users } from '../models/schema.js'
 import {
   cookieName,
   cookieOpts,
@@ -25,10 +25,13 @@ import {
 
 type UserRow = typeof users.$inferSelect
 
-const publicUser = (u: UserRow) => ({ id: u.id, name: u.name, email: u.email, role: u.role, mfaEnabled: u.mfaEnabled })
+async function publicUser(u: UserRow) {
+  const [org] = await db.select({ currency: organizations.currency }).from(organizations).where(eq(organizations.id, u.organizationId))
+  return { id: u.id, name: u.name, email: u.email, role: u.role, mfaEnabled: u.mfaEnabled, currency: org?.currency ?? 'USD' }
+}
 
 /** Finish a sign-in that already proved the password (or Google): open a session, or ask for the MFA code first. */
-export function completeSignIn(res: Response, u: UserRow, mfaPassed = false) {
+export async function completeSignIn(res: Response, u: UserRow, mfaPassed = false) {
   if (u.mfaEnabled && !mfaPassed) {
     res.cookie(mfaCookieName, signMfaPending(u.id), mfaCookieOpts)
     return { mfaRequired: true as const }
@@ -69,7 +72,7 @@ export async function verifyMfa(req: Request, res: Response) {
   if (!ok) return res.status(401).json({ error: 'That code is not valid. Try the latest code from your app.' })
 
   res.clearCookie(mfaCookieName)
-  res.json(completeSignIn(res, u, true))
+  res.json(await completeSignIn(res, u, true))
 }
 
 /* ---- setup / enable / disable (signed in) ---- */

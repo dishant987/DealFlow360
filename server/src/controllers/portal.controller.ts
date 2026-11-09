@@ -16,6 +16,7 @@ import {
 import { computeQuoteTotals } from '../services/pricing.js'
 import { scoreQuotation } from './quotation.controller.js'
 import { quoteNumber } from '../services/quoteNumber.js'
+import { orgCurrency } from '../utils/format.js'
 
 // the customer may only act while the quote is genuinely open to them
 const OPEN_TO_CUSTOMER = ['sent', 'under_negotiation']
@@ -85,6 +86,7 @@ export async function getPortalQuote(req: Request<{ token: string }>, res: Respo
     .where(eq(negotiationRequests.quotationId, q.id))
 
   res.json({
+    currency: await orgCurrency(req.orgId),
     quoteNumber: quoteNumber(q.seqNo, q.createdAt),
     customer: customer?.name,
     status: q.status,

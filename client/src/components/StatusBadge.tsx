@@ -1,3 +1,5 @@
+import { humanize } from '@/lib/format'
+
 // One source of truth for status colours, so a status looks identical on every
 // screen. Covers quotation, invoice and billing-schedule statuses. Every tone has
 // a dark-mode variant so badges stay readable on both themes.
@@ -50,10 +52,10 @@ export default function StatusBadge({
   const tone = TONE_CLASS[TONES[status] ?? 'slate']
   return (
     <span
-      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium capitalize ${tone} ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${tone} ${className}`}
     >
       <span aria-hidden className="size-1.5 rounded-full bg-current opacity-70" />
-      {(label ?? status).replace(/_/g, ' ')}
+      {humanize(label ?? status)}
     </span>
   )
 }

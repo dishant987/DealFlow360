@@ -14,6 +14,7 @@ import {
 } from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { quoteNumber } from '../services/quoteNumber.js'
+import { money as fmt, orgCurrency } from '../utils/format.js'
 
 const require = createRequire(import.meta.url)
 
@@ -225,6 +226,7 @@ function activeFilters(q: Request['query']): string {
 }
 
 export async function exportReport(req: Request, res: Response) {
+  const cur = await orgCurrency(req.orgId)
   const { rows, summary } = await buildReport(req.query)
   const format = String(req.query.format ?? 'xls')
 
@@ -261,7 +263,7 @@ export async function exportReport(req: Request, res: Response) {
         r.rep,
         r.status.replace(/_/g, ' '),
         { text: r.riskScore.toFixed(1), alignment: 'right' },
-        { text: `$${r.amount.toFixed(2)}`, alignment: 'right' },
+        { text: fmt(r.amount, cur), alignment: 'right' },
       ]),
       [
         { text: 'Total', bold: true, colSpan: 5 },
@@ -269,7 +271,7 @@ export async function exportReport(req: Request, res: Response) {
         {},
         {},
         {},
-        { text: `$${summary.totalValue.toFixed(2)}`, bold: true, alignment: 'right' },
+        { text: fmt(summary.totalValue, cur), bold: true, alignment: 'right' },
       ],
     ]
 
@@ -307,7 +309,7 @@ export async function exportReport(req: Request, res: Response) {
         {
           columns: [
             kpi('Quotations', String(summary.count)),
-            kpi('Total value', `$${summary.totalValue.toFixed(2)}`),
+            kpi('Total value', fmt(summary.totalValue, cur)),
             kpi('Avg risk score', summary.avgRisk.toFixed(1)),
             kpi(
               'Avg approval time',

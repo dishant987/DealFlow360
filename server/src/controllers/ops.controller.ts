@@ -23,6 +23,7 @@ import { replenishmentPlan, type StockRule } from '../services/replenishment.js'
 import { createRequire } from 'module'
 import { quoteNumber, invoiceNumber } from '../services/quoteNumber.js'
 import { computeLine } from '../services/pricing.js'
+import { money as fmt, orgCurrency } from '../utils/format.js'
 
 const ACTIVE_STATUSES = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
 
@@ -455,6 +456,7 @@ export async function listSubscriptions(_req: Request, res: Response) {
 
 /* ---- downloadable invoice PDF ---- */
 export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
+  const cur = await orgCurrency(req.orgId)
   const [inv] = await db
     .select({
       id: invoices.id,
@@ -515,9 +517,9 @@ export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
     ...rawLines.map((l) => [
       l.product,
       { text: String(l.quantity), alignment: 'right' },
-      { text: `$${Number(l.unitPrice).toFixed(2)}`, alignment: 'right' },
+      { text: fmt(Number(l.unitPrice), cur), alignment: 'right' },
       { text: `${Number(l.discountPct).toFixed(0)}%`, alignment: 'right' },
-      { text: `$${computeLine(l).net.toFixed(2)}`, alignment: 'right' },
+      { text: fmt(computeLine(l).net, cur), alignment: 'right' },
     ]),
   ]
 
@@ -591,9 +593,9 @@ export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
         layout: { fillColor: (i: number) => (i > 0 && i % 2 === 0 ? LIGHT : null) },
       },
       { text: '', margin: [0, 10, 0, 0] },
-      money('Invoice total', `$${Number(inv.amount).toFixed(2)}`),
-      money('Paid', `$${paid.toFixed(2)}`),
-      money('Balance due', `$${balance.toFixed(2)}`, true),
+      money('Invoice total', fmt(Number(inv.amount), cur)),
+      money('Paid', fmt(paid, cur)),
+      money('Balance due', fmt(balance, cur), true),
       {
         text:
           inv.type === 'recurring'

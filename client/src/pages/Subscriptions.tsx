@@ -5,6 +5,7 @@ import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import StatCard from '@/components/StatCard'
+import { money } from '@/lib/format'
 
 type Sub = {
   id: string
@@ -62,7 +63,7 @@ export default function Subscriptions() {
       label: 'Per period',
       align: 'right',
       value: (r) => Number(r.amount),
-      render: (r) => `$${Number(r.amount).toFixed(2)}`,
+      render: (r) => money(Number(r.amount)),
     },
     {
       key: 'nextBillingDate',
@@ -98,7 +99,7 @@ export default function Subscriptions() {
           <StatCard label="Cancelled" value={s?.cancelled ?? 0} loading={q.isLoading} />
           <StatCard
             label="MRR"
-            value={`$${(s?.mrr ?? 0).toFixed(2)}`}
+            value={money((s?.mrr ?? 0))}
             hint="normalised monthly, active plans only"
             tone="primary"
             loading={q.isLoading}

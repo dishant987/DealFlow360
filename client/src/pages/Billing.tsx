@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { money } from '@/lib/format'
 
 type Invoice = { id: string; type: string; status: string; amount: string; dueAt: string | null }
 type Schedule = {
@@ -112,7 +113,7 @@ export default function Billing() {
                       {inv.status}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right">${Number(inv.amount).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{money(Number(inv.amount))}</TableCell>
                   <TableCell>
                     {inv.status !== 'paid' && canAct && (
                       <Button
@@ -161,7 +162,7 @@ export default function Billing() {
                     )}
                   </TableCell>
                   <TableCell>{new Date(s.nextBillingDate).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right">${Number(s.amount).toFixed(2)}</TableCell>
+                  <TableCell className="text-right">{money(Number(s.amount))}</TableCell>
                   <TableCell>{s.quantity}</TableCell>
                   <TableCell>
                     {s.status !== 'cancelled' && canAct && (
@@ -250,7 +251,7 @@ export default function Billing() {
               {(b?.creditNotes ?? []).map((c) => (
                 <li key={c.id} className="flex justify-between border-b py-1">
                   <span>{c.reason}</span>
-                  <span>${Number(c.amount).toFixed(2)}</span>
+                  <span>{money(Number(c.amount))}</span>
                 </li>
               ))}
             </ul>

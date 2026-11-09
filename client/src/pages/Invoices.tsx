@@ -10,6 +10,7 @@ import DataTable, { type Column } from '@/components/DataTable'
 import StatCard from '@/components/StatCard'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { money } from '@/lib/format'
 
 type Invoice = {
   id: string
@@ -87,7 +88,7 @@ export default function Invoices() {
       label: 'Amount',
       align: 'right',
       value: (r) => Number(r.amount),
-      render: (r) => `$${Number(r.amount).toFixed(2)}`,
+      render: (r) => money(Number(r.amount)),
     },
     {
       key: 'issuedAt',
@@ -129,13 +130,13 @@ export default function Invoices() {
           <StatCard label="Invoices" value={s?.count ?? 0} loading={q.isLoading} />
           <StatCard
             label="Outstanding"
-            value={`$${(s?.outstanding ?? 0).toFixed(2)}`}
+            value={money((s?.outstanding ?? 0))}
             hint="not yet settled"
             loading={q.isLoading}
           />
           <StatCard
             label="Paid"
-            value={`$${(s?.paid ?? 0).toFixed(2)}`}
+            value={money((s?.paid ?? 0))}
             tone="success"
             loading={q.isLoading}
           />

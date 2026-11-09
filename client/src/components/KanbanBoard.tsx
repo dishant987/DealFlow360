@@ -16,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { money } from '@/lib/format'
 
 export type Quote = {
   id: string
@@ -221,7 +222,7 @@ export default function KanbanBoard({ quotes, loading }: { quotes: Quote[]; load
                   >
                     <div className="text-[10px] font-mono text-muted-foreground">{q.quoteNumber}</div>
                     <div className="font-medium text-sm">{q.customer}</div>
-                    <div className="text-sm text-muted-foreground">${q.amount.toFixed(2)}</div>
+                    <div className="text-sm text-muted-foreground">{money(q.amount)}</div>
                     <div className="flex items-center justify-between mt-1">
                       <StatusBadge status={q.status} className="text-[10px] px-1.5 py-0" />
                       {Number(q.riskScore) > 0 && (
