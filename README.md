@@ -215,11 +215,15 @@ tracks approval and fulfilment progress on their own deals, and answers customer
 negotiation requests. A rep is scoped to their own pipeline everywhere: another rep's
 quotation returns 403, and the cross-quotation invoice, fulfilment and subscription
 screens are not theirs to open. They can watch their own deal's fulfilment and billing
-pages, but the decisions there belong to Finance.
+pages, but the decisions there belong to Finance. Reps add the customers they sell to
+(from the New quotation dialog); a rep's customer always starts on the Bronze tier, since
+tier sets prices and discount ceilings.
 
 **Sales Manager** — reviews the first approval step, approves / rejects / returns for
 revision (a reason is mandatory, enforced server-side), configures discount tiers,
-category ceilings and the approval-chain thresholds, and works the deal-health board.
+category ceilings and the approval-chain thresholds, works the deal-health board, and
+manages the catalogue (products, categories, variants, price lists, pairings, plans),
+warehouses, stock and customer tiers.
 
 **Finance / Operations** — handles the second-level approval on high-risk discounts,
 owns warehouse splits and backorder decisions, and reconciles recurring billing, credit
@@ -229,7 +233,10 @@ notes and payments.
 specific lines, counters the discount, requests a delivery date, and confirms in one
 click. Cost and margin never reach this view.
 
-**Admin** — full backend setup and platform-wide analytics.
+**Admin** — everything above, plus user management: create users, change roles, and
+**block / unblock** accounts. A blocked user can't sign in and any open session stops on
+its next request (the server re-reads the account on every request). Admins can't block,
+demote or delete themselves. Deleting customers is admin-only.
 
 ### Approvals are a role queue, not a per-person assignment
 

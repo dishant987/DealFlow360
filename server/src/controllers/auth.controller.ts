@@ -53,6 +53,8 @@ export async function login(req: Request, res: Response) {
   const [u] = await db.select().from(users).where(eq(users.email, email))
   if (!u || !(await verifyPassword(password, u.passwordHash)))
     return res.status(401).json({ error: 'invalid credentials' })
+  // checked after the password, so a wrong guess never reveals the account is blocked
+  if (u.blocked) return res.status(403).json({ error: 'This account is blocked. Contact your administrator.' })
 
   const token = signToken({ id: u.id, role: u.role, email: u.email })
   res

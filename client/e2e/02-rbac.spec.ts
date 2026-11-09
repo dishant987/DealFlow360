@@ -101,12 +101,11 @@ test.describe('§3 — role-based access', () => {
     }
   })
 
-  test('API refuses a manager on admin-only catalogue config', async () => {
+  test('managers run the catalogue, but user management stays with the admin', async () => {
     const mgr = await apiAs('manager')
-    for (const path of ['/api/config/products', '/api/config/users', '/api/config/warehouses']) {
-      const res = await mgr.get(path)
-      expect(res.status(), `manager GET ${path}`).toBe(403)
-    }
+    for (const path of ['/api/config/products', '/api/config/warehouses', '/api/config/customers'])
+      expect((await mgr.get(path)).status(), `manager GET ${path}`).toBe(200)
+    expect((await mgr.get('/api/config/users')).status(), 'manager GET users').toBe(403)
     // …but a manager DOES own discount governance
     expect((await mgr.get('/api/config/discount-tiers')).status()).toBe(200)
     expect((await mgr.get('/api/config/settings')).status()).toBe(200)
