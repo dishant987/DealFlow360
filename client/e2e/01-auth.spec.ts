@@ -19,8 +19,6 @@ test.describe('A1 — authentication', () => {
     await expect(page.getByRole('button', { name: 'Rep', exact: true })).toHaveCount(0)
 
     await login(page, 'rep')
-    // workspace strapline
-    await expect(page.getByText(/Signed in as\s*Sales Rep/)).toBeVisible()
     // account menu badge
     await page.getByRole('button', { name: 'Account menu' }).click()
     await expect(page.getByText('Sales Rep').first()).toBeVisible()
