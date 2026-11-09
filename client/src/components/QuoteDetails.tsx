@@ -6,7 +6,7 @@ import { errText } from '@/lib/errors'
 import FormField from '@/components/FormField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 
 export type QuoteDetailFields = {
   id: string
@@ -76,15 +76,16 @@ export default function QuoteDetails({ quote, canEdit }: { quote: QuoteDetailFie
           />
         </FormField>
         <FormField id="qd-contact" label="Addressed to">
-          <Select id="qd-contact" disabled={!canEdit} value={f.contactId ?? ''} onChange={(e) => setF({ ...f, contactId: e.target.value || null })}>
-            <option value="">The customer's email</option>
-            {(contacts.data?.contacts ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-                {c.email ? ` — ${c.email}` : ''}
-              </option>
-            ))}
-          </Select>
+          <Combobox
+            id="qd-contact"
+            disabled={!canEdit}
+            value={f.contactId ?? ''}
+            onChange={(v) => setF({ ...f, contactId: v || null })}
+            clearLabel="The customer's email"
+            placeholder="The customer's email"
+            searchPlaceholder="Search contacts…"
+            options={(contacts.data?.contacts ?? []).map((c) => ({ value: c.id, label: c.name, hint: c.email ?? undefined }))}
+          />
         </FormField>
         <FormField id="qd-po" label="Customer PO number">
           <Input id="qd-po" disabled={!canEdit} value={f.customerPo ?? ''} onChange={(e) => setF({ ...f, customerPo: e.target.value })} />

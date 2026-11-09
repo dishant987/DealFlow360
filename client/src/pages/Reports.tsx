@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { humanize, money } from '@/lib/format'
+import { Combobox } from '@/components/ui/combobox'
 
 type Filters = { from?: string; to?: string; status?: string; repId?: string; categoryId?: string }
 type Row = { id: string; quoteNumber: string; customer: string; rep: string; status: string; riskScore: number; amount: number }
@@ -94,28 +95,26 @@ export default function Reports() {
               </option>
             ))}
           </Select>
-          <Select
+          <Combobox
+            aria-label="Filter by rep"
+            className="w-44"
             value={filters.repId ?? ''}
-            onChange={(e) => set('repId', e.target.value)}
-          >
-            <option value="">All reps</option>
-            {options.data?.reps.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </Select>
-          <Select
+            onChange={(v) => set('repId', v)}
+            clearLabel="All reps"
+            placeholder="All reps"
+            searchPlaceholder="Search people…"
+            options={(options.data?.reps ?? []).map((r) => ({ value: r.id, label: r.name }))}
+          />
+          <Combobox
+            aria-label="Filter by category"
+            className="w-44"
             value={filters.categoryId ?? ''}
-            onChange={(e) => set('categoryId', e.target.value)}
-          >
-            <option value="">All categories</option>
-            {options.data?.categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
+            onChange={(v) => set('categoryId', v)}
+            clearLabel="All categories"
+            placeholder="All categories"
+            searchPlaceholder="Search categories…"
+            options={(options.data?.categories ?? []).map((c) => ({ value: c.id, label: c.name }))}
+          />
           <div className="ml-auto flex gap-2">
             <Button variant="outline" onClick={() => exportFile('xls')}>
               Export XLS

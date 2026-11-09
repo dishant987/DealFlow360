@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Combobox } from '@/components/ui/combobox'
 
 export type CustomerRow = {
   id: string
@@ -27,6 +28,35 @@ export type CustomerRow = {
   ownerName: string | null
 }
 
+type Draft = {
+  name: string
+  email: string
+  tier: string
+  phone: string
+  website: string
+  taxId: string
+  paymentTermsDays: string
+  ownerId: string
+  billingAddress: string
+  shippingAddress: string
+  notes: string
+}
+const BLANK: Draft = {
+  name: '',
+  email: '',
+  tier: 'bronze',
+  phone: '',
+  website: '',
+  taxId: '',
+  paymentTermsDays: '30',
+  ownerId: '',
+  billingAddress: '',
+  shippingAddress: '',
+  notes: '',
+}
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const AREA = 'w-full rounded-md border bg-background px-3 py-2 text-sm disabled:opacity-60'
+
 export default function Customers() {
   const { user } = useAuth()
   const nav = useNavigate()
@@ -35,11 +65,19 @@ export default function Customers() {
   const canManage = user?.role === 'manager' || user?.role === 'admin'
   const [scope, setScope] = useState<'mine' | 'all'>(isRep ? 'mine' : 'all')
   const [creating, setCreating] = useState(false)
-  const [draft, setDraft] = useState({ name: '', email: '', tier: 'bronze' })
+  const [draft, setDraft] = useState<Draft>(BLANK)
+  const [sameAddress, setSameAddress] = useState(true)
+  const set = (k: keyof Draft) => (e: { target: { value: string } }) => setDraft({ ...draft, [k]: e.target.value })
+  const emailBad = draft.email.trim() !== '' && !EMAIL.test(draft.email.trim())
 
   const list = useQuery({
     queryKey: ['customers'],
     queryFn: async () => (await api.get('/customers')).data as CustomerRow[],
+  })
+  const owners = useQuery({
+    queryKey: ['report-filters'],
+    queryFn: async () => (await api.get('/reports/filters')).data as { reps: { id: string; name: string }[] },
+    enabled: canManage && creating,
   })
   const rows = useMemo(
     () => (list.data ?? []).filter((c) => scope === 'all' || c.ownerId === user?.id),
@@ -47,11 +85,19 @@ export default function Customers() {
   )
 
   const create = useMutation({
-    mutationFn: async () => (await api.post('/config/customers', draft)).data as CustomerRow,
+    mutationFn: async () => {
+      const body: Record<string, unknown> = { ...draft, paymentTermsDays: Number(draft.paymentTermsDays || 30) }
+      if (sameAddress) body.shippingAddress = draft.billingAddress
+      // blanks are simply not sent; reps can't pick the owner (the server enforces it too)
+      for (const k of Object.keys(body)) if (body[k] === '') delete body[k]
+      if (!canManage) delete body.ownerId
+      return (await api.post('/config/customers', body)).data as CustomerRow
+    },
     onSuccess: (c) => {
       qc.invalidateQueries({ queryKey: ['customers'] })
       setCreating(false)
-      setDraft({ name: '', email: '', tier: 'bronze' })
+      setDraft(BLANK)
+      setSameAddress(true)
       nav(`/customers/${c.id}`)
     },
     onError: (e) => toast.error(errText(e, 'Could not add the customer')),
@@ -97,37 +143,98 @@ export default function Customers() {
       />
 
       <Dialog open={creating} onOpenChange={setCreating}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>New customer</DialogTitle>
             <DialogDescription>
-              {isRep ? 'It will be yours, on the Bronze tier — a manager can change the tier.' : 'Add the details now or later.'}
+              {isRep
+                ? 'It will be yours, on the Bronze tier — a manager can change the tier.'
+                : 'Only name and email are required; the rest can be filled in later.'}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <FormField id="nc-name" label="Name">
-              <Input id="nc-name" autoFocus value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            </FormField>
-            <FormField id="nc-email" label="Email">
-              <Input id="nc-email" type="email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} />
-            </FormField>
-            {canManage && (
-              <FormField id="nc-tier" label="Tier">
-                <Select id="nc-tier" value={draft.tier} onChange={(e) => setDraft({ ...draft, tier: e.target.value })}>
-                  {['bronze', 'silver', 'gold'].map((t) => (
-                    <option key={t} value={t}>
-                      {humanize(t)}
-                    </option>
-                  ))}
-                </Select>
+
+          {/* scrolls inside the dialog on a phone */}
+          <div className="-mx-1 max-h-[65svh] space-y-5 overflow-y-auto px-1">
+            <fieldset className="grid gap-3 sm:grid-cols-2">
+              <legend className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Company</legend>
+              <FormField id="nc-name" label="Name">
+                <Input id="nc-name" autoFocus value={draft.name} onChange={set('name')} />
               </FormField>
-            )}
+              <FormField id="nc-email" label="Email" error={emailBad ? 'Enter a valid email' : undefined}>
+                <Input id="nc-email" type="email" aria-invalid={emailBad} value={draft.email} onChange={set('email')} />
+              </FormField>
+              <FormField id="nc-phone" label="Phone">
+                <Input id="nc-phone" type="tel" value={draft.phone} onChange={set('phone')} />
+              </FormField>
+              <FormField id="nc-website" label="Website">
+                <Input id="nc-website" placeholder="example.com" value={draft.website} onChange={set('website')} />
+              </FormField>
+              <FormField id="nc-tax" label="Tax / GST ID">
+                <Input id="nc-tax" value={draft.taxId} onChange={set('taxId')} />
+              </FormField>
+              <FormField id="nc-terms" label="Payment terms (days)">
+                <Input id="nc-terms" type="number" min={0} max={365} value={draft.paymentTermsDays} onChange={set('paymentTermsDays')} />
+              </FormField>
+              {canManage && (
+                <>
+                  <FormField id="nc-tier" label="Tier">
+                    <Select id="nc-tier" value={draft.tier} onChange={set('tier')}>
+                      {['bronze', 'silver', 'gold'].map((t) => (
+                        <option key={t} value={t}>
+                          {humanize(t)}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
+                  <FormField id="nc-owner" label="Owner">
+                    <Combobox
+                      id="nc-owner"
+                      value={draft.ownerId}
+                      onChange={(v) => setDraft({ ...draft, ownerId: v })}
+                      clearLabel="No owner"
+                      placeholder="No owner"
+                      searchPlaceholder="Search people…"
+                      loading={owners.isLoading}
+                      options={(owners.data?.reps ?? []).map((r) => ({ value: r.id, label: r.name }))}
+                    />
+                  </FormField>
+                </>
+              )}
+            </fieldset>
+
+            <fieldset className="grid gap-3 sm:grid-cols-2">
+              <legend className="mb-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">Addresses</legend>
+              <FormField id="nc-billing" label="Billing address">
+                <textarea id="nc-billing" rows={3} className={AREA} value={draft.billingAddress} onChange={set('billingAddress')} />
+              </FormField>
+              <div className="space-y-1.5">
+                <FormField id="nc-shipping" label="Shipping address">
+                  <textarea
+                    id="nc-shipping"
+                    rows={3}
+                    disabled={sameAddress}
+                    className={AREA}
+                    value={sameAddress ? draft.billingAddress : draft.shippingAddress}
+                    onChange={set('shippingAddress')}
+                  />
+                </FormField>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <input type="checkbox" checked={sameAddress} onChange={(e) => setSameAddress(e.target.checked)} /> Same as billing
+                </label>
+              </div>
+            </fieldset>
+
+            <FormField id="nc-notes" label="Notes">
+              <textarea id="nc-notes" rows={2} className={AREA} value={draft.notes} onChange={set('notes')} />
+            </FormField>
+            <p className="text-xs text-muted-foreground">Add contact people on the customer's page once it's created.</p>
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreating(false)}>
               Cancel
             </Button>
-            <Button disabled={!draft.name.trim() || !draft.email.trim() || create.isPending} onClick={() => create.mutate()}>
+            <Button disabled={!draft.name.trim() || !draft.email.trim() || emailBad || create.isPending} onClick={() => create.mutate()}>
               {create.isPending ? 'Adding…' : 'Add customer'}
             </Button>
           </DialogFooter>

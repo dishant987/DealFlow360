@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 
 export type Field = {
   name: string
@@ -78,6 +79,18 @@ function FieldInput({
         />
         {field.label}
       </label>
+    )
+
+  if (isSelect && field.optionsFrom)
+    return (
+      <Combobox
+        id={id}
+        value={value ?? ''}
+        onChange={onChange}
+        placeholder={`${field.label}…`}
+        searchPlaceholder={`Search ${field.label.toLowerCase()}…`}
+        options={options}
+      />
     )
 
   if (isSelect)

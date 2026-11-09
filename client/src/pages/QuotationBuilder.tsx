@@ -12,7 +12,6 @@ import { lineMargin, quoteTotals } from '@/lib/pricing'
 import { Button } from '@/components/ui/button'
 import ConfirmButton from '@/components/ConfirmButton'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -23,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import { humanize, money } from '@/lib/format'
 import QuoteDetails, { type QuoteDetailFields } from '@/components/QuoteDetails'
+import { Combobox } from '@/components/ui/combobox'
 
 type Variant = { id: string; attribute: string; value: string; extraPrice: string }
 type Product = {
@@ -444,44 +444,40 @@ export default function QuotationBuilder() {
           )}
           {canEdit && (
           <div className="flex items-center gap-2">
-            <Select
+            <Combobox
+              aria-label="Add product"
               className="min-w-64"
               value={pick}
-              onChange={(e) => {
-                setPick(e.target.value)
+              onChange={(v) => {
+                setPick(v)
                 setPickVariant('')
               }}
-            >
-              <option value="">Add product…</option>
-              {/* B3: grouped by category (Hardware / Services / Subscriptions …) */}
-              {Object.entries(
-                (products.data ?? []).reduce<Record<string, Product[]>>((acc, p) => {
-                  ;(acc[p.category ?? 'Other'] ??= []).push(p)
-                  return acc
-                }, {}),
-              ).map(([category, items]) => (
-                <optgroup key={category} label={category}>
-                  {items.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} — {money(Number(p.unitPrice))} {p.isPromoted ? '★' : ''}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </Select>
+              placeholder="Add product…"
+              searchPlaceholder="Search products or SKU…"
+              loading={products.isLoading}
+              // B3: grouped by category (Hardware / Services / Subscriptions …)
+              options={[...(products.data ?? [])]
+                .sort((a, b) => (a.category ?? 'Other').localeCompare(b.category ?? 'Other'))
+                .map((p) => ({
+                  value: p.id,
+                  label: `${p.name}${p.isPromoted ? ' ★' : ''}`,
+                  hint: money(Number(p.unitPrice)),
+                  group: p.category ?? 'Other',
+                }))}
+            />
             {pickedVariants.length > 0 && (
-              <Select
+              <Combobox
+                aria-label={pickedVariants[0].attribute}
+                className="w-48"
                 value={pickVariant}
-                onChange={(e) => setPickVariant(e.target.value)}
-              >
-                <option value="">{pickedVariants[0].attribute}…</option>
-                {pickedVariants.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.value}
-                    {Number(v.extraPrice) > 0 ? ` (+${money(Number(v.extraPrice))})` : ''}
-                  </option>
-                ))}
-              </Select>
+                onChange={setPickVariant}
+                placeholder={`${pickedVariants[0].attribute}…`}
+                options={pickedVariants.map((v) => ({
+                  value: v.id,
+                  label: v.value,
+                  hint: Number(v.extraPrice) > 0 ? `+${money(Number(v.extraPrice))}` : undefined,
+                }))}
+              />
             )}
             <Button onClick={addLine} disabled={!pick}>
               Add

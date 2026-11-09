@@ -14,7 +14,7 @@ import PageSkeleton from '@/components/PageSkeleton'
 import StatusBadge from '@/components/StatusBadge'
 import ConfirmButton from '@/components/ConfirmButton'
 import FormField from '@/components/FormField'
-import { Select } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 
 type Detail = {
   id: string
@@ -111,14 +111,15 @@ export default function UserDetail() {
             ) : (
               <div className="flex flex-wrap items-end gap-2">
                 <FormField id="transfer-to" label="Give it all to">
-                  <Select id="transfer-to" value={toUser} onChange={(e) => setToUser(e.target.value)}>
-                    <option value="">Choose a teammate…</option>
-                    {others.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                  </Select>
+                  <Combobox
+                    id="transfer-to"
+                    className="w-56"
+                    value={toUser}
+                    onChange={setToUser}
+                    placeholder="Choose a teammate…"
+                    searchPlaceholder="Search people…"
+                    options={others.map((m) => ({ value: m.id, label: m.name }))}
+                  />
                 </FormField>
                 <ConfirmButton
                   disabled={!toUser || transfer.isPending}

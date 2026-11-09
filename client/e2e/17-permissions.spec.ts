@@ -12,7 +12,7 @@ test.describe('Data entry beyond the admin', () => {
     await page.getByLabel('Customer email').fill(`rep-${Date.now()}@example.com`)
     await page.getByRole('button', { name: 'Add customer' }).click()
     // the new customer is selected, so the quote can be created straight away
-    await expect(page.getByLabel('Customer', { exact: true })).toHaveValue(/[0-9a-f-]{36}/)
+    await expect(page.getByRole('combobox', { name: 'Customer', exact: true })).toContainText(name)
     await page.getByRole('button', { name: 'Create quotation' }).click()
     await expect(page).toHaveURL(/\/quotations\/[0-9a-f-]{36}$/)
   })

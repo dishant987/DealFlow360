@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { humanize, money } from '@/lib/format'
+import { Combobox } from '@/components/ui/combobox'
 
 type Customer = { id: string; name: string; tier: string }
 
@@ -208,19 +209,16 @@ export default function Quotations() {
           </option>
         ))}
       </Select>
-      <Select
+      <Combobox
         aria-label="Filter by customer"
         className="h-8 w-44 text-xs"
         value={customerFilter}
-        onChange={(e) => setCustomerFilter(e.target.value)}
-      >
-        <option value="">All customers</option>
-        {customerNames.map((v) => (
-          <option key={v} value={v}>
-            {v}
-          </option>
-        ))}
-      </Select>
+        onChange={setCustomerFilter}
+        clearLabel="All customers"
+        placeholder="All customers"
+        searchPlaceholder="Search customers…"
+        options={customerNames.map((v) => ({ value: v, label: v }))}
+      />
       <Button
         size="sm"
         variant={flaggedOnly ? 'default' : 'outline'}
@@ -249,19 +247,15 @@ export default function Quotations() {
           </DialogDescription>
         </DialogHeader>
         <FormField id="new-quote-customer" label="Customer">
-          <Select
+          <Combobox
             id="new-quote-customer"
-            autoFocus
             value={customerId}
-            onChange={(e) => setCustomerId(e.target.value)}
-          >
-            <option value="">Select customer…</option>
-            {(customers.data ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.tier})
-              </option>
-            ))}
-          </Select>
+            onChange={setCustomerId}
+            placeholder="Select customer…"
+            searchPlaceholder="Search customers…"
+            loading={customers.isLoading}
+            options={(customers.data ?? []).map((c) => ({ value: c.id, label: c.name, hint: humanize(c.tier) }))}
+          />
         </FormField>
         {newCustomer ? (
           <div className="space-y-3 rounded-lg border bg-muted/30 p-3">

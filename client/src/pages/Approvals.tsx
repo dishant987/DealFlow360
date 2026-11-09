@@ -8,6 +8,7 @@ import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
+import { Combobox } from '@/components/ui/combobox'
 
 type Outcome = 'pending' | 'returned' | 'approved' | 'rejected'
 type Row = {
@@ -258,19 +259,16 @@ export default function Approvals() {
                 <option value="LOW">Low</option>
               </Select>
 
-              <Select
+              <Combobox
                 aria-label="Filter by customer"
                 className="h-8 w-44 text-xs"
                 value={customer}
-                onChange={(e) => setCustomer(e.target.value)}
-              >
-                <option value="">All customers</option>
-                {customers.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </Select>
+                onChange={setCustomer}
+                clearLabel="All customers"
+                placeholder="All customers"
+                searchPlaceholder="Search customers…"
+                options={customers.map((v) => ({ value: v, label: v }))}
+              />
 
               {active > 0 && (
                 <Button size="sm" variant="ghost" onClick={clearAll}>

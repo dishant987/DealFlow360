@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext } from '@playwright/test'
-import { apiAs, login } from './helpers'
+import { apiAs, login, pick } from './helpers'
 
 /**
  * §3 User Roles — one test per bullet in the brief, driven through the UI the
@@ -27,17 +27,14 @@ test.describe('Sales Rep', () => {
     await page.getByRole('button', { name: 'New Quotation' }).click()
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
-    await dialog.getByLabel('Customer').selectOption({ label: 'Acme Corp (gold)' })
+    await pick(dialog, 'Customer', 'Acme Corp')
     await dialog.getByRole('button', { name: 'Create quotation' }).click()
     await expect(page).toHaveURL(/\/quotations\/[0-9a-f-]{36}$/)
 
     // add a product
-    const picker = page.getByRole('combobox').first()
-    const laptop = await picker
-      .locator('option', { hasText: 'Business Laptop' })
-      .first()
-      .getAttribute('value')
-    await picker.selectOption(laptop!)
+    // Business Laptop anchors four seeded pairings, so the upsell panel has something to suggest
+
+    await pick(page, 'Add product', 'Business Laptop')
     await page.getByRole('button', { name: 'Add', exact: true }).click()
     await expect(page.getByRole('row').nth(1)).toBeVisible()
 
