@@ -279,6 +279,7 @@ async function seed() {
         status: opts.status,
         orderDiscountPct: money(orderDiscount),
         portalToken: opts.portalToken ?? null,
+        portalTokenExpiresAt: opts.portalToken ? new Date(Date.now() + 30 * DAY) : null,
         createdAt,
         updatedAt: createdAt,
         lastActivityAt: daysAgo(opts.activityDaysAgo ?? opts.createdDaysAgo),

@@ -1,5 +1,5 @@
-import { test, expect, type APIRequestContext } from '@playwright/test'
-import { apiAs, login } from './helpers'
+import { test, expect, request, type APIRequestContext } from '@playwright/test'
+import { API, apiAs, login } from './helpers'
 
 /** An approved quote, sent to the customer, with its portal token. */
 async function sentQuote(rep: APIRequestContext, discountPct = 0) {
@@ -374,5 +374,21 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     const entry = detail.audit.find((a: any) => a.action === 'customer_counter_discount')
     expect(entry, 'customer action is logged').toBeTruthy()
     expect(entry.user, 'no internal user is credited for a customer action').toBeNull()
+  })
+})
+
+test.describe('Portal link lifetime', () => {
+  test('a link lasts about 30 days, and re-sending replaces it', async () => {
+    const rep = await apiAs('rep')
+    const { id, token } = await sentQuote(rep)
+    const portal = await request.newContext({ baseURL: API })
+    expect((await portal.get(`/api/portal/${token}`)).status()).toBe(200)
+
+    const again = await (await rep.post(`/api/quotations/${id}/send`)).json()
+    const days = (new Date(again.expiresAt).getTime() - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(29.9)
+    expect(days).toBeLessThanOrEqual(30)
+    expect((await portal.get(`/api/portal/${token}`)).status(), 'old link is dead').toBe(404)
+    expect((await portal.get(`/api/portal/${again.portalToken}`)).status()).toBe(200)
   })
 })

@@ -21,6 +21,7 @@ Finance · Insights · Settings) and a **Ctrl/⌘ K** command palette to jump an
 ## Table of contents
 
 - [Quick start](#quick-start)
+- [Deploying](#deploying)
 - [Demo accounts](#demo-accounts)
 - [The five-minute demo](#the-five-minute-demo)
 - [End-to-end flow](#end-to-end-flow)
@@ -96,6 +97,28 @@ pipeline: 6 users, 12 customers across all three tiers, 11 products (hardware, s
 subscriptions), tier price overrides, variants, upsell pairings, 3 warehouses (Main Warehouse, East Depot, West Hub) with stock
 and reorder rules, and roughly 80 quotations spread across every stage, complete with
 approvals, negotiations, fulfilments, invoices and payments.
+
+---
+
+## Deploying
+
+One Docker image runs the whole app: it builds the client, compiles the API, applies committed
+migrations on start (a failed migration stops the deploy), and serves client + API from one
+origin, so cookies, live updates and the Content-Security-Policy stay same-origin.
+
+```bash
+docker build -t dealwise .
+docker run -p 4000:4000   -e DATABASE_URL=postgresql://user:pass@host:5432/dealwise?sslmode=require   -e JWT_SECRET=<at least 32 random characters>   -e CLIENT_URL=https://app.yourdomain.com   dealwise
+```
+
+Put it behind HTTPS (the session cookie is HTTPS-only in production). Without Docker:
+`npm run build` in both folders, then `CLIENT_DIST=../client/dist npm run start:prod` in `server/`.
+
+**Backups** are the database host's job: turn on daily backups with point-in-time recovery
+(every managed Postgres offers it) and test a restore before going live.
+
+**Customer portal links** expire 30 days after they're sent; re-sending a quote issues a fresh
+link and the old one stops working.
 
 ---
 

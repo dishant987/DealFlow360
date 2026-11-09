@@ -6,10 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dealwise — quote to cash, on autopilot</title>
     <meta name="description" content="Dealwise is B2B sales operations software: quotes, discount approvals, inventory, billing and a customer portal in one place." />
-    <!-- apply the saved theme before first paint so dark mode never flashes light; default is light -->
-    <script>
-      try { if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark') } catch (e) {}
-    </script>
+    <!-- apply the saved theme before first paint so dark mode never flashes light; default is light.
+         A file, not inline, so the production Content-Security-Policy (script-src 'self') allows it. -->
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>

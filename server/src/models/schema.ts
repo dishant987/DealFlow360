@@ -244,6 +244,8 @@ export const quotations = pgTable('quotations', {
     .notNull()
     .default('0'),
   portalToken: text('portal_token').unique(), // magic-link token for customer portal
+  // links stop working after this; a missing value counts as expired (fail closed)
+  portalTokenExpiresAt: timestamp('portal_token_expires_at', { withTimezone: true }),
   lastActivityAt: timestamp('last_activity_at', { withTimezone: true }).defaultNow().notNull(), // stalled-deal detection
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

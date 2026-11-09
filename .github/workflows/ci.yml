@@ -80,3 +80,39 @@ jobs:
           name: playwright-results
           path: client/test-results/
           retention-days: 7
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dealwise
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t dealwise:ci .
+      # the container migrates an empty database on start, then serves client + API on one port
+      - name: Run and smoke-test
+        run: |
+          docker run -d --name app --network host \
+            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dealwise \
+            -e JWT_SECRET=ci-only-secret-not-used-anywhere-else-0123456789 \
+            -e CLIENT_URL=https://ci.dealwise.example \
+            -e MAIL_ENABLED=false \
+            dealwise:ci
+          for i in $(seq 1 30); do curl -fs localhost:4000/api/health && break; sleep 2; done
+          curl -fs localhost:4000/api/health | grep -q '"db":"connected"'
+          curl -fs localhost:4000/ | grep -q '<title>Dealwise'
+          curl -fs localhost:4000/quotations | grep -q '<title>Dealwise'
+          docker logs app | grep -q 'migrations up to date'
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
