@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express'
 import { eq } from 'drizzle-orm'
-import { db } from '../config/db.js'
+import { db, scopeRequest } from '../config/db.js'
 import { quotations, users } from '../models/schema.js'
 import { cookieName, verifyToken, type JwtUser, type Role } from '../utils/token.js'
 
@@ -10,6 +10,8 @@ declare global {
   namespace Express {
     interface Request {
       user?: JwtUser
+      /** company of this request: the signed-in user's, or a portal quote's */
+      orgId?: string
     }
   }
 }
@@ -26,12 +28,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   // The JWT lives 7 days; re-read the account so blocking, deletion and role
   // changes take effect on the next request, not at token expiry.
   const [u] = await db
-    .select({ role: users.role, blocked: users.blocked })
+    .select({ role: users.role, blocked: users.blocked, orgId: users.organizationId })
     .from(users)
     .where(eq(users.id, claims.id))
   if (!u || u.blocked) return res.status(401).json({ error: 'unauthenticated' })
   req.user = { ...claims, role: u.role }
-  next()
+  req.orgId = u.orgId
+  // everything after this point only sees this company's data (RLS)
+  scopeRequest(u.orgId, res, next)
 }
 
 export function requireRole(...roles: Role[]) {

@@ -18,5 +18,6 @@ COPY --from=build /app/server/drizzle ./drizzle
 COPY --from=build /app/client/dist /app/client/dist
 USER node
 EXPOSE 4000
-# apply committed migrations, then start; a failed migration stops the deploy
+# apply committed migrations (MIGRATE_DATABASE_URL = owner login), then start as DATABASE_URL
+# (the app login from `npm run app-role:prod`); a failed migration stops the deploy
 CMD ["npm", "run", "start:prod"]

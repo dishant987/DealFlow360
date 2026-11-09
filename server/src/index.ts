@@ -21,6 +21,18 @@ server.listen(port, async () => {
   try {
     await pool.query('SELECT 1')
     console.log('✔ database connected')
+    // a login that skips row-level security would let companies see each other's data
+    const [r] = (await pool.query(
+      'select current_user as u, rolsuper or rolbypassrls as skips from pg_roles where rolname = current_user',
+    )).rows
+    if (r?.skips) {
+      const msg = `DATABASE_URL logs in as "${r.u}", which bypasses row-level security, so company data is NOT isolated. Run \`npm run db:app-role\` and point DATABASE_URL at that login.`
+      if (process.env.NODE_ENV === 'production') {
+        console.error(`✖ ${msg}`)
+        process.exit(1)
+      }
+      console.warn(`⚠ ${msg}`)
+    }
     startCron()
   } catch (e) {
     console.error('✖ database connection failed:', (e as Error).message)

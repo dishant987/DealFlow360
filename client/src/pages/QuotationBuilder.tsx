@@ -329,7 +329,20 @@ export default function QuotationBuilder() {
         <PageSkeleton />
       </AppShell>
     )
-  if (!quote.data) return <div className="p-8 text-destructive">Quotation not found.</div>
+  if (!quote.data)
+    return (
+      <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Quotations', to: '/quotations' }, { label: 'Not found' }]}>
+        <div className="mx-auto max-w-md rounded-xl border bg-card p-6 text-center">
+          <h1 className="font-heading text-lg font-semibold">Quotation not found.</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            It may have been deleted, or it belongs to a different company.
+          </p>
+          <Link to="/quotations" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">
+            Back to quotations
+          </Link>
+        </div>
+      </AppShell>
+    )
 
   return (
     <AppShell

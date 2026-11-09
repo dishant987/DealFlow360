@@ -2,7 +2,7 @@ import type { Request, Response } from 'express'
 import crypto from 'crypto'
 import { z } from 'zod'
 import { and, eq, inArray } from 'drizzle-orm'
-import { db } from '../config/db.js'
+import { db, runInTenant } from '../config/db.js'
 import {
   quotations,
   quoteLines,
@@ -500,22 +500,25 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
   const portalUrl = `${CLIENT_URL}/portal/${token}`
   const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId))
   if (customer?.email) {
+    // runs after the response, when the request's company transaction is closed
+    const orgId = req.orgId!
     void sendPortalLink(customer.email, portalUrl, customer.name)
       .then(() =>
-        db.insert(auditLog).values({
+        runInTenant(orgId, () => db.insert(auditLog).values({
           quotationId: q.id,
           action: 'portal_link_emailed',
           detail: { to: customer.email },
-        }),
+        })),
       )
       .catch((e: Error) => {
         console.error('portal link email failed:', e.message)
-        return db.insert(auditLog).values({
+        return runInTenant(orgId, () => db.insert(auditLog).values({
           quotationId: q.id,
           action: 'portal_link_email_failed',
           detail: { to: customer.email, error: e.message },
-        })
+        }))
       })
+      .catch((e: Error) => console.error('portal link audit failed:', e.message))
   }
 
   await db.insert(auditLog).values({

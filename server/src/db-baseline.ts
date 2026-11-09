@@ -1,7 +1,9 @@
 import 'dotenv/config'
 import crypto from 'crypto'
 import fs from 'fs'
-import { pool } from './config/db.js'
+import { poolFor } from './config/db.js'
+
+const pool = poolFor((process.env.MIGRATE_DATABASE_URL || process.env.DATABASE_URL)!)
 
 /*
  * One-time switch from `db:push` to `db:migrate` for a database whose tables were

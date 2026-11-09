@@ -41,7 +41,7 @@ app.use((req, _res, next) => {
 app.use((req, res, next) => {
   if (req.method !== 'GET') {
     res.on('finish', () => {
-      if (res.statusCode < 400) emitChange({ path: req.originalUrl, method: req.method })
+      if (res.statusCode < 400 && req.orgId) emitChange({ path: req.originalUrl, method: req.method }, req.orgId)
     })
   }
   next()

@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input'
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
+  company: z.string().max(120).optional(),
   email: z.string().email('Enter a valid email'),
   password: z.string().min(6, 'At least 6 characters'),
 })
@@ -41,8 +42,8 @@ export default function Signup() {
 
   return (
     <AuthLayout
-      title="Create your account"
-      description="Start building quotations in a couple of minutes."
+      title="Create your company"
+      description="You'll be its admin — add your team from Config → Users."
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <GoogleButton />
@@ -55,6 +56,10 @@ export default function Signup() {
             aria-invalid={!!errors.name}
             {...register('name')}
           />
+        </FormField>
+
+        <FormField id="company" label="Company name">
+          <Input id="company" autoComplete="organization" placeholder="Acme Inc." {...register('company')} />
         </FormField>
 
         <FormField id="email" label="Work email" error={errors.email?.message}>
@@ -85,8 +90,8 @@ export default function Signup() {
         </Button>
 
         <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          Signing up creates a <strong className="font-medium text-foreground">sales rep</strong>{' '}
-          account. Manager, finance and admin roles are granted by an administrator.
+          Signing up creates a <strong className="font-medium text-foreground">new company</strong>{' '}
+          with you as its admin. Joining a colleague's company? Ask their admin to add you.
         </p>
 
         <p className="text-center text-sm text-muted-foreground">

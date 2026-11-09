@@ -13,6 +13,8 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/seed.ts",
     "db:baseline": "tsx src/db-baseline.ts",
+    "db:app-role": "tsx src/db-app-role.ts",
+    "app-role:prod": "node dist/db-app-role.js",
     "migrate:prod": "node dist/migrate.js",
     "start:prod": "node dist/migrate.js && node dist/index.js",
     "test": "vitest run"

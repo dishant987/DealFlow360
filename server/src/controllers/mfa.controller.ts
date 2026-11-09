@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
-import { db } from '../config/db.js'
+import { db, runInTenant } from '../config/db.js'
 import { auditLog, users } from '../models/schema.js'
 import {
   cookieName,
@@ -63,7 +63,7 @@ export async function verifyMfa(req: Request, res: Response) {
         .update(users)
         .set({ mfaRecoveryHashes: u.mfaRecoveryHashes.filter((x) => x !== h) })
         .where(eq(users.id, u.id))
-      await audit(u.id, 'mfa_recovery_code_used')
+      await runInTenant(u.organizationId, () => audit(u.id, 'mfa_recovery_code_used'))
     }
   }
   if (!ok) return res.status(401).json({ error: 'That code is not valid. Try the latest code from your app.' })

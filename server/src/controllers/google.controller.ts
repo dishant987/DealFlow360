@@ -5,6 +5,7 @@ import { db } from '../config/db.js'
 import { users } from '../models/schema.js'
 import { cookieOpts, hashPassword } from '../utils/token.js'
 import { completeSignIn } from './mfa.controller.js'
+import { createCompany } from './auth.controller.js'
 
 // Google sign-in with the OpenID Connect authorization-code flow, on fetch alone.
 // The id_token comes straight from Google's token endpoint over TLS, which OIDC
@@ -79,15 +80,18 @@ export async function googleCallback(req: Request, res: Response) {
 
   let [u] = await db.select().from(users).where(eq(users.email, email))
   if (!u) {
-    // same policy as self-signup: a new account is a rep. It gets a random
-    // password; "Forgot password" sets a real one if they ever want it.
+    // same policy as self-signup: a new company with this person as its admin.
+    // Random password; "Forgot password" sets a real one if they ever want it.
+    const name = claims.name || email.split('@')[0]
+    const org = await createCompany(`${name}'s company`)
     ;[u] = await db
       .insert(users)
       .values({
-        name: claims.name || email.split('@')[0],
+        name,
         email,
         passwordHash: await hashPassword(crypto.randomBytes(32).toString('hex')),
-        role: 'rep',
+        role: 'admin',
+        organizationId: org.id,
       })
       .returning()
   }
