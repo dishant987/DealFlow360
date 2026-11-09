@@ -20,6 +20,20 @@ export interface JwtUser {
   email: string
 }
 
+// Password (or Google) accepted but MFA still owed: a 5-minute token that can
+// only be traded for a session at /auth/mfa/verify, never used as one.
+export const mfaCookieName = 'mfa_pending'
+export const mfaCookieOpts = { ...cookieOpts, maxAge: 5 * 60 * 1000 }
+export const signMfaPending = (id: string) => jwt.sign({ id, purpose: 'mfa' }, SECRET, { expiresIn: '5m' })
+export function verifyMfaPending(t: string): string | null {
+  try {
+    const p = jwt.verify(t, SECRET) as { id?: string; purpose?: string }
+    return p.purpose === 'mfa' && p.id ? p.id : null
+  } catch {
+    return null
+  }
+}
+
 export const hashPassword = (p: string) => bcrypt.hash(p, 10)
 export const verifyPassword = (p: string, hash: string) => bcrypt.compare(p, hash)
 export const signToken = (u: JwtUser) => jwt.sign(u, SECRET, { expiresIn: '7d' })

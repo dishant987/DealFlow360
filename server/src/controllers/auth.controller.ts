@@ -9,10 +9,12 @@ import {
   signToken,
   cookieName,
   cookieOpts,
+  mfaCookieName,
   generateResetToken,
   hashResetToken,
 } from '../utils/token.js'
 import { sendPasswordReset } from '../utils/mailer.js'
+import { completeSignIn } from './mfa.controller.js'
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 
@@ -56,14 +58,11 @@ export async function login(req: Request, res: Response) {
   // checked after the password, so a wrong guess never reveals the account is blocked
   if (u.blocked) return res.status(403).json({ error: 'This account is blocked. Contact your administrator.' })
 
-  const token = signToken({ id: u.id, role: u.role, email: u.email })
-  res
-    .cookie(cookieName, token, cookieOpts)
-    .json({ id: u.id, name: u.name, email: u.email, role: u.role })
+  res.json(completeSignIn(res, u))
 }
 
 export function logout(_req: Request, res: Response) {
-  res.clearCookie(cookieName).json({ ok: true })
+  res.clearCookie(cookieName).clearCookie(mfaCookieName).json({ ok: true })
 }
 
 export async function forgotPassword(req: Request, res: Response) {
@@ -151,7 +150,7 @@ export async function updateMe(req: Request, res: Response) {
 
 export async function me(req: Request, res: Response) {
   const [u] = await db
-    .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+    .select({ id: users.id, name: users.name, email: users.email, role: users.role, mfaEnabled: users.mfaEnabled })
     .from(users)
     .where(eq(users.id, req.user!.id))
   if (!u) return res.status(404).json({ error: 'not found' })
