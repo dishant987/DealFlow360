@@ -10,6 +10,7 @@ import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
+import { humanize, money } from '@/lib/format'
 
 type Filters = { from?: string; to?: string; status?: string; repId?: string; categoryId?: string }
 type Row = { id: string; quoteNumber: string; customer: string; rep: string; status: string; riskScore: number; amount: number }
@@ -64,7 +65,7 @@ export default function Reports() {
   }
 
   const chartData = Object.entries(report.data?.summary.byStatus ?? {}).map(([status, count]) => ({
-    status: status.replace(/_/g, ' '),
+    status: humanize(status),
     raw: status,
     count,
   }))
@@ -89,7 +90,7 @@ export default function Reports() {
             <option value="">All statuses</option>
             {options.data?.statuses.map((s) => (
               <option key={s} value={s}>
-                {s.replace(/_/g, ' ')}
+                {humanize(s)}
               </option>
             ))}
           </Select>
@@ -134,7 +135,7 @@ export default function Reports() {
           />
           <StatCard
             label="Total value"
-            value={`$${(report.data?.summary.totalValue ?? 0).toFixed(2)}`}
+            value={money((report.data?.summary.totalValue ?? 0))}
             tone="primary"
             loading={report.isLoading}
           />
@@ -209,5 +210,5 @@ const reportColumns: Column<Row>[] = [
   { key: 'rep', label: 'Rep' },
   { key: 'status', label: 'Status', render: (r) => <StatusBadge status={r.status} /> },
   { key: 'riskScore', label: 'Risk', align: 'right', render: (r) => r.riskScore.toFixed(1) },
-  { key: 'amount', label: 'Amount', align: 'right', render: (r) => `$${r.amount.toFixed(2)}` },
+  { key: 'amount', label: 'Amount', align: 'right', render: (r) => money(r.amount) },
 ]

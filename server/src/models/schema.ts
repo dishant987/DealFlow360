@@ -26,6 +26,8 @@ const pk = () => uuid('id').primaryKey().defaultRandom()
 export const organizations = pgTable('organizations', {
   id: pk(),
   name: text('name').notNull(),
+  // ISO 4217 code every amount is shown in; chosen at sign-up, editable in Settings
+  currency: text('currency').notNull().default('USD'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 // Migration 0006 also adds an index on every organization_id and the RLS policies;

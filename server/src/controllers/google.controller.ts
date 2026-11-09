@@ -98,6 +98,6 @@ export async function googleCallback(req: Request, res: Response) {
   if (u.blocked) return fail('blocked')
 
   res.clearCookie(STATE_COOKIE)
-  const result = completeSignIn(res, u)
+  const result = await completeSignIn(res, u)
   res.redirect('mfaRequired' in result ? `${clientUrl()}/login?mfa=1` : `${clientUrl()}/`)
 }

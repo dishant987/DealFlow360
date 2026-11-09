@@ -13,6 +13,7 @@ import DataTable, { type Column } from '@/components/DataTable'
 import StatCard from '@/components/StatCard'
 import Panel from '@/components/Panel'
 import { Select } from '@/components/ui/select'
+import { humanize } from '@/lib/format'
 
 type Row = {
   id: string
@@ -347,7 +348,7 @@ export default function FulfillmentQueue() {
                   <option value="">All deal statuses</option>
                   {dealStatuses.map((v) => (
                     <option key={v} value={v}>
-                      {v.replace(/_/g, ' ')}
+                      {humanize(v)}
                     </option>
                   ))}
                 </Select>

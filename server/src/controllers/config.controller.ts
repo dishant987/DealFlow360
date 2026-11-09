@@ -4,11 +4,13 @@ import { and, desc, eq } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { hashPassword } from '../utils/token.js'
 import { num } from '../utils/crud.js'
+import { currencySchema } from '../utils/format.js'
 import {
   stock,
   warehouses,
   products,
   appSettings,
+  organizations,
   users,
   productPairings,
   productVariants,
@@ -278,9 +280,10 @@ export async function listAudit(_req: Request, res: Response) {
 }
 
 /* ---- app settings (singleton row) ---- */
-export async function getSettings(_req: Request, res: Response) {
+export async function getSettings(req: Request, res: Response) {
   const [row] = await db.select().from(appSettings).limit(1)
-  res.json(row ?? null)
+  const [org] = await db.select({ currency: organizations.currency }).from(organizations).where(eq(organizations.id, req.orgId!))
+  res.json(row ? { ...row, currency: org?.currency ?? 'USD' } : null)
 }
 const settingsSchema = z
   .object({
@@ -288,13 +291,20 @@ const settingsSchema = z
     financeThreshold: num,
     minUpsellMarginPct: num,
     stalledDays: z.number().int().positive(),
+    currency: currencySchema,
   })
   .partial()
 export async function updateSettings(req: Request, res: Response) {
   const p = settingsSchema.safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
-  const [row] = await db.update(appSettings).set(p.data).returning() // singleton → updates the one row
-  res.json(row ?? null)
+  const { currency, ...rest } = p.data
+  // organizations isn't under RLS, so scope to this company explicitly
+  if (currency) await db.update(organizations).set({ currency }).where(eq(organizations.id, req.orgId!))
+  const [row] = Object.keys(rest).length
+    ? await db.update(appSettings).set(rest).returning() // RLS: only this company's row
+    : await db.select().from(appSettings).limit(1)
+  const [org] = await db.select({ currency: organizations.currency }).from(organizations).where(eq(organizations.id, req.orgId!))
+  res.json(row ? { ...row, currency: org?.currency ?? 'USD' } : null)
 }
 
 /* ---- user management (admin creates manager/finance/admin) ---- */

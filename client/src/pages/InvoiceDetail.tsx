@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { money } from '@/lib/format'
 
 type Detail = {
   id: string
@@ -141,9 +142,9 @@ export default function InvoiceDetail() {
                   <TableRow key={l.id}>
                     <TableCell>{l.product}</TableCell>
                     <TableCell className="text-right">{l.quantity}</TableCell>
-                    <TableCell className="text-right">${Number(l.unitPrice).toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{money(Number(l.unitPrice))}</TableCell>
                     <TableCell className="text-right">{Number(l.discountPct).toFixed(0)}%</TableCell>
-                    <TableCell className="text-right font-medium">${l.net.toFixed(2)}</TableCell>
+                    <TableCell className="text-right font-medium">{money(l.net)}</TableCell>
                   </TableRow>
                 ))}
                 {d.lines.length === 0 && (
@@ -168,7 +169,7 @@ export default function InvoiceDetail() {
                     <span>
                       {p.method} · {new Date(p.paidAt).toLocaleString()}
                     </span>
-                    <span className="font-medium">${Number(p.amount).toFixed(2)}</span>
+                    <span className="font-medium">{money(Number(p.amount))}</span>
                   </li>
                 ))}
               </ul>
@@ -182,7 +183,7 @@ export default function InvoiceDetail() {
                 {d.creditNotes.map((c) => (
                   <li key={c.id} className="flex justify-between border-b py-1.5">
                     <span>{c.reason}</span>
-                    <span>${Number(c.amount).toFixed(2)}</span>
+                    <span>{money(Number(c.amount))}</span>
                   </li>
                 ))}
               </ul>
@@ -199,12 +200,12 @@ export default function InvoiceDetail() {
           <Row label="Issued" value={new Date(d.issuedAt).toLocaleDateString()} />
           <Row label="Due" value={d.dueAt ? new Date(d.dueAt).toLocaleDateString() : '—'} />
           <div className="border-t pt-2 space-y-2">
-            <Row label="Invoice total" value={`$${Number(d.amount).toFixed(2)}`} />
-            <Row label="Paid" value={`$${d.paidTotal.toFixed(2)}`} />
+            <Row label="Invoice total" value={money(Number(d.amount))} />
+            <Row label="Paid" value={money(d.paidTotal)} />
             <div className="flex justify-between font-semibold">
               <span>Balance</span>
               <span className={d.balance > 0 ? 'text-amber-600' : 'text-emerald-600'}>
-                ${d.balance.toFixed(2)}
+                {money(d.balance)}
               </span>
             </div>
           </div>

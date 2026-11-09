@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import DataTable, { type Column } from '@/components/DataTable'
+import { humanize } from '@/lib/format'
 
 type Entry = {
   id: string
@@ -47,7 +48,7 @@ const columns: Column<Entry>[] = [
     label: 'Action',
     render: (r) => (
       <span className={`rounded px-2 py-0.5 text-xs ${tone(r.action)}`}>
-        {r.action.replace(/_/g, ' ')}
+        {humanize(r.action)}
       </span>
     ),
   },

@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { humanize, money } from '@/lib/format'
 
 type Variant = { id: string; attribute: string; value: string; extraPrice: string }
 type Product = {
@@ -374,9 +375,10 @@ export default function QuotationBuilder() {
         </div>
       }
     >
-      <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+      {/* minmax(0,1fr)/min-w-0: on a phone the wide lines table scrolls in its own box instead of widening the page */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* cart */}
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           {/* B8: the customer's side of the conversation, and the rep's reply to it */}
           {requests.length > 0 && (
             <div className="rounded-xl border bg-background">
@@ -402,7 +404,7 @@ export default function QuotationBuilder() {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm">
                         {r.product && <span className="font-medium text-primary">{r.product}: </span>}
-                        {r.message || <span className="text-muted-foreground">{r.type.replace(/_/g, ' ')}</span>}
+                        {r.message || <span className="text-muted-foreground">{humanize(r.type)}</span>}
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span>{new Date(r.createdAt).toLocaleDateString()}</span>
@@ -460,7 +462,7 @@ export default function QuotationBuilder() {
                 <optgroup key={category} label={category}>
                   {items.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} — ${Number(p.unitPrice).toFixed(2)} {p.isPromoted ? '★' : ''}
+                      {p.name} — {money(Number(p.unitPrice))} {p.isPromoted ? '★' : ''}
                     </option>
                   ))}
                 </optgroup>
@@ -475,7 +477,7 @@ export default function QuotationBuilder() {
                 {pickedVariants.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.value}
-                    {Number(v.extraPrice) > 0 ? ` (+$${Number(v.extraPrice).toFixed(2)})` : ''}
+                    {Number(v.extraPrice) > 0 ? ` (+${money(Number(v.extraPrice))})` : ''}
                   </option>
                 ))}
               </Select>
@@ -487,7 +489,7 @@ export default function QuotationBuilder() {
           )}
           {!canEdit && (
             <p className="text-xs rounded bg-muted px-2 py-1.5 text-muted-foreground">
-              Locked — this quotation is {status.replace(/_/g, ' ')}. An approver must return it for
+              Locked — this quotation is {humanize(status).toLowerCase()}. An approver must return it for
               revision before it can be edited.
             </p>
           )}
@@ -560,7 +562,7 @@ export default function QuotationBuilder() {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right">${m.net.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">{money(m.net)}</TableCell>
                     <TableCell className={`text-right ${marginColor(m.marginPct)}`}>
                       {m.marginPct.toFixed(1)}%
                     </TableCell>
@@ -610,7 +612,7 @@ export default function QuotationBuilder() {
                   </div>
                   <div className="text-xs text-muted-foreground">{s.reason}</div>
                   <div className="text-xs">
-                    ${Number(s.unitPrice).toFixed(2)} ·{' '}
+                    {money(Number(s.unitPrice))} ·{' '}
                     <span className={marginColor(s.marginPct)}>{s.marginPct}% margin</span>
                   </div>
                   {(() => {
@@ -648,7 +650,7 @@ export default function QuotationBuilder() {
           <h2 className="font-semibold">Summary</h2>
           <div className="flex justify-between text-sm">
             <span>Subtotal</span>
-            <span>${totals.subtotal.toFixed(2)}</span>
+            <span>{money(totals.subtotal)}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
             <span>Order discount %</span>
@@ -663,16 +665,16 @@ export default function QuotationBuilder() {
           </div>
           <div className="flex justify-between font-medium border-t pt-2">
             <span>Total</span>
-            <span>${totals.total.toFixed(2)}</span>
+            <span>{money(totals.total)}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span>Cost</span>
-            <span>${totals.cost.toFixed(2)}</span>
+            <span>{money(totals.cost)}</span>
           </div>
           <div className={`flex justify-between font-semibold ${marginColor(totals.marginPct)}`}>
             <span>Margin</span>
             <span>
-              ${totals.marginAmount.toFixed(2)} ({totals.marginPct.toFixed(1)}%)
+              {money(totals.marginAmount)} ({totals.marginPct.toFixed(1)}%)
             </span>
           </div>
 

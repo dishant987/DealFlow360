@@ -22,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { humanize, money } from '@/lib/format'
 
 type Customer = { id: string; name: string; tier: string }
 
@@ -130,7 +131,7 @@ export default function Quotations() {
       label: 'Amount',
       align: 'right',
       value: (r) => r.amount,
-      render: (r) => `$${r.amount.toFixed(2)}`,
+      render: (r) => money(r.amount),
     },
     {
       key: 'riskScore',
@@ -203,7 +204,7 @@ export default function Quotations() {
         <option value="">All statuses</option>
         {statuses.map((v) => (
           <option key={v} value={v}>
-            {v.replace(/_/g, ' ')}
+            {humanize(v)}
           </option>
         ))}
       </Select>

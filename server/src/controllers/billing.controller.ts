@@ -14,6 +14,7 @@ import {
   auditLog,
 } from '../models/schema.js'
 import { computeLine } from '../services/pricing.js'
+import { money as fmt, orgCurrency } from '../utils/format.js'
 import {
   nextBillingDate,
   periodDays,
@@ -355,7 +356,7 @@ export async function payInvoice(req: Request<{ invoiceId: string }>, res: Respo
   if (amount > outstanding)
     return res
       .status(400)
-      .json({ error: `Payment exceeds the outstanding balance of $${outstanding.toFixed(2)}.` })
+      .json({ error: `Payment exceeds the outstanding balance of ${fmt(outstanding, await orgCurrency(req.orgId))}.` })
 
   await db
     .insert(payments)

@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { humanize, money, setCurrency } from '@/lib/format'
 
 type Line = {
   id: string
@@ -27,6 +28,7 @@ type Line = {
   lineType: string
 }
 type PortalQuote = {
+  currency: string
   quoteNumber: string
   customer: string
   status: string
@@ -45,7 +47,6 @@ type PortalQuote = {
   }[]
 }
 
-const money = (n: number) => `$${n.toFixed(2)}`
 
 export default function Portal() {
   const { token } = useParams<{ token: string }>()
@@ -147,6 +148,8 @@ export default function Portal() {
     )
 
   const q = quote.data
+  // the customer sees amounts in the seller's currency
+  setCurrency(q.currency)
   const confirmed = q.status === 'confirmed'
   // The customer may only act while the quote is genuinely open to them — the
   // same two statuses the server accepts. Anything else (a counter-offer sent
@@ -242,7 +245,7 @@ export default function Portal() {
                           </TableCell>
                           <TableCell className="text-right">{l.quantity}</TableCell>
                           <TableCell className="text-right">
-                            ${Number(l.unitPrice).toFixed(2)}
+                            {money(Number(l.unitPrice))}
                           </TableCell>
                           <TableCell className="text-right">
                             {Number(l.discountPct) > 0 ? (
@@ -358,7 +361,7 @@ export default function Portal() {
                             <span className="font-medium text-primary">{line.product}: </span>
                           )}
                           <span className="text-muted-foreground">
-                            {n.message || n.type.replace(/_/g, ' ')}
+                            {n.message || humanize(n.type)}
                           </span>
                           {(n.counterDiscountPct || n.requestedDeliveryDate) && (
                             <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted-foreground">

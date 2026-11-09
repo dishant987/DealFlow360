@@ -14,6 +14,7 @@ import {
   hashResetToken,
 } from '../utils/token.js'
 import { sendPasswordReset } from '../utils/mailer.js'
+import { currencySchema } from '../utils/format.js'
 import { completeSignIn } from './mfa.controller.js'
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
@@ -25,11 +26,12 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   company: z.string().trim().min(1).max(120).optional(),
+  currency: currencySchema.optional(),
 })
 
 /** A new company with the defaults the pricing engine needs (no tiers = every discount is over the limit). */
-export async function createCompany(name: string) {
-  const [org] = await db.insert(organizations).values({ name }).returning()
+export async function createCompany(name: string, currency = 'USD') {
+  const [org] = await db.insert(organizations).values({ name, currency }).returning()
   await runInTenant(org.id, async () => {
     await db.insert(appSettings).values({})
     await db.insert(discountTiers).values([
@@ -52,7 +54,7 @@ export async function signup(req: Request, res: Response) {
   const existing = await db.select().from(users).where(eq(users.email, email))
   if (existing.length) return res.status(409).json({ error: 'email already registered' })
 
-  const org = await createCompany(parsed.data.company || `${name}'s company`)
+  const org = await createCompany(parsed.data.company || `${name}'s company`, parsed.data.currency)
   const [u] = await db
     .insert(users)
     .values({ name, email, passwordHash: await hashPassword(password), role: 'admin', organizationId: org.id })
@@ -61,7 +63,7 @@ export async function signup(req: Request, res: Response) {
   res
     .cookie(cookieName, token, cookieOpts)
     .status(201)
-    .json({ id: u.id, name: u.name, email: u.email, role: u.role })
+    .json({ id: u.id, name: u.name, email: u.email, role: u.role, currency: org.currency })
 }
 
 export async function login(req: Request, res: Response) {
@@ -75,7 +77,7 @@ export async function login(req: Request, res: Response) {
   // checked after the password, so a wrong guess never reveals the account is blocked
   if (u.blocked) return res.status(403).json({ error: 'This account is blocked. Contact your administrator.' })
 
-  res.json(completeSignIn(res, u))
+  res.json(await completeSignIn(res, u))
 }
 
 export function logout(_req: Request, res: Response) {
@@ -167,8 +169,16 @@ export async function updateMe(req: Request, res: Response) {
 
 export async function me(req: Request, res: Response) {
   const [u] = await db
-    .select({ id: users.id, name: users.name, email: users.email, role: users.role, mfaEnabled: users.mfaEnabled })
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      mfaEnabled: users.mfaEnabled,
+      currency: organizations.currency,
+    })
     .from(users)
+    .innerJoin(organizations, eq(organizations.id, users.organizationId))
     .where(eq(users.id, req.user!.id))
   if (!u) return res.status(404).json({ error: 'not found' })
   res.json(u)
