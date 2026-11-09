@@ -12,6 +12,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/seed.ts",
+    "db:baseline": "tsx src/db-baseline.ts",
     "test": "vitest run"
   },
   "keywords": [],

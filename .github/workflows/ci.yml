@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dealwise
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dealwise
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
+      CLIENT_URL: http://localhost:5173
+      MAIL_ENABLED: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            client/package-lock.json
+
+      - name: Install
+        run: |
+          npm ci --prefix server
+          npm ci --prefix client
+
+      - name: Server — type-check and unit tests
+        working-directory: server
+        run: |
+          npx tsc --noEmit
+          npm test
+
+      # builds the schema from committed migrations, so a broken migration fails CI
+      - name: Database — migrate and seed
+        working-directory: server
+        run: |
+          npm run db:migrate
+          npm run db:seed
+
+      - name: Client — lint and build
+        working-directory: client
+        run: |
+          npm run lint
+          npm run build
+
+      # Playwright drives the Chrome that ships on GitHub's Ubuntu image (channel: 'chrome')
+      # and starts both dev servers itself (webServer in playwright.config.ts).
+      - name: End-to-end
+        working-directory: client
+        run: npx playwright test --reporter=line
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: client/test-results/
+          retention-days: 7

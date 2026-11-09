@@ -48,7 +48,7 @@ createdb dealwise
 cd server
 cp .env.example .env        # set DATABASE_URL and JWT_SECRET
 npm install
-npm run db:push             # create the schema
+npm run db:migrate          # create the schema from committed migrations
 npm run db:seed             # sample data — see below
 npm run dev                 # http://localhost:4000
 ```
@@ -84,6 +84,12 @@ Client build settings:
 | `VITE_API_TARGET` | Dev-server proxy target for `/api` and `/socket.io` (default `http://localhost:4000`). |
 
 In production, serve the client and API from one origin (a reverse proxy routing `/api` and `/socket.io` to the server); the client calls both with relative URLs.
+
+**Schema changes.** Edit `server/src/models/schema.ts`, run `npm run db:generate`, commit the new
+file in `server/drizzle/`, and apply it with `npm run db:migrate` (every environment, including
+production). Already have a database that was created with `db:push`? Run `npm run db:baseline`
+once: it records the existing migrations as applied without running them, and refuses on an empty
+database or when nothing is missing.
 
 `npm run db:seed` is destructive — it clears every table and rebuilds a full demo
 pipeline: 6 users, 12 customers across all three tiers, 11 products (hardware, services,
@@ -422,6 +428,9 @@ session cookie.
 ---
 
 ## Testing
+
+CI (`.github/workflows/ci.yml`) runs on every PR and push to `main`: type-check, unit tests,
+migrate + seed a fresh Postgres, lint + build the client, then the full e2e suite.
 
 ```bash
 cd server && npm test          # unit tests — pure business logic
