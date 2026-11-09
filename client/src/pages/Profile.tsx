@@ -10,6 +10,7 @@ import { roleLabel } from '@/lib/roles'
 import { errText } from '@/lib/errors'
 import { useAuth, type Role } from '@/hooks/useAuth'
 import TwoFactorCard from '@/components/TwoFactorCard'
+import DevicesCard from '@/components/DevicesCard'
 import AppShell from '@/components/AppShell'
 import Avatar from '@/components/Avatar'
 import FormField from '@/components/FormField'
@@ -203,6 +204,8 @@ export default function Profile() {
           </section>
 
           <TwoFactorCard />
+
+          <DevicesCard />
 
           <section className="rounded-xl border bg-background p-5">
             <h2 className="font-heading font-medium">Your role</h2>

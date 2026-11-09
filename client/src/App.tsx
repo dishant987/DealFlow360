@@ -40,6 +40,8 @@ const Login = page(() => import('@/pages/Login'))
 const Signup = page(() => import('@/pages/Signup'))
 const ForgotPassword = page(() => import('@/pages/ForgotPassword'))
 const ResetPassword = page(() => import('@/pages/ResetPassword'))
+const VerifyEmail = page(() => import('@/pages/VerifyEmail'))
+const UserDetail = page(() => import('@/pages/UserDetail'))
 const Dashboard = page(() => import('@/pages/Dashboard'))
 const Admin = page(() => import('@/pages/Admin'))
 const Quotations = page(() => import('@/pages/Quotations'))
@@ -76,6 +78,7 @@ export default function App() {
       <Route path="/signup" element={<Signup />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/verify-email" element={<VerifyEmail />} />
       {/* public, token-gated customer portal — separate from the internal app */}
       <Route path="/portal/:token" element={<Portal />} />
       <Route path="/" element={<Home />} />
@@ -102,6 +105,9 @@ export default function App() {
       </Route>
       <Route element={<ProtectedRoute roles={['manager', 'admin']} />}>
         <Route path="/admin" element={<Admin />} />
+      </Route>
+      <Route element={<ProtectedRoute roles={['admin']} />}>
+        <Route path="/admin/users/:id" element={<UserDetail />} />
       </Route>
     </Routes>
     </Suspense>

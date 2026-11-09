@@ -10,6 +10,9 @@ import StockPanel from '@/components/StockPanel'
 import ResourceManager, { type Field } from '@/components/ResourceManager'
 import StatusBadge from '@/components/StatusBadge'
 import ImportDialog from '@/components/ImportDialog'
+import InviteDialog from '@/components/InviteDialog'
+import { Link } from 'react-router-dom'
+import { formatDistanceToNow } from 'date-fns'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -399,14 +402,24 @@ export default function Admin() {
                 title="User"
                 description="Your team and their roles. Add teammates here — signing up creates a separate company."
                 endpoint="/config/users"
+                headerExtra={<InviteDialog />}
                 columns={[
-                  { key: 'name', label: 'Name' },
+                  {
+                    key: 'name',
+                    label: 'Name',
+                    render: (u) => (
+                      <Link to={`/admin/users/${u.id}`} className="font-medium text-primary hover:underline">
+                        {u.name}
+                      </Link>
+                    ),
+                  },
                   { key: 'email', label: 'Email' },
                   { key: 'role', label: 'Role', render: (u) => roleLabel(u.role) },
+                  { key: 'status', label: 'Status', render: (u) => <StatusBadge status={u.status} /> },
                   {
-                    key: 'blocked',
-                    label: 'Status',
-                    render: (u) => <StatusBadge status={u.blocked ? 'rejected' : 'approved'} label={u.blocked ? 'Blocked' : 'Active'} />,
+                    key: 'lastLoginAt',
+                    label: 'Last sign-in',
+                    render: (u) => (u.lastLoginAt ? formatDistanceToNow(new Date(u.lastLoginAt), { addSuffix: true }) : '—'),
                   },
                 ]}
                 fields={[

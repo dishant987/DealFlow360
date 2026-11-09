@@ -9,6 +9,11 @@ import {
   resetPassword,
   me,
   updateMe,
+  verifyEmail,
+  resendVerifyEmail,
+  listMySessions,
+  revokeMySession,
+  revokeMyOtherSessions,
 } from '../controllers/auth.controller.js'
 import { disableMfa, enableMfa, setupMfa, verifyMfa } from '../controllers/mfa.controller.js'
 import { googleCallback, googleStart, providers } from '../controllers/google.controller.js'
@@ -56,5 +61,10 @@ router.get('/google', googleStart)
 router.get('/google/callback', googleCallback)
 router.get('/me', requireAuth, me)
 router.patch('/me', requireAuth, updateMe)
+router.post('/verify-email', authLimiter, verifyEmail)
+router.post('/verify-email/resend', requireAuth, authLimiter, resendVerifyEmail)
+router.get('/sessions', requireAuth, listMySessions)
+router.post('/sessions/revoke-others', requireAuth, revokeMyOtherSessions)
+router.delete('/sessions/:id', requireAuth, revokeMySession)
 
 export default router

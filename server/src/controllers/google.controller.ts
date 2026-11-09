@@ -92,12 +92,16 @@ export async function googleCallback(req: Request, res: Response) {
         passwordHash: await hashPassword(crypto.randomBytes(32).toString('hex')),
         role: 'admin',
         organizationId: org.id,
+        emailVerifiedAt: new Date(),
       })
       .returning()
   }
   if (u.blocked) return fail('blocked')
+  // Google has verified this address; an invited teammate signing in with it has joined
+  if (!u.emailVerifiedAt || u.invitedAt)
+    [u] = await db.update(users).set({ emailVerifiedAt: u.emailVerifiedAt ?? new Date(), invitedAt: null }).where(eq(users.id, u.id)).returning()
 
   res.clearCookie(STATE_COOKIE)
-  const result = await completeSignIn(res, u)
+  const result = await completeSignIn(req, res, u)
   res.redirect('mfaRequired' in result ? `${clientUrl()}/login?mfa=1` : `${clientUrl()}/`)
 }

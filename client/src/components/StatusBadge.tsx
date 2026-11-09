@@ -37,6 +37,10 @@ const TONES: Record<string, Tone> = {
   awaiting: 'sky',
   partial: 'amber',
   complete: 'emerald',
+  // team members
+  active: 'emerald',
+  invited: 'amber',
+  blocked: 'red',
 }
 
 export default function StatusBadge({

@@ -1,19 +1,72 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { BadgeCheck, Building2, Coins, ShieldCheck, TriangleAlert } from 'lucide-react'
 import ThemeToggle from '@/components/ThemeToggle'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import StatusBadge from '@/components/StatusBadge'
+import { money } from '@/lib/format'
 
-const PITCH = [
-  'Discount governance that routes its own approvals',
-  'Live upsell suggestions with real margin impact',
-  'Multi-warehouse splitting with backorder recovery',
-  'One-time and recurring billing on a single order',
+// all true of the product today (landing-page rule: no claims we don't ship)
+const POINTS = [
+  { icon: ShieldCheck, text: 'Two-factor sign-in' },
+  { icon: Building2, text: "Each company's data kept apart" },
+  { icon: Coins, text: 'Quotes in your currency' },
 ]
 
+const EXAMPLE_LINES: [string, number, number][] = [
+  ['Analytics Suite — annual', 12, 1440],
+  ['Onboarding package', 1, 2500],
+  ['Priority support', 12, 300],
+]
+
+function Logo({ className = '' }: { className?: string }) {
+  return (
+    <Link to="/" className={`flex items-center gap-2 font-heading text-lg font-semibold tracking-tight ${className}`}>
+      <span className="grid size-7 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+        <BadgeCheck className="size-4" aria-hidden />
+      </span>
+      Dealwise
+    </Link>
+  )
+}
+
+/** A small, illustrative quote showing what the product does: a discount over the limit goes to approval. */
+function ExampleQuote() {
+  const total = EXAMPLE_LINES.reduce((s, [, q, p]) => s + q * p, 0)
+  return (
+    <figure aria-label="Example quotation" className="w-full max-w-md rounded-xl border bg-background p-5 shadow-xl shadow-black/5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-mono text-xs text-muted-foreground">QT-2026-0142</p>
+          <p className="font-medium">Acme Corp</p>
+        </div>
+        <StatusBadge status="pending_approval" />
+      </div>
+      <ul className="mt-4 space-y-2 text-sm">
+        {EXAMPLE_LINES.map(([name, qty, price]) => (
+          <li key={name} className="flex justify-between gap-4">
+            <span className="truncate text-muted-foreground">
+              {name} <span className="text-xs">× {qty}</span>
+            </span>
+            <span className="tabular-nums">{money(qty * price)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex justify-between border-t pt-3 text-sm">
+        <span>Total after 18% discount</span>
+        <span className="font-semibold tabular-nums">{money(total * 0.82)}</span>
+      </div>
+      <div className="mt-4 flex gap-2.5 rounded-lg bg-accent p-3 text-xs text-accent-foreground">
+        <TriangleAlert className="size-4 shrink-0" aria-hidden />
+        <span>18% is above the Gold tier limit of 15%, so it went to a manager for approval.</span>
+      </div>
+      <figcaption className="mt-3 text-[11px] text-muted-foreground">Example quotation</figcaption>
+    </figure>
+  )
+}
+
 /**
- * Shared shell for the four unauthenticated screens. Brand panel on the left at
- * lg and up; below that it collapses to a compact wordmark so the form stays the
- * focus on a phone.
+ * Shared shell for the sign-in, sign-up, password and verify screens. Product
+ * panel on the left from lg up; on a phone only the form shows.
  */
 export default function AuthLayout({
   title,
@@ -27,66 +80,56 @@ export default function AuthLayout({
   footer?: ReactNode
 }) {
   return (
-    <div className="min-h-svh lg:grid lg:grid-cols-[1.05fr_1fr]">
-      <aside className="relative hidden overflow-hidden bg-primary p-12 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
-        {/* soft light source, keeps the flat brand colour from reading as a solid block */}
+    <div className="min-h-svh bg-background lg:grid lg:grid-cols-2">
+      <aside className="relative hidden overflow-hidden border-r bg-muted/50 p-12 lg:flex lg:flex-col lg:justify-between xl:p-16">
+        {/* faint dot grid, fading out towards the bottom */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-70"
-          style={{
-            background:
-              'radial-gradient(70rem 40rem at 15% 0%, rgba(255,255,255,0.22), transparent 55%), radial-gradient(50rem 40rem at 90% 100%, rgba(0,0,0,0.28), transparent 60%)',
-          }}
+          className="pointer-events-none absolute inset-0 [mask-image:linear-gradient(to_bottom,black,transparent_85%)]"
+          style={{ backgroundImage: 'radial-gradient(var(--border) 1px, transparent 1px)', backgroundSize: '22px 22px' }}
         />
-        <div className="relative">
-          <Link to="/" className="text-2xl font-semibold tracking-tight">
-            Dealwise
-          </Link>
-          <p className="mt-1 text-sm text-primary-foreground/70">
-            Quotation to cash, self-governing
-          </p>
+        <Logo className="relative" />
+
+        <div className="relative space-y-8">
+          <div className="max-w-lg space-y-3">
+            <p className="text-sm font-medium text-primary">Quote-to-cash for B2B sales teams</p>
+            <h2 className="font-heading text-4xl leading-tight font-semibold tracking-tight text-balance">
+              Every quote priced right, approved fast and billed on time.
+            </h2>
+          </div>
+          <ExampleQuote />
         </div>
 
-        <div className="relative max-w-md space-y-6">
-          <h2 className="font-heading text-3xl leading-tight font-medium text-balance">
-            The deal engine that enforces its own pricing discipline.
-          </h2>
-          <ul className="space-y-3">
-            {PITCH.map((line) => (
-              <li key={line} className="flex items-start gap-3 text-sm text-primary-foreground/85">
-                <span
-                  aria-hidden
-                  className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary-foreground/60"
-                />
-                {line}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <p className="relative text-xs text-primary-foreground/55">
-          Customers negotiate through their own portal link — no account required.
-        </p>
+        <ul className="relative flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
+          {POINTS.map(({ icon: Icon, text }) => (
+            <li key={text} className="flex items-center gap-2">
+              <Icon className="size-4 text-primary" aria-hidden />
+              {text}
+            </li>
+          ))}
+        </ul>
       </aside>
 
-      <main className="relative flex min-h-svh flex-col items-center justify-center bg-muted/30 px-4 py-10 lg:min-h-0">
-        <ThemeToggle className="absolute top-3 right-3" />
-        <div className="w-full max-w-sm space-y-5">
-          {/* compact brand — only shown when the panel above is hidden */}
-          <div className="text-center lg:hidden">
-            <Link to="/" className="font-heading text-xl font-semibold text-primary">Dealwise</Link>
+      <main className="flex min-h-svh flex-col">
+        <header className="flex items-center justify-between p-4 sm:px-8 sm:py-6">
+          {/* the left panel carries the logo on wide screens */}
+          <Logo className="lg:invisible" />
+          <ThemeToggle />
+        </header>
+
+        <div className="flex flex-1 items-center justify-center px-5 pb-12">
+          <div className="w-full max-w-[400px]">
+            <h1 className="font-heading text-3xl font-semibold tracking-tight">{title}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+            {/* roomier controls than the dense app screens */}
+            <div className="mt-8 [&_[data-slot=button]]:h-10 [&_[data-slot=input]]:h-10 [&_[data-slot=select]]:h-10">{children}</div>
+            {footer && <div className="mt-8">{footer}</div>}
           </div>
-
-          <Card className="shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg">{title}</CardTitle>
-              <CardDescription>{description}</CardDescription>
-            </CardHeader>
-            <CardContent>{children}</CardContent>
-          </Card>
-
-          {footer}
         </div>
+
+        <p className="px-6 pb-6 text-center text-xs text-muted-foreground">
+          Customers review and confirm quotes through their own link — no account needed.
+        </p>
       </main>
     </div>
   )

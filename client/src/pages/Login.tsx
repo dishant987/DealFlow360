@@ -127,25 +127,21 @@ export default function Login() {
       description="Pick up your sales workspace where you left it."
       footer={
         SHOW_DEMO && (
-        <div className="rounded-lg border border-dashed bg-background/60 p-3">
-          <p className="text-xs font-medium text-muted-foreground">Demo accounts</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
+        <div>
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            Try a demo account
+            <span className="h-px flex-1 bg-border" />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {DEMO_ROLES.map((r) => (
-              <Button
-                key={r.email}
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs"
-                onClick={() => fillDemo(r.email)}
-              >
+              <Button key={r.email} type="button" size="sm" variant="outline" className="text-xs" onClick={() => fillDemo(r.email)}>
                 {r.label}
               </Button>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-muted-foreground">
-            Fills the form with that role. Password is{' '}
-            <code className="rounded bg-muted px-1">{DEMO_PASSWORD}</code>.
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">
+            Fills the form. Password is <code className="rounded bg-muted px-1">{DEMO_PASSWORD}</code>.
           </p>
         </div>
         )

@@ -1,8 +1,9 @@
 import type { Request, Response, NextFunction } from 'express'
 import { eq } from 'drizzle-orm'
 import { db, scopeRequest } from '../config/db.js'
-import { quotations, users } from '../models/schema.js'
-import { cookieName, verifyToken, type JwtUser, type Role } from '../utils/token.js'
+import { quotations } from '../models/schema.js'
+import { cookieName, type JwtUser, type Role } from '../utils/token.js'
+import { loadSession } from '../utils/session.js'
 
 // make req.user available across handlers
 declare global {
@@ -19,23 +20,14 @@ declare global {
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies?.[cookieName]
   if (!token) return res.status(401).json({ error: 'unauthenticated' })
-  let claims
-  try {
-    claims = verifyToken(token)
-  } catch {
-    return res.status(401).json({ error: 'invalid token' })
-  }
-  // The JWT lives 7 days; re-read the account so blocking, deletion and role
-  // changes take effect on the next request, not at token expiry.
-  const [u] = await db
-    .select({ role: users.role, blocked: users.blocked, orgId: users.organizationId })
-    .from(users)
-    .where(eq(users.id, claims.id))
-  if (!u || u.blocked) return res.status(401).json({ error: 'unauthenticated' })
-  req.user = { ...claims, role: u.role }
-  req.orgId = u.orgId
+  // The JWT lives 7 days; re-read the account and device so blocking, deletion,
+  // role changes and "sign out" take effect on the next request, not at expiry.
+  const s = await loadSession(token)
+  if (!s) return res.status(401).json({ error: 'unauthenticated' })
+  req.user = { ...s.claims, role: s.role }
+  req.orgId = s.orgId
   // everything after this point only sees this company's data (RLS)
-  scopeRequest(u.orgId, res, next)
+  scopeRequest(s.orgId, res, next)
 }
 
 export function requireRole(...roles: Role[]) {

@@ -61,7 +61,7 @@ test.describe('A1 — authentication', () => {
   })
 
   test('logout clears the session', async ({ page }) => {
-    await login(page, 'rep')
+    await loginViaForm(page, 'rep')
     await page.getByRole('button', { name: 'Account menu' }).click()
     await page.getByRole('menuitem', { name: 'Log out' }).click()
     // logout is behind a confirmation dialog

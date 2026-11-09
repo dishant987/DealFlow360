@@ -108,9 +108,15 @@ approvals, negotiations, fulfilments, invoices and payments.
 
 ## Companies (multi-tenancy)
 
-Dealwise hosts many companies in one database. Signing up creates a **new company** with you as
-its admin (default settings and discount tiers included); teammates are added by that admin and
-join the same company. Existing data from before multi-tenancy lives in "Default company".
+Dealwise hosts many companies in one database. Signing up (two short steps: about you, then your
+company) creates a **new company** with you as its admin (default settings and discount tiers
+included). You're asked to confirm your email from a link; until then a reminder bar shows, nothing
+is locked. Teammates join the same company by **invite**: Settings → Users → Invite sends a link
+(valid 7 days) where they choose a password. Each user has a detail page (Settings → Users → name)
+showing last sign-in, signed-in devices, and the quotations and customers they own, with
+**Transfer** to hand all of it to a teammate and **Sign out everywhere**. Everyone can see and sign
+out their own devices on the Profile page; blocking a user or resetting a password signs them out
+of every device at once, live tabs included. Existing data from before multi-tenancy lives in "Default company".
 
 **Currency.** Each company picks its currency when signing up (USD by default; managers and admins
 can change it under Config → Thresholds). Every amount in the app, the customer portal and the
@@ -454,7 +460,7 @@ is a genuinely separate unauthenticated router whose projection omits cost and m
 
 ## Data model
 
-23 tables. The spine:
+24 tables. The spine:
 
 ```
 users ──< quotations >── customers
@@ -473,6 +479,7 @@ users ──< quotations >── customers
               └──< credit_notes
 
 discount_tiers · category_discount_ceilings · app_settings   (governance config)
+users ──< sessions   (one row per signed-in device; not under row-level security, always read by user)
 ```
 
 - `app_settings` is a singleton holding the approval thresholds, minimum upsell margin and
@@ -490,7 +497,8 @@ session cookie.
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback` |
+| Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback`, `POST /auth/verify-email[/resend]`, `GET /auth/sessions`, `POST /auth/sessions/revoke-others`, `DELETE /auth/sessions/:id` |
+| Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |
 | Quotations | `GET·POST /quotations`, `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |
 | Approvals | `GET /approvals`, `GET /approvals/:id`, `POST /approvals/:id/action` |
