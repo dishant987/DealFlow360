@@ -469,6 +469,7 @@ export async function getUpsell(req: Request<{ id: string }>, res: Response) {
 }
 
 /* ---- send to customer: generate portal token + set status 'sent' ---- */
+export const PORTAL_LINK_DAYS = 30
 export async function sendToCustomer(req: Request<{ id: string }>, res: Response) {
   const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
   const [before] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
@@ -481,7 +482,13 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
   const token = crypto.randomBytes(24).toString('hex')
   const [q] = await db
     .update(quotations)
-    .set({ portalToken: token, status: 'sent', updatedAt: new Date(), lastActivityAt: new Date() })
+    .set({
+      portalToken: token,
+      portalTokenExpiresAt: new Date(Date.now() + PORTAL_LINK_DAYS * 86_400_000),
+      status: 'sent',
+      updatedAt: new Date(),
+      lastActivityAt: new Date(),
+    })
     .where(eq(quotations.id, req.params.id))
     .returning()
   if (!q) return res.status(404).json({ error: 'not found' })
@@ -522,6 +529,7 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
   res.json({
     portalToken: token,
     portalUrl,
+    expiresAt: q.portalTokenExpiresAt,
     emailed: !!customer?.email,
     sentTo: customer?.email ?? null,
   })

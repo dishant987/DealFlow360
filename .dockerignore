@@ -1,0 +1,10 @@
+**/node_modules
+**/dist
+**/.env
+**/test-results
+**/playwright-report
+client/e2e-results.json
+.git
+.github
+.claude
+docs

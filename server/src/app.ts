@@ -1,4 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from 'express'
+import path from 'path'
 import cors from 'cors'
 import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
@@ -64,6 +65,14 @@ app.use('/api', billingRouter)
 app.use('/api/dashboard', dashboardRouter)
 app.use('/api/reports', reportRouter)
 app.use('/api', opsRouter)
+
+// Single-container deploy: serve the built client from the same origin as the API,
+// so cookies, the socket and the CSP all stay same-origin. Unknown /api paths still 404.
+if (process.env.CLIENT_DIST) {
+  const dist = path.resolve(process.env.CLIENT_DIST)
+  app.use(express.static(dist, { index: false, maxAge: '1h' }))
+  app.get(/^\/(?!api\/|socket\.io\/).*/, (_req, res) => res.sendFile(path.join(dist, 'index.html')))
+}
 
 // Express 5 forwards rejected promises here. Without this the default handler
 // answers with an HTML stack trace, leaking SQL and schema to the browser.

@@ -24,9 +24,13 @@ const closedMsg = (status: string) =>
     : `This quotation is ${status.replace(/_/g, ' ')} and is no longer open for changes.`
 
 // Resolve a quote by its portal token. Returns null if not found.
+/** A link with no expiry counts as expired (fail closed). */
+export const portalLinkLive = (expiresAt: Date | null, now = new Date()) => !!expiresAt && expiresAt > now
+
+// An expired link reads exactly like an unknown one; re-sending issues a fresh link.
 async function findByToken(token: string) {
   const [q] = await db.select().from(quotations).where(eq(quotations.portalToken, token))
-  return q ?? null
+  return q && portalLinkLive(q.portalTokenExpiresAt) ? q : null
 }
 
 // Customer-safe projection: NO cost/margin ever leaves the server.

@@ -36,6 +36,13 @@
       "when": 1794237091499,
       "tag": "0004_panoramic_hulk",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794238348793,
+      "tag": "0005_clumsy_arachne",
+      "breakpoints": true
     }
   ]
 }
