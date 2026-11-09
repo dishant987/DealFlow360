@@ -9,6 +9,7 @@ import DataTable, { type Column } from '@/components/DataTable'
 import KanbanBoard, { type Quote } from '@/components/KanbanBoard'
 import { Plus, Trash2, X } from 'lucide-react'
 import { errText } from '@/lib/errors'
+import { Input } from '@/components/ui/input'
 import ConfirmButton from '@/components/ConfirmButton'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
@@ -60,6 +61,20 @@ export default function Quotations() {
       nav(`/quotations/${q.id}`)
     },
     onError: () => toast.error('Could not create quotation'),
+  })
+
+  // reps add the customer they're quoting right here; the server starts it at bronze
+  const [newCustomer, setNewCustomer] = useState<{ name: string; email: string } | null>(null)
+  const addCustomer = useMutation({
+    mutationFn: async (c: { name: string; email: string }) =>
+      (await api.post('/config/customers', { ...c, tier: 'bronze' })).data as Customer,
+    onSuccess: (c) => {
+      qc.invalidateQueries({ queryKey: ['customers'] })
+      setCustomerId(c.id)
+      setNewCustomer(null)
+      toast.success(`Added ${c.name}`)
+    },
+    onError: (e) => toast.error(errText(e, 'Could not add customer')),
   })
 
   const remove = useMutation({
@@ -247,6 +262,44 @@ export default function Quotations() {
             ))}
           </Select>
         </FormField>
+        {newCustomer ? (
+          <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
+            <FormField id="new-customer-name" label="Customer name">
+              <Input
+                id="new-customer-name"
+                value={newCustomer.name}
+                onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+              />
+            </FormField>
+            <FormField id="new-customer-email" label="Customer email">
+              <Input
+                id="new-customer-email"
+                type="email"
+                value={newCustomer.email}
+                onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+              />
+            </FormField>
+            <p className="text-xs text-muted-foreground">
+              New customers start on the Bronze tier; a manager can change it.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={() => setNewCustomer(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={!newCustomer.name.trim() || !newCustomer.email.trim() || addCustomer.isPending}
+                onClick={() => addCustomer.mutate(newCustomer)}
+              >
+                {addCustomer.isPending ? 'Adding…' : 'Add customer'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button variant="link" className="h-auto justify-start p-0" onClick={() => setNewCustomer({ name: '', email: '' })}>
+            + New customer
+          </Button>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => setCreateOpen(false)}>
             Cancel

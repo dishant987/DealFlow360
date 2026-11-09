@@ -8,6 +8,7 @@ import AppShell from '@/components/AppShell'
 import AuditLog from '@/components/AuditLog'
 import StockPanel from '@/components/StockPanel'
 import ResourceManager, { type Field } from '@/components/ResourceManager'
+import StatusBadge from '@/components/StatusBadge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -123,27 +124,25 @@ export default function Admin() {
     <AppShell
       crumbs={[
         { label: 'Workspace', to: '/' },
-        { label: isAdmin ? 'Backend Config' : 'Discount Config' },
+        { label: 'Backend Config' },
       ]}
     >
       <div className="space-y-4">
         <div>
           <h1 className="font-heading text-xl font-semibold">
-            {isAdmin ? 'Backend configuration' : 'Discount configuration'}
+            Backend configuration
           </h1>
           <p className="text-sm text-muted-foreground">
-            {isAdmin
-              ? 'Everything the sales engine reads at runtime: catalogue, pricing, discount governance, stock and users.'
-              : 'The discount ceilings and thresholds the approval router applies to every quotation.'}
+            Everything the sales engine reads at runtime: catalogue, pricing, discount governance, stock
+            {isAdmin ? ' and users' : ''}.
           </p>
         </div>
 
-        <Tabs defaultValue={isAdmin ? 'products' : 'tiers'}>
+        <Tabs defaultValue="products">
           {/* thirteen flat tabs read as one undifferentiated wall — grouping them
               by what they govern makes the screen navigable */}
           <div className="flex flex-wrap items-center gap-x-1 gap-y-2 rounded-lg border bg-background p-1.5">
-            {isAdmin && (
-              <>
+            <>
                 <TabGroupLabel>Catalogue</TabGroupLabel>
                 <TabsList className="h-auto flex-wrap bg-transparent p-0">
                   <TabsTrigger value="products">Products</TabsTrigger>
@@ -153,8 +152,7 @@ export default function Admin() {
                   <TabsTrigger value="plans">Subscription Plans</TabsTrigger>
                 </TabsList>
                 <Divider />
-              </>
-            )}
+            </>
 
             <TabGroupLabel>Governance</TabGroupLabel>
             <TabsList className="h-auto flex-wrap bg-transparent p-0">
@@ -163,8 +161,7 @@ export default function Admin() {
               <TabsTrigger value="settings">Thresholds</TabsTrigger>
             </TabsList>
 
-            {isAdmin && (
-              <>
+            <>
                 <Divider />
                 <TabGroupLabel>Operations</TabGroupLabel>
                 <TabsList className="h-auto flex-wrap bg-transparent p-0">
@@ -172,8 +169,7 @@ export default function Admin() {
                   <TabsTrigger value="stock">Stock</TabsTrigger>
                   <TabsTrigger value="customers">Customers</TabsTrigger>
                 </TabsList>
-              </>
-            )}
+            </>
 
             <Divider />
             <TabGroupLabel>Records</TabGroupLabel>
@@ -184,7 +180,7 @@ export default function Admin() {
           </div>
 
           <div className="mt-4">
-            {isAdmin && <TabsContent value="products">
+            <TabsContent value="products">
               <ResourceManager
                 title="Product"
                 description="The catalogue reps sell from. Price and cost drive every margin figure in the app."
@@ -206,9 +202,9 @@ export default function Admin() {
                   </Button>
                 )}
               />
-            </TabsContent>}
+            </TabsContent>
 
-            {isAdmin && <TabsContent value="categories">
+            <TabsContent value="categories">
               <ResourceManager
                 title="Category"
                 plural="Categories"
@@ -217,9 +213,9 @@ export default function Admin() {
                 columns={[{ key: 'name', label: 'Name' }]}
                 fields={[{ name: 'name', label: 'Name' }]}
               />
-            </TabsContent>}
+            </TabsContent>
 
-            {isAdmin && <TabsContent value="customers">
+            <TabsContent value="customers">
               <ResourceManager
                 title="Customer"
                 description="Accounts and their tier. Tier sets both the price list and the discount ceiling."
@@ -235,7 +231,7 @@ export default function Admin() {
                   { name: 'tier', label: 'Tier', type: 'select', options: tierOpts, default: 'bronze' },
                 ]}
               />
-            </TabsContent>}
+            </TabsContent>
 
             <TabsContent value="tiers">
               <ResourceManager
@@ -276,7 +272,7 @@ export default function Admin() {
               />
             </TabsContent>
 
-            {isAdmin && <TabsContent value="warehouses">
+            <TabsContent value="warehouses">
               <ResourceManager
                 title="Warehouse"
                 description="Stock locations. Shipping weight decides which one the split logic prefers."
@@ -290,9 +286,9 @@ export default function Admin() {
                   { name: 'shippingCostWeight', label: 'Shipping Weight', type: 'number' },
                 ]}
               />
-            </TabsContent>}
+            </TabsContent>
 
-            {isAdmin && <TabsContent value="stock">
+            <TabsContent value="stock">
               <ResourceManager
                 title="Stock"
                 plural="Stock levels"
@@ -323,9 +319,8 @@ export default function Admin() {
                   { name: 'reorderLevel', label: 'Reorder', type: 'number' },
                 ]}
               />
-            </TabsContent>}
+            </TabsContent>
 
-            {isAdmin && (
               <TabsContent value="variants">
                 <ResourceManager
                   title="Variant"
@@ -352,9 +347,7 @@ export default function Admin() {
                   ]}
                 />
               </TabsContent>
-            )}
 
-            {isAdmin && (
               <TabsContent value="pairings">
                 <ResourceManager
                   title="Pairing"
@@ -383,9 +376,8 @@ export default function Admin() {
                   ]}
                 />
               </TabsContent>
-            )}
 
-            {isAdmin && <TabsContent value="plans">
+            <TabsContent value="plans">
               <ResourceManager
                 title="Plan"
                 plural="Subscription plans"
@@ -413,7 +405,7 @@ export default function Admin() {
                   { name: 'prorationEnabled', label: 'Proration', type: 'boolean', default: true },
                 ]}
               />
-            </TabsContent>}
+            </TabsContent>
 
             {isAdmin && <TabsContent value="users">
               <ResourceManager
@@ -424,6 +416,11 @@ export default function Admin() {
                   { key: 'name', label: 'Name' },
                   { key: 'email', label: 'Email' },
                   { key: 'role', label: 'Role', render: (u) => roleLabel(u.role) },
+                  {
+                    key: 'blocked',
+                    label: 'Status',
+                    render: (u) => <StatusBadge status={u.blocked ? 'rejected' : 'approved'} label={u.blocked ? 'Blocked' : 'Active'} />,
+                  },
                 ]}
                 fields={[
                   { name: 'name', label: 'Name' },
@@ -441,6 +438,8 @@ export default function Admin() {
                     ],
                     default: 'rep',
                   },
+                  // blocking keeps the account and its history; it just can't sign in
+                  { name: 'blocked', label: 'Blocked (cannot sign in)', type: 'boolean', default: false },
                 ]}
               />
             </TabsContent>}

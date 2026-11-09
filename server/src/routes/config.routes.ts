@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { db } from '../config/db.js'
 import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
@@ -34,18 +34,34 @@ import {
 } from '../controllers/config.controller.js'
 
 const router = Router()
+
+// shortcut: customers have no owner yet, so any rep can edit any customer's name/email; add ownership with the permissions engine
+export function repCustomerTier(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.role === 'rep') {
+    if (req.method === 'POST') req.body = { ...req.body, tier: 'bronze' }
+    if (req.method === 'PATCH' && req.body?.tier !== undefined)
+      return res.status(403).json({ error: "Only a manager or admin can change a customer's tier." })
+  }
+  next()
+}
 router.use(requireAuth)
 
 const adminOnly = requireRole('admin')
 // brief: the Sales Manager configures discount tiers & approval chains
 const managerConfig = requireRole('manager', 'admin')
+// catalogue and warehouses: managers run them day to day, not only the admin
+const catalogue = managerConfig
 
-/* ---- catalog / infrastructure: admin only ---- */
-router.use('/categories', adminOnly, crud(categories, z.object({ name: z.string().min(1) })))
+router.use('/categories', catalogue, crud(categories, z.object({ name: z.string().min(1) })))
 
+// Reps add the customers they sell to. Tier sets the price list and discount
+// ceilings, so a rep's customer always starts at bronze and only a manager or
+// admin can move it; deleting a customer stays with the admin.
+router.delete('/customers/:id', adminOnly)
 router.use(
   '/customers',
-  adminOnly,
+  requireRole('rep', 'manager', 'admin'),
+  repCustomerTier,
   crud(
     customers,
     z.object({
@@ -56,11 +72,11 @@ router.use(
   ),
 )
 
-router.get('/products', adminOnly, listProductsAdmin)
-router.get('/products/:id/stock', adminOnly, productStockDetail)
+router.get('/products', catalogue, listProductsAdmin)
+router.get('/products/:id/stock', catalogue, productStockDetail)
 router.use(
   '/products',
-  adminOnly,
+  catalogue,
   crud(
     products,
     z.object({
@@ -80,13 +96,13 @@ router.use(
   ),
 )
 
-router.use('/price-list', adminOnly, crud(priceListItems, z.object({ productId: z.string().uuid(), tier, unitPrice: num })))
+router.use('/price-list', catalogue, crud(priceListItems, z.object({ productId: z.string().uuid(), tier, unitPrice: num })))
 
-router.use('/warehouses', adminOnly, crud(warehouses, z.object({ name: z.string().min(1), shippingCostWeight: num.optional() })))
+router.use('/warehouses', catalogue, crud(warehouses, z.object({ name: z.string().min(1), shippingCostWeight: num.optional() })))
 
 router.use(
   '/subscription-plans',
-  adminOnly,
+  catalogue,
   crud(
     subscriptionPlans,
     z.object({
@@ -99,10 +115,10 @@ router.use(
 )
 
 // joined GET registered first so the UI shows names; crud handles the writes
-router.get('/pairings', adminOnly, listPairings)
+router.get('/pairings', catalogue, listPairings)
 router.use(
   '/pairings',
-  adminOnly,
+  catalogue,
   crud(
     productPairings,
     z.object({
@@ -114,10 +130,10 @@ router.use(
 )
 
 /* ---- A2: product variants (attribute / value / extra price) ---- */
-router.get('/variants', adminOnly, listVariants)
+router.get('/variants', catalogue, listVariants)
 router.use(
   '/variants',
-  adminOnly,
+  catalogue,
   crud(
     productVariants,
     z.object({
@@ -130,9 +146,9 @@ router.use(
   ),
 )
 
-router.get('/stock', adminOnly, listStock)
-router.post('/stock', adminOnly, upsertStock)
-router.delete('/stock/:id', adminOnly, deleteStock)
+router.get('/stock', catalogue, listStock)
+router.post('/stock', catalogue, upsertStock)
+router.delete('/stock/:id', catalogue, deleteStock)
 
 router.use('/users', adminOnly, (() => {
   const r = Router()

@@ -155,15 +155,15 @@ test.describe('Sales Manager / Approver', () => {
   test('configures discount tiers and approval chains in the UI', async ({ page }) => {
     await login(page, 'manager')
     await page.goto('/admin')
-    await expect(page.getByText('Discount configuration')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Backend configuration' })).toBeVisible()
     await expect(page.getByText('Discount Tiers').first()).toBeVisible()
     await expect(page.getByText('Category Ceilings').first()).toBeVisible()
     // the approval chain = the two routing thresholds, on their own tab
     await page.getByRole('tab', { name: 'Thresholds' }).click()
     await expect(page.getByText('Manager threshold').first()).toBeVisible()
     await expect(page.getByText('Finance threshold').first()).toBeVisible()
-    // catalogue setup is NOT a manager's job
-    await expect(page.getByRole('tab', { name: 'Products' })).toHaveCount(0)
+    // managers run the catalogue; user management stays with the admin
+    await expect(page.getByRole('tab', { name: 'Products' })).toBeVisible()
     await expect(page.getByRole('tab', { name: 'Users' })).toHaveCount(0)
   })
 

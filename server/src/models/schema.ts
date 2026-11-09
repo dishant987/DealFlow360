@@ -61,6 +61,8 @@ export const users = pgTable('users', {
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
   role: roleEnum('role').notNull().default('rep'),
+  // blocked users can't sign in and their open sessions stop working at once
+  blocked: boolean('blocked').notNull().default(false),
   resetTokenHash: text('reset_token_hash'),
   resetTokenExpiresAt: timestamp('reset_token_expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

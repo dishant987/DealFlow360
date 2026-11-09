@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express'
 import { eq } from 'drizzle-orm'
 import { db } from '../config/db.js'
-import { quotations } from '../models/schema.js'
+import { quotations, users } from '../models/schema.js'
 import { cookieName, verifyToken, type JwtUser, type Role } from '../utils/token.js'
 
 // make req.user available across handlers
@@ -14,15 +14,24 @@ declare global {
   }
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
+export async function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies?.[cookieName]
   if (!token) return res.status(401).json({ error: 'unauthenticated' })
+  let claims
   try {
-    req.user = verifyToken(token)
-    next()
+    claims = verifyToken(token)
   } catch {
-    res.status(401).json({ error: 'invalid token' })
+    return res.status(401).json({ error: 'invalid token' })
   }
+  // The JWT lives 7 days; re-read the account so blocking, deletion and role
+  // changes take effect on the next request, not at token expiry.
+  const [u] = await db
+    .select({ role: users.role, blocked: users.blocked })
+    .from(users)
+    .where(eq(users.id, claims.id))
+  if (!u || u.blocked) return res.status(401).json({ error: 'unauthenticated' })
+  req.user = { ...claims, role: u.role }
+  next()
 }
 
 export function requireRole(...roles: Role[]) {

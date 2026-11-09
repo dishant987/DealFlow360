@@ -302,7 +302,7 @@ const roleEnum = z.enum(['rep', 'manager', 'finance', 'admin'])
 export async function listUsers(_req: Request, res: Response) {
   res.json(
     await db
-      .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+      .select({ id: users.id, name: users.name, email: users.email, role: users.role, blocked: users.blocked })
       .from(users),
   )
 }
@@ -336,21 +336,26 @@ export async function updateUser(req: Request<{ id: string }>, res: Response) {
       name: z.string().min(1),
       email: z.string().email(),
       password: z.string().min(6), // optional admin password reset
+      blocked: z.boolean(),
     })
     .partial()
     .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
+  // an admin locking themselves out (or demoting themselves) leaves nobody to undo it
+  if (req.params.id === req.user!.id && (p.data.blocked || (p.data.role && p.data.role !== 'admin')))
+    return res.status(400).json({ error: "You can't block or demote your own account." })
   const { password, ...rest } = p.data
   const patch = password ? { ...rest, passwordHash: await hashPassword(password) } : rest
   const [u] = await db
     .update(users)
     .set(patch)
     .where(eq(users.id, req.params.id))
-    .returning({ id: users.id, name: users.name, email: users.email, role: users.role })
+    .returning({ id: users.id, name: users.name, email: users.email, role: users.role, blocked: users.blocked })
   if (!u) return res.status(404).json({ error: 'not found' })
   res.json(u)
 }
 export async function deleteUser(req: Request<{ id: string }>, res: Response) {
+  if (req.params.id === req.user!.id) return res.status(400).json({ error: "You can't delete your own account." })
   const [u] = await db.delete(users).where(eq(users.id, req.params.id)).returning()
   if (!u) return res.status(404).json({ error: 'not found' })
   res.json({ ok: true })
