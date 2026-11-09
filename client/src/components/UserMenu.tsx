@@ -49,10 +49,10 @@ export default function UserMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Account menu"
-          className="flex items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+          className="flex items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         >
-          <Avatar name={user?.name} className="size-8 bg-white/20 text-primary-foreground" />
-          <span className="hidden max-w-36 truncate text-sm whitespace-nowrap xl:inline">
+          <Avatar name={user?.name} className="size-8 bg-primary/10 text-primary" />
+          <span className="sr-only">
             {user?.name}
           </span>
         </DropdownMenuTrigger>
@@ -78,11 +78,11 @@ export default function UserMenu({
             </Link>
           </DropdownMenuItem>
 
-          {/* B1 workspace actions live here too, so the top bar stays uncluttered */}
-          <DropdownMenuItem onSelect={onReloadData} className="xl:hidden">
+          {/* workspace actions live here, so the top bar stays uncluttered */}
+          <DropdownMenuItem onSelect={onReloadData}>
             <RefreshCw /> Reload data
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onCloseWorkspace} className="xl:hidden">
+          <DropdownMenuItem onSelect={onCloseWorkspace}>
             <PanelsTopLeft /> Close workspace
           </DropdownMenuItem>
 

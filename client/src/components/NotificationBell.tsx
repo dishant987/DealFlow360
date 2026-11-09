@@ -33,11 +33,11 @@ const icon: Record<Kind, typeof Bell> = {
   alert: TriangleAlert,
 }
 const tone: Record<Kind, string> = {
-  approval: 'text-emerald-600',
+  approval: 'text-emerald-600 dark:text-emerald-400',
   customer: 'text-primary',
-  fulfillment: 'text-sky-600',
-  billing: 'text-violet-600',
-  alert: 'text-amber-600',
+  fulfillment: 'text-sky-600 dark:text-sky-400',
+  billing: 'text-violet-600 dark:text-violet-400',
+  alert: 'text-amber-600 dark:text-amber-400',
 }
 
 // Read state is a per-browser "last seen" stamp rather than a row per user per
@@ -95,11 +95,11 @@ export default function NotificationBell() {
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         aria-label={`Notifications${unread.length ? ` (${unread.length} unread)` : ''}`}
-        className="relative rounded-md p-1.5 text-primary-foreground/85 transition-colors hover:bg-white/10 hover:text-primary-foreground focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none"
+        className="relative rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <Bell className="size-4" />
         {unread.length > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-amber-400 px-1 text-[10px] leading-4 font-semibold text-amber-950 tabular-nums">
+          <span className="absolute -top-0.5 -right-0.5 min-w-4 rounded-full bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground tabular-nums ring-2 ring-background">
             {unread.length > 9 ? '9+' : unread.length}
           </span>
         )}

@@ -1,28 +1,40 @@
 // One source of truth for status colours, so a status looks identical on every
-// screen. Covers quotation, invoice and billing-schedule statuses.
-const TONES: Record<string, string> = {
+// screen. Covers quotation, invoice and billing-schedule statuses. Every tone has
+// a dark-mode variant so badges stay readable on both themes.
+type Tone = 'slate' | 'amber' | 'emerald' | 'red' | 'sky' | 'violet' | 'teal' | 'brand'
+const TONE_CLASS: Record<Tone, string> = {
+  slate: 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-300',
+  amber: 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
+  emerald: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
+  red: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  sky: 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300',
+  violet: 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300',
+  teal: 'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300',
+  brand: 'bg-accent text-accent-foreground',
+}
+const TONES: Record<string, Tone> = {
   // quotation lifecycle
-  draft: 'bg-slate-100 text-slate-700',
-  pending_approval: 'bg-amber-100 text-amber-800',
-  approved: 'bg-emerald-100 text-emerald-800',
-  rejected: 'bg-red-100 text-red-800',
-  cancelled: 'bg-red-100 text-red-800',
-  sent: 'bg-sky-100 text-sky-800',
-  under_negotiation: 'bg-violet-100 text-violet-800',
-  confirmed: 'bg-teal-100 text-teal-800',
-  fulfilled: 'bg-emerald-100 text-emerald-800',
-  invoiced: 'bg-primary/10 text-primary',
+  draft: 'slate',
+  pending_approval: 'amber',
+  approved: 'emerald',
+  rejected: 'red',
+  cancelled: 'red',
+  sent: 'sky',
+  under_negotiation: 'violet',
+  confirmed: 'teal',
+  fulfilled: 'emerald',
+  invoiced: 'brand',
   // invoices
-  paid: 'bg-emerald-100 text-emerald-800',
-  overdue: 'bg-red-100 text-red-800',
-  void: 'bg-slate-100 text-slate-500',
+  paid: 'emerald',
+  overdue: 'red',
+  void: 'slate',
   // billing schedules
-  scheduled: 'bg-emerald-100 text-emerald-800',
-  billed: 'bg-sky-100 text-sky-800',
+  scheduled: 'emerald',
+  billed: 'sky',
   // fulfillment states
-  awaiting: 'bg-sky-100 text-sky-800',
-  partial: 'bg-amber-100 text-amber-800',
-  complete: 'bg-emerald-100 text-emerald-800',
+  awaiting: 'sky',
+  partial: 'amber',
+  complete: 'emerald',
 }
 
 export default function StatusBadge({
@@ -35,11 +47,12 @@ export default function StatusBadge({
   label?: string
   className?: string
 }) {
-  const tone = TONES[status] ?? 'bg-slate-100 text-slate-700'
+  const tone = TONE_CLASS[TONES[status] ?? 'slate']
   return (
     <span
-      className={`inline-block whitespace-nowrap rounded px-2 py-0.5 text-xs font-medium ${tone} ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium capitalize ${tone} ${className}`}
     >
+      <span aria-hidden className="size-1.5 rounded-full bg-current opacity-70" />
       {(label ?? status).replace(/_/g, ' ')}
     </span>
   )
