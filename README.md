@@ -73,6 +73,7 @@ npm run dev                 # http://localhost:5173
 | `NODE_ENV` | `production` turns on HTTPS-only cookies and `trust proxy`, and the server refuses to boot with a weak `JWT_SECRET` (< 32 chars), a localhost `CLIENT_URL` or no `DATABASE_URL`. |
 | `CORS_ORIGINS` | Optional comma-separated allow-list for the API and socket. Defaults to `CLIENT_URL`. |
 | `DB_SSL_ALLOW_SELF_SIGNED` | Set to `true` only if your hosted Postgres uses a self-signed certificate; otherwise the certificate is verified. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google sign-in. Create a "Web application" OAuth client in Google Cloud Console and add `<CLIENT_URL>/api/auth/google/callback` as an authorised redirect URI. Without both, the Google button is hidden. |
 | `ALLOW_DESTRUCTIVE_SEED` | `db:seed` refuses to run with `NODE_ENV=production` unless this is `true`. |
 
 Client build settings:
@@ -361,7 +362,7 @@ snapshotted onto the quote so later catalogue changes can't rewrite history. Quo
 invoice numbers come from Postgres sequences, so two reps creating a quote in the same
 instant can never collide.
 
-**Security.** httpOnly JWT cookie; bcrypt passwords; helmet; rate limiting on the
+**Security.** httpOnly JWT cookie; bcrypt passwords; optional **two-factor authentication** (authenticator-app codes, RFC 6238, secret encrypted at rest, 10 single-use recovery codes; Profile → Two-factor authentication); **Google sign-in** (OpenID Connect code flow with state check, verified email required); helmet; rate limiting on the
 credential endpoints keyed per account per IP (so one attacker can't lock out an office);
 Zod validation on every write; friendly DB errors that never leak SQL. The customer portal
 is a genuinely separate unauthenticated router whose projection omits cost and margin.
@@ -406,7 +407,7 @@ session cookie.
 
 | Area | Endpoints |
 | --- | --- |
-| Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me` |
+| Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback` |
 | Catalogue | `GET /customers`, `GET /products` |
 | Quotations | `GET·POST /quotations`, `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |
 | Approvals | `GET /approvals`, `GET /approvals/:id`, `POST /approvals/:id/action` |

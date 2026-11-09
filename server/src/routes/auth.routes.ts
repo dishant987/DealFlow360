@@ -10,6 +10,8 @@ import {
   me,
   updateMe,
 } from '../controllers/auth.controller.js'
+import { disableMfa, enableMfa, setupMfa, verifyMfa } from '../controllers/mfa.controller.js'
+import { googleCallback, googleStart, providers } from '../controllers/google.controller.js'
 
 const router = Router()
 
@@ -44,6 +46,14 @@ router.post('/login', authLimiter, login)
 router.post('/forgot-password', authLimiter, forgotPassword)
 router.post('/reset-password', authLimiter, resetPassword)
 router.post('/logout', logout)
+// the code step shares the brute-force budget; it has no email, so it keys on the IP
+router.post('/mfa/verify', authLimiter, verifyMfa)
+router.post('/mfa/setup', requireAuth, setupMfa)
+router.post('/mfa/enable', requireAuth, authLimiter, enableMfa)
+router.post('/mfa/disable', requireAuth, authLimiter, disableMfa)
+router.get('/providers', providers)
+router.get('/google', googleStart)
+router.get('/google/callback', googleCallback)
 router.get('/me', requireAuth, me)
 router.patch('/me', requireAuth, updateMe)
 

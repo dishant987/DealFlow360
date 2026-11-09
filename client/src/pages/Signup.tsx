@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { errText } from '@/lib/errors'
 import AuthLayout from '@/components/AuthLayout'
+import GoogleButton from '@/components/GoogleButton'
 import FormField from '@/components/FormField'
 import PasswordInput from '@/components/PasswordInput'
 import { Button } from '@/components/ui/button'
@@ -44,6 +45,7 @@ export default function Signup() {
       description="Start building quotations in a couple of minutes."
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <GoogleButton />
         <FormField id="name" label="Name" error={errors.name?.message}>
           <Input
             id="name"

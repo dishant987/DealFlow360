@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   pgTable,
   pgEnum,
@@ -63,6 +64,11 @@ export const users = pgTable('users', {
   role: roleEnum('role').notNull().default('rep'),
   // blocked users can't sign in and their open sessions stop working at once
   blocked: boolean('blocked').notNull().default(false),
+  // MFA: TOTP secret is AES-GCM encrypted (utils/totp.ts); set during setup, live once mfaEnabled
+  mfaSecret: text('mfa_secret'),
+  mfaEnabled: boolean('mfa_enabled').notNull().default(false),
+  // sha256 of each unused recovery code; a code is removed when used
+  mfaRecoveryHashes: text('mfa_recovery_hashes').array().notNull().default(sql`'{}'::text[]`),
   resetTokenHash: text('reset_token_hash'),
   resetTokenExpiresAt: timestamp('reset_token_expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
