@@ -86,9 +86,10 @@ function checkProduct(r: RawRow, errors: string[], lk: Lookups) {
     else if (!v.success) errors.push(`${col} ${v.error.issues[0].message}`)
     else values[field] = v.data
   }
-  const type = (r.type ?? '').trim().toLowerCase().replace(/[\s-]/g, '') || 'onetime'
-  if (type !== 'onetime' && type !== 'subscription') errors.push('type must be onetime or subscription')
-  else values.type = type
+  // blank type keeps an existing product's type; new products default to onetime (in planImport)
+  const type = (r.type ?? '').trim().toLowerCase().replace(/[\s-]/g, '')
+  if (type && type !== 'onetime' && type !== 'subscription') errors.push('type must be onetime or subscription')
+  else if (type) values.type = type
   if (r.tax_rate?.trim()) {
     const n = Number(r.tax_rate)
     if (!Number.isFinite(n) || n < 0 || n > 100) errors.push('tax_rate must be between 0 and 100')
@@ -123,6 +124,7 @@ export function planImport(kind: ImportKind, rows: RawRow[], lk: Lookups, mode: 
     const id = (kind === 'customers' ? lk.customersByEmail : lk.productsBySku).get(key)
     if (!id) {
       if (kind === 'customers') values.tier ??= 'bronze'
+      else values.type ??= 'onetime'
       return planned.push({ row, action: 'create', key, errors, values })
     }
     planned.push({ row, action: mode === 'update' ? 'update' : 'skip', key, errors, id, values })

@@ -69,11 +69,18 @@ describe('planImport — products', () => {
       lk(),
       'update',
     )
-    expect(r.rows[0]).toMatchObject({ action: 'update', id: 'p1', values: { categoryId: 'cat1', type: 'onetime' } })
+    // blank type on an update leaves the product's type alone
+    expect(r.rows[0]).toMatchObject({ action: 'update', id: 'p1', values: { categoryId: 'cat1' } })
+    expect(r.rows[0].values).not.toHaveProperty('type')
     expect(r.rows[1]).toMatchObject({
       action: 'create',
       values: { type: 'subscription', subscriptionPlanId: 'plan1', taxRate: '18' },
     })
+  })
+
+  it('defaults a new product with no type to onetime', () => {
+    const r = planImport('products', [{ name: 'N', sku: 'NEW-1', category: 'hardware', unit_price: '1', unit_cost: '1' }], lk(), 'update')
+    expect(r.rows[0]).toMatchObject({ action: 'create', values: { type: 'onetime' } })
   })
 
   it('rejects unknown categories, bad money, missing plans and bad tax rates', () => {
