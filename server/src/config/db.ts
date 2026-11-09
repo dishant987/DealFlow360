@@ -52,25 +52,47 @@ export function runInTenant<T>(orgId: string | null, fn: () => Promise<T>, opts:
   })
 }
 
-class Rollback extends Error {}
+class Rollback extends Error {
+  constructor(readonly endArgs?: unknown[]) {
+    super('rollback')
+  }
+}
 
 /**
- * Express helper: run the rest of this request as `orgId`. The transaction
- * commits when the response has been sent, and rolls back on a 5xx or if the
- * client disconnects first. A request already in scope just continues.
- * shortcut: the commit happens after the response is sent, so a failed commit isn't reported to the client; move to explicit transactions if that ever matters
+ * Express helper: run the rest of this request as `orgId`, in one transaction.
+ * The response is held until that transaction has COMMITTED, so the client's
+ * next request always sees what this one wrote (and a failed commit becomes a
+ * 500, never a false success). A 5xx or a client disconnect rolls back.
+ * A request already in scope just continues.
  */
 export function scopeRequest(orgId: string, res: Response, next: () => void) {
   if (scope.getStore()) return next()
-  runInTenant(orgId, () => {
-    return new Promise<void>((resolve, reject) => {
-      res.once('finish', () => (res.statusCode >= 500 ? reject(new Rollback()) : resolve()))
-      res.once('close', () => (res.writableFinished ? undefined : reject(new Rollback())))
-      next()
-    })
-  }).catch((e) => {
-    if (e instanceof Rollback) return
-    console.error('[tenant] transaction failed:', (e as Error).message)
-    if (!res.headersSent) res.status(500).json({ error: 'Something went wrong on the server. Please try again.' })
+  const end = res.end.bind(res) as (...args: unknown[]) => Response
+  let finished!: (args: unknown[] | null) => void
+  const handlerDone = new Promise<unknown[] | null>((resolve) => (finished = resolve))
+  // the handler "ends" the response; we send it only after the commit below
+  res.end = ((...args: unknown[]) => {
+    finished(args)
+    return res
+  }) as Response['end']
+  res.once('close', () => finished(null)) // client gone before we answered
+
+  runInTenant(orgId, async () => {
+    next()
+    const args = await handlerDone
+    if (!args) throw new Rollback()
+    if (res.statusCode >= 500) throw new Rollback(args)
+    return args
   })
+    .then((args) => end(...args))
+    .catch((e) => {
+      if (e instanceof Rollback) {
+        if (e.endArgs) end(...e.endArgs)
+        return
+      }
+      console.error('[tenant] transaction failed:', (e as Error).message)
+      res.end = end
+      if (!res.headersSent) res.status(500).json({ error: 'Something went wrong on the server. Please try again.' })
+      else end()
+    })
 }
