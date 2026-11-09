@@ -15,6 +15,9 @@ living document instead of a static PDF.
 dashboard), light and dark themes (light by default; switch with the moon/sun icon in any header,
 remembered per device), and a new app layout: a grouped, collapsible sidebar (Sell · Operate ·
 Finance · Insights · Settings) and a **Ctrl/⌘ K** command palette to jump anywhere.
+The workspace page shows what needs you (role-shaped tasks), four KPIs (open pipeline, won this
+month, 90-day win rate, average discount), pipeline-by-stage and invoiced-revenue charts, and a
+"Get set up" checklist for a new company.
 
 ---
 
@@ -494,7 +497,7 @@ session cookie.
 | Fulfilment | `GET /quotations/:id/fulfillment/suggestion·allocations`, `POST /:id/fulfillment/accept·consolidate`, `POST /stock/:id/receive` |
 | Billing | `GET·POST /quotations/:id/billing[/generate]`, `POST /:id/billing/subscriptions/:lineId/change·cancel·pause·resume`, `POST /invoices/:id/pay` |
 | Portal *(public)* | `GET /portal/:token`, `POST /portal/:token/negotiate·confirm` |
-| Ops | `GET /summary·notifications` (scoped per role), `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf]` (manager, finance, admin only) |
+| Ops | `GET /summary` (tasks, KPIs, charts, setup checklist; scoped per role), `GET /notifications`, `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf]` (manager, finance, admin only) |
 | Dashboard | `GET /dashboard`, `POST /dashboard/quotations/:id/nudge·escalate` |
 | Reports | `GET /reports·/filters·/export?format=pdf\|xls` |
 | Config | `GET·POST·PATCH·DELETE /config/{products,categories,customers,variants,price-list,pairings,warehouses,stock,subscription-plans,discount-tiers,category-ceilings,users}`, `GET·PATCH /config/settings`, `GET /config/products/:id/stock·/config/categories-list·/config/audit` |
