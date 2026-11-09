@@ -1,30 +1,35 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route } from 'react-router-dom'
-import Login from '@/pages/Login'
-import Signup from '@/pages/Signup'
-import ForgotPassword from '@/pages/ForgotPassword'
-import ResetPassword from '@/pages/ResetPassword'
-import Dashboard from '@/pages/Dashboard'
-import Admin from '@/pages/Admin'
-import Quotations from '@/pages/Quotations'
-import QuotationBuilder from '@/pages/QuotationBuilder'
-import Fulfillment from '@/pages/Fulfillment'
-import Billing from '@/pages/Billing'
-import Invoices from '@/pages/Invoices'
-import InvoiceDetail from '@/pages/InvoiceDetail'
-import FulfillmentQueue from '@/pages/FulfillmentQueue'
-import Subscriptions from '@/pages/Subscriptions'
-import Portal from '@/pages/Portal'
-import Profile from '@/pages/Profile'
-import Approvals from '@/pages/Approvals'
-import ApprovalDetail from '@/pages/ApprovalDetail'
-import DealHealth from '@/pages/DealHealth'
-import Reports from '@/pages/Reports'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useLiveUpdates } from '@/hooks/useLiveUpdates'
+import PageSkeleton from '@/components/PageSkeleton'
+
+// one chunk per screen, so the first load doesn't ship every page
+const Login = lazy(() => import('@/pages/Login'))
+const Signup = lazy(() => import('@/pages/Signup'))
+const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('@/pages/ResetPassword'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Admin = lazy(() => import('@/pages/Admin'))
+const Quotations = lazy(() => import('@/pages/Quotations'))
+const QuotationBuilder = lazy(() => import('@/pages/QuotationBuilder'))
+const Fulfillment = lazy(() => import('@/pages/Fulfillment'))
+const Billing = lazy(() => import('@/pages/Billing'))
+const Invoices = lazy(() => import('@/pages/Invoices'))
+const InvoiceDetail = lazy(() => import('@/pages/InvoiceDetail'))
+const FulfillmentQueue = lazy(() => import('@/pages/FulfillmentQueue'))
+const Subscriptions = lazy(() => import('@/pages/Subscriptions'))
+const Portal = lazy(() => import('@/pages/Portal'))
+const Profile = lazy(() => import('@/pages/Profile'))
+const Approvals = lazy(() => import('@/pages/Approvals'))
+const ApprovalDetail = lazy(() => import('@/pages/ApprovalDetail'))
+const DealHealth = lazy(() => import('@/pages/DealHealth'))
+const Reports = lazy(() => import('@/pages/Reports'))
 
 export default function App() {
   useLiveUpdates()
   return (
+    <Suspense fallback={<PageSkeleton />}>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
@@ -56,5 +61,6 @@ export default function App() {
         <Route path="/admin" element={<Admin />} />
       </Route>
     </Routes>
+    </Suspense>
   )
 }

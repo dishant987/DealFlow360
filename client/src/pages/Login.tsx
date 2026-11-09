@@ -19,8 +19,10 @@ const schema = z.object({
 })
 type Form = z.infer<typeof schema>
 
-// The seeded roles, so a reviewer can switch personas without hunting through
-// the docs for credentials. They all share the seed password.
+// Internal testing only: the seeded roles, which all share the seed password.
+// Shown in `npm run dev`, never in a production build unless an internal
+// staging build opts in with VITE_SHOW_DEMO_LOGINS=true.
+const SHOW_DEMO = import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGINS === 'true'
 const DEMO_ROLES = [
   { label: ROLE_LABEL.rep, email: 'rep@dealflow.com' },
   { label: ROLE_LABEL.manager, email: 'manager@dealflow.com' },
@@ -62,6 +64,7 @@ export default function Login() {
       title="Sign in"
       description="Pick up your sales workspace where you left it."
       footer={
+        SHOW_DEMO && (
         <div className="rounded-lg border border-dashed bg-background/60 p-3">
           <p className="text-xs font-medium text-muted-foreground">Demo accounts</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -83,6 +86,7 @@ export default function Login() {
             <code className="rounded bg-muted px-1">{DEMO_PASSWORD}</code>.
           </p>
         </div>
+        )
       }
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>

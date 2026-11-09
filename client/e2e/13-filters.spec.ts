@@ -125,8 +125,8 @@ test.describe('Approvals — filters', () => {
   test('an approver opens on their OWN queue, not the whole pipeline', async ({ page }) => {
     await login(page, 'manager')
     await page.goto('/approvals')
-    const scope = page.getByRole('button', { name: /Needs my decision/ })
-    await expect(scope, 'scoped by default').toHaveAttribute('aria-pressed', 'true')
+    const scope = page.getByLabel('Approval scope')
+    await expect(scope, 'scoped by default').toHaveValue('todo')
 
     // every row on screen is one this approver can actually decide
     for (const r of await page.getByRole('row').filter({ hasNotText: 'Quotation' }).all())
@@ -134,8 +134,8 @@ test.describe('Approvals — filters', () => {
 
     // and it can be widened to the full pipeline
     const mine = Number((await page.getByText(/of \d+/).first().textContent())!.match(/of (\d+)/)![1])
-    await scope.click()
-    await expect(scope).toHaveAttribute('aria-pressed', 'false')
+    await scope.selectOption('all')
+    await expect(scope).toHaveValue('all')
     const everything = Number(
       (await page.getByText(/of \d+/).first().textContent())!.match(/of (\d+)/)![1],
     )
