@@ -158,7 +158,7 @@ test.describe('Sales Manager / Approver', () => {
   test('configures discount tiers and approval chains in the UI', async ({ page }) => {
     await login(page, 'manager')
     await page.goto('/admin')
-    await expect(page.getByRole('heading', { name: 'Backend configuration' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible()
     await expect(page.getByText('Discount Tiers').first()).toBeVisible()
     await expect(page.getByText('Category Ceilings').first()).toBeVisible()
     // the approval chain = the two routing thresholds, on their own tab
@@ -299,7 +299,7 @@ test.describe('Admin', () => {
   test('manages products, price lists, discount tiers, warehouses and plans', async ({ page }) => {
     await login(page, 'admin')
     await page.goto('/admin')
-    await expect(page.getByText('Backend configuration')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Settings', level: 1 })).toBeVisible()
     for (const tab of [
       'Products',
       'Categories',

@@ -135,9 +135,13 @@ function TabGroupLabel({ children }: { children: ReactNode }) {
   )
 }
 
-function Divider() {
-  return <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
-}
+const SECTIONS: { label: string; items: [string, string][] }[] = [
+  { label: 'Catalogue', items: [['products', 'Products'], ['categories', 'Categories'], ['variants', 'Variants'], ['pairings', 'Upsell Pairings'], ['plans', 'Subscription Plans']] },
+  { label: 'Pricing & governance', items: [['tiers', 'Discount Tiers'], ['ceilings', 'Category Ceilings'], ['settings', 'Thresholds']] },
+  { label: 'Operations', items: [['warehouses', 'Warehouses'], ['stock', 'Stock']] },
+  { label: 'Team', items: [['users', 'Users']] },
+  { label: 'Records', items: [['audit', 'Audit Log']] },
+]
 
 export default function Admin() {
   const { user } = useAuth()
@@ -147,13 +151,13 @@ export default function Admin() {
     <AppShell
       crumbs={[
         { label: 'Workspace', to: '/' },
-        { label: 'Backend Config' },
+        { label: 'Settings' },
       ]}
     >
       <div className="space-y-4">
         <div>
           <h1 className="font-heading text-xl font-semibold">
-            Backend configuration
+            Settings
           </h1>
           <p className="text-sm text-muted-foreground">
             Everything the sales engine reads at runtime: catalogue, pricing, discount governance, stock
@@ -161,47 +165,24 @@ export default function Admin() {
           </p>
         </div>
 
-        <Tabs defaultValue="products">
-          {/* thirteen flat tabs read as one undifferentiated wall — grouping them
-              by what they govern makes the screen navigable */}
-          <div className="flex flex-wrap items-center gap-x-1 gap-y-2 rounded-lg border bg-background p-1.5">
-            <>
-                <TabGroupLabel>Catalogue</TabGroupLabel>
-                <TabsList className="h-auto flex-wrap bg-transparent p-0">
-                  <TabsTrigger value="products">Products</TabsTrigger>
-                  <TabsTrigger value="categories">Categories</TabsTrigger>
-                  <TabsTrigger value="variants">Variants</TabsTrigger>
-                  <TabsTrigger value="pairings">Upsell Pairings</TabsTrigger>
-                  <TabsTrigger value="plans">Subscription Plans</TabsTrigger>
+        <Tabs defaultValue="products" orientation="vertical" className="flex-col gap-6 md:flex-row md:items-start">
+          {/* grouped menu on the left; two columns on a phone so it stays short */}
+          <nav aria-label="Settings sections" className="grid grid-cols-2 gap-4 rounded-lg border bg-background p-3 md:sticky md:top-4 md:block md:w-52 md:shrink-0 md:space-y-4">
+            {SECTIONS.filter((g) => isAdmin || g.label !== 'Team').map((g) => (
+              <div key={g.label} className="space-y-1">
+                <TabGroupLabel>{g.label}</TabGroupLabel>
+                <TabsList variant="line" className="w-full items-stretch">
+                  {g.items.map(([value, label]) => (
+                    <TabsTrigger key={value} value={value} className="px-2 py-1.5 after:hidden data-active:bg-accent! data-active:text-foreground">
+                      {label}
+                    </TabsTrigger>
+                  ))}
                 </TabsList>
-                <Divider />
-            </>
+              </div>
+            ))}
+          </nav>
 
-            <TabGroupLabel>Governance</TabGroupLabel>
-            <TabsList className="h-auto flex-wrap bg-transparent p-0">
-              <TabsTrigger value="tiers">Discount Tiers</TabsTrigger>
-              <TabsTrigger value="ceilings">Category Ceilings</TabsTrigger>
-              <TabsTrigger value="settings">Thresholds</TabsTrigger>
-            </TabsList>
-
-            <>
-                <Divider />
-                <TabGroupLabel>Operations</TabGroupLabel>
-                <TabsList className="h-auto flex-wrap bg-transparent p-0">
-                  <TabsTrigger value="warehouses">Warehouses</TabsTrigger>
-                  <TabsTrigger value="stock">Stock</TabsTrigger>
-                </TabsList>
-            </>
-
-            <Divider />
-            <TabGroupLabel>Records</TabGroupLabel>
-            <TabsList className="h-auto flex-wrap bg-transparent p-0">
-              {isAdmin && <TabsTrigger value="users">Users</TabsTrigger>}
-              <TabsTrigger value="audit">Audit Log</TabsTrigger>
-            </TabsList>
-          </div>
-
-          <div className="mt-4">
+          <div className="min-w-0 flex-1">
             <TabsContent value="products">
               <ResourceManager
                 title="Product"
@@ -416,7 +397,7 @@ export default function Admin() {
             {isAdmin && <TabsContent value="users">
               <ResourceManager
                 title="User"
-                description={`Internal accounts and their role. Self-signup always creates a ${ROLE_LABEL.rep}.`}
+                description="Your team and their roles. Add teammates here — signing up creates a separate company."
                 endpoint="/config/users"
                 columns={[
                   { key: 'name', label: 'Name' },
