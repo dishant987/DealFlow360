@@ -23,3 +23,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# local backups of .env (contain secrets)
+.env.backup*

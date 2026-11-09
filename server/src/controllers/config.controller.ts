@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { hashPassword } from '../utils/token.js'
 import { num } from '../utils/crud.js'
@@ -299,11 +299,13 @@ export async function updateSettings(req: Request, res: Response) {
 
 /* ---- user management (admin creates manager/finance/admin) ---- */
 const roleEnum = z.enum(['rep', 'manager', 'finance', 'admin'])
-export async function listUsers(_req: Request, res: Response) {
+export async function listUsers(req: Request, res: Response) {
   res.json(
     await db
       .select({ id: users.id, name: users.name, email: users.email, role: users.role, blocked: users.blocked })
-      .from(users),
+      .from(users)
+      // users aren't under RLS (sign-in finds them by email), so scope by company here
+      .where(eq(users.organizationId, req.orgId!)),
   )
 }
 export async function createUser(req: Request, res: Response) {
@@ -325,6 +327,7 @@ export async function createUser(req: Request, res: Response) {
       email: p.data.email,
       passwordHash: await hashPassword(p.data.password),
       role: p.data.role,
+      organizationId: req.orgId!,
     })
     .returning({ id: users.id, name: users.name, email: users.email, role: users.role })
   res.status(201).json(u)
@@ -349,14 +352,17 @@ export async function updateUser(req: Request<{ id: string }>, res: Response) {
   const [u] = await db
     .update(users)
     .set(patch)
-    .where(eq(users.id, req.params.id))
+    .where(and(eq(users.id, req.params.id), eq(users.organizationId, req.orgId!)))
     .returning({ id: users.id, name: users.name, email: users.email, role: users.role, blocked: users.blocked })
   if (!u) return res.status(404).json({ error: 'not found' })
   res.json(u)
 }
 export async function deleteUser(req: Request<{ id: string }>, res: Response) {
   if (req.params.id === req.user!.id) return res.status(400).json({ error: "You can't delete your own account." })
-  const [u] = await db.delete(users).where(eq(users.id, req.params.id)).returning()
+  const [u] = await db
+    .delete(users)
+    .where(and(eq(users.id, req.params.id), eq(users.organizationId, req.orgId!)))
+    .returning()
   if (!u) return res.status(404).json({ error: 'not found' })
   res.json({ ok: true })
 }

@@ -2,6 +2,9 @@ import { Server as IOServer } from 'socket.io'
 import type { Server as HttpServer } from 'http'
 import { corsOrigins } from './env.js'
 import { cookieName, verifyToken } from '../utils/token.js'
+import { eq } from 'drizzle-orm'
+import { db } from './db.js'
+import { users } from '../models/schema.js'
 
 // Read the session cookie straight from the handshake headers.
 export function tokenFromCookie(header: string | undefined): string | null {
@@ -25,14 +28,23 @@ export function initSocket(server: HttpServer) {
       // inside the try: a malformed %-escape makes decodeURIComponent throw
       const token = tokenFromCookie(socket.handshake.headers.cookie)
       if (!token) throw new Error('no session')
-      verifyToken(token)
-      next()
+      const { id } = verifyToken(token)
+      // join the company's room so change signals never cross companies
+      void db
+        .select({ org: users.organizationId, blocked: users.blocked })
+        .from(users)
+        .where(eq(users.id, id))
+        .then(([u]) => {
+          if (!u || u.blocked) return next(new Error('unauthenticated'))
+          socket.data.orgId = u.org
+          next()
+        }, () => next(new Error('unauthenticated')))
     } catch {
       next(new Error('unauthenticated'))
     }
   })
   io.on('connection', (socket) => {
-    socket.on('disconnect', () => {})
+    socket.join(`org:${socket.data.orgId}`)
   })
   return io
 }
@@ -46,17 +58,17 @@ export function initSocket(server: HttpServer) {
 // out a burst of frames that all say the same thing ("something changed, go
 // look"). One trailing frame per window carries exactly as much information.
 const BURST_MS = 250
-let pending: { path: string; method: string } | null = null
+// coalesced per company: each company's room gets its own trailing frame
+const pending = new Map<string, { path: string; method: string }>()
 let timer: NodeJS.Timeout | null = null
 
-export function emitChange(payload: { path: string; method: string }) {
+export function emitChange(payload: { path: string; method: string }, orgId: string) {
   if (!io) return
-  pending = payload
+  pending.set(orgId, payload)
   if (timer) return
   timer = setTimeout(() => {
     timer = null
-    const p = pending
-    pending = null
-    if (p) io?.emit('data:changed', p)
+    for (const [org, p] of pending) io?.to(`org:${org}`).emit('data:changed', p)
+    pending.clear()
   }, BURST_MS)
 }

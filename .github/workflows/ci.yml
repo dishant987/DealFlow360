@@ -27,7 +27,10 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dealwise
+      # owner login for migrations; the app and the seed run as dealwise_app (no RLS bypass)
+      MIGRATE_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/dealwise
+      DATABASE_URL: postgresql://dealwise_app:ci-app-password-0123456789@localhost:5432/dealwise
+      APP_DB_PASSWORD: ci-app-password-0123456789
       JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
       CLIENT_URL: http://localhost:5173
       MAIL_ENABLED: 'false'
@@ -55,10 +58,11 @@ jobs:
           npm test
 
       # builds the schema from committed migrations, so a broken migration fails CI
-      - name: Database — migrate and seed
+      - name: Database — migrate, create the app login, seed as it
         working-directory: server
         run: |
           npm run db:migrate
+          npm run db:app-role
           npm run db:seed
 
       - name: Client — lint and build
@@ -101,9 +105,16 @@ jobs:
         run: docker build -t dealwise:ci .
       # the container migrates an empty database on start, then serves client + API on one port
       - name: Run and smoke-test
+        env:
+          OWNER: postgresql://postgres:postgres@localhost:5432/dealwise
+          APP: postgresql://dealwise_app:ci-app-password-0123456789@localhost:5432/dealwise
         run: |
+          # first deploy: migrate as the owner, then create the app login
+          docker run --rm --network host -e DATABASE_URL=$OWNER dealwise:ci npm run migrate:prod
+          docker run --rm --network host -e DATABASE_URL=$OWNER -e APP_DB_PASSWORD=ci-app-password-0123456789 dealwise:ci npm run app-role:prod
           docker run -d --name app --network host \
-            -e DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dealwise \
+            -e MIGRATE_DATABASE_URL=$OWNER \
+            -e DATABASE_URL=$APP \
             -e JWT_SECRET=ci-only-secret-not-used-anywhere-else-0123456789 \
             -e CLIENT_URL=https://ci.dealwise.example \
             -e MAIL_ENABLED=false \
@@ -113,6 +124,8 @@ jobs:
           curl -fs localhost:4000/ | grep -q '<title>Dealwise'
           curl -fs localhost:4000/quotations | grep -q '<title>Dealwise'
           docker logs app | grep -q 'migrations up to date'
+          # production refuses to start on a login that skips row-level security
+          ! docker logs app 2>&1 | grep -q 'row-level security'
       - name: Container logs
         if: always()
         run: docker logs app || true

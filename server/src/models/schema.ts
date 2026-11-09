@@ -19,6 +19,23 @@ const money = (name: string) => numeric(name, { precision: 12, scale: 2 })
 // uuid primary key helper
 const pk = () => uuid('id').primaryKey().defaultRandom()
 
+/* ---------- companies (multi-tenancy) ----------
+   Every business table carries organization_id. It defaults to the request's
+   company (set per request in config/tenant.ts) and Postgres row-level security
+   (migration 0006) only ever shows rows of that company. */
+export const organizations = pgTable('organizations', {
+  id: pk(),
+  name: text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+})
+// Migration 0006 also adds an index on every organization_id and the RLS policies;
+// drizzle-kit doesn't model those, so never run `db:push` (it would drop them).
+const tenantId = () =>
+  uuid('organization_id')
+    .notNull()
+    .default(sql`(current_setting('app.org_id'))::uuid`)
+    .references(() => organizations.id)
+
 /* ---------- enums ---------- */
 export const roleEnum = pgEnum('role', ['rep', 'manager', 'finance', 'admin'])
 export const tierEnum = pgEnum('customer_tier', ['bronze', 'silver', 'gold'])
@@ -58,6 +75,9 @@ export const negotiationStatusEnum = pgEnum('negotiation_status', ['open', 'addr
 /* ---------- users & customers ---------- */
 export const users = pgTable('users', {
   id: pk(),
+  organizationId: uuid('organization_id')
+    .notNull()
+    .references(() => organizations.id),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   passwordHash: text('password_hash').notNull(),
@@ -76,6 +96,7 @@ export const users = pgTable('users', {
 
 export const customers = pgTable('customers', {
   id: pk(),
+  organizationId: tenantId(),
   name: text('name').notNull(),
   email: text('email').notNull(),
   tier: tierEnum('tier').notNull().default('bronze'),
@@ -85,13 +106,15 @@ export const customers = pgTable('customers', {
 /* ---------- catalog ---------- */
 export const categories = pgTable('categories', {
   id: pk(),
-  name: text('name').notNull().unique(),
-})
+  organizationId: tenantId(),
+  name: text('name').notNull(),
+}, (t) => [uniqueIndex('categories_org_name_uq').on(t.organizationId, t.name)])
 
 export const products = pgTable('products', {
   id: pk(),
+  organizationId: tenantId(),
   name: text('name').notNull(),
-  sku: text('sku').notNull().unique(),
+  sku: text('sku').notNull(),
   categoryId: uuid('category_id')
     .notNull()
     .references(() => categories.id),
@@ -108,13 +131,14 @@ export const products = pgTable('products', {
   ),
   isPromoted: boolean('is_promoted').notNull().default(false),
   active: boolean('active').notNull().default(true),
-})
+}, (t) => [uniqueIndex('products_org_sku_uq').on(t.organizationId, t.sku)])
 
 // tier-based price overrides (falls back to products.unit_price when absent)
 export const priceListItems = pgTable(
   'price_list_items',
   {
     id: pk(),
+  organizationId: tenantId(),
     productId: uuid('product_id')
       .notNull()
       .references(() => products.id),
@@ -127,6 +151,7 @@ export const priceListItems = pgTable(
 // A2: variants — attribute (e.g. "Size"), value (e.g. "Large"), extra price on top of base
 export const productVariants = pgTable('product_variants', {
   id: pk(),
+  organizationId: tenantId(),
   productId: uuid('product_id')
     .notNull()
     .references(() => products.id, { onDelete: 'cascade' }),
@@ -139,12 +164,14 @@ export const productVariants = pgTable('product_variants', {
 /* ---------- discount governance ---------- */
 export const discountTiers = pgTable('discount_tiers', {
   id: pk(),
-  tier: tierEnum('tier').notNull().unique(),
+  organizationId: tenantId(),
+  tier: tierEnum('tier').notNull(),
   maxDiscountPct: numeric('max_discount_pct', { precision: 5, scale: 2 }).notNull(),
-})
+}, (t) => [uniqueIndex('discount_tiers_org_tier_uq').on(t.organizationId, t.tier)])
 
 export const categoryDiscountCeilings = pgTable('category_discount_ceilings', {
   id: pk(),
+  organizationId: tenantId(),
   categoryId: uuid('category_id')
     .notNull()
     .references(() => categories.id)
@@ -155,17 +182,19 @@ export const categoryDiscountCeilings = pgTable('category_discount_ceilings', {
 /* ---------- warehouses & stock ---------- */
 export const warehouses = pgTable('warehouses', {
   id: pk(),
-  name: text('name').notNull().unique(),
+  organizationId: tenantId(),
+  name: text('name').notNull(),
   shippingCostWeight: numeric('shipping_cost_weight', { precision: 6, scale: 2 })
     .notNull()
     .default('1'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-})
+}, (t) => [uniqueIndex('warehouses_org_name_uq').on(t.organizationId, t.name)])
 
 export const stock = pgTable(
   'stock',
   {
     id: pk(),
+  organizationId: tenantId(),
     warehouseId: uuid('warehouse_id')
       .notNull()
       .references(() => warehouses.id),
@@ -186,6 +215,7 @@ export const stock = pgTable(
 /* ---------- subscriptions ---------- */
 export const subscriptionPlans = pgTable('subscription_plans', {
   id: pk(),
+  organizationId: tenantId(),
   name: text('name').notNull(),
   interval: planIntervalEnum('interval').notNull().default('monthly'),
   prorationEnabled: boolean('proration_enabled').notNull().default(true),
@@ -199,6 +229,7 @@ export const productPairings = pgTable(
   'product_pairings',
   {
     id: pk(),
+  organizationId: tenantId(),
     productId: uuid('product_id')
       .notNull()
       .references(() => products.id),
@@ -213,6 +244,7 @@ export const productPairings = pgTable(
 /* ---------- tunable knobs (singleton row) ---------- */
 export const appSettings = pgTable('app_settings', {
   id: pk(),
+  organizationId: tenantId(),
   managerThreshold: numeric('manager_threshold', { precision: 6, scale: 2 })
     .notNull()
     .default('5'), // blended risk score above this → manager approval
@@ -228,6 +260,7 @@ export const appSettings = pgTable('app_settings', {
 /* ---------- quotations ---------- */
 export const quotations = pgTable('quotations', {
   id: pk(),
+  organizationId: tenantId(),
   // human-readable quotation number — sequence guarantees uniqueness under concurrency
   seqNo: serial('seq_no').notNull(),
   customerId: uuid('customer_id')
@@ -253,6 +286,7 @@ export const quotations = pgTable('quotations', {
 
 export const quoteLines = pgTable('quote_lines', {
   id: pk(),
+  organizationId: tenantId(),
   quotationId: uuid('quotation_id')
     .notNull()
     .references(() => quotations.id, { onDelete: 'cascade' }),
@@ -272,6 +306,7 @@ export const quoteLines = pgTable('quote_lines', {
 /* ---------- approvals & audit ---------- */
 export const approvals = pgTable('approvals', {
   id: pk(),
+  organizationId: tenantId(),
   quotationId: uuid('quotation_id')
     .notNull()
     .references(() => quotations.id, { onDelete: 'cascade' }),
@@ -285,6 +320,7 @@ export const approvals = pgTable('approvals', {
 // immutable trail for every approval/rejection/edit (A3)
 export const auditLog = pgTable('audit_log', {
   id: pk(),
+  organizationId: tenantId(),
   quotationId: uuid('quotation_id').references(() => quotations.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').references(() => users.id),
   action: text('action').notNull(),
@@ -296,6 +332,7 @@ export const auditLog = pgTable('audit_log', {
 /* ---------- fulfillment (allocations hang directly off the quote) ---------- */
 export const fulfillmentAllocations = pgTable('fulfillment_allocations', {
   id: pk(),
+  organizationId: tenantId(),
   quotationId: uuid('quotation_id')
     .notNull()
     .references(() => quotations.id, { onDelete: 'cascade' }),
@@ -311,6 +348,7 @@ export const fulfillmentAllocations = pgTable('fulfillment_allocations', {
 /* ---------- billing & invoices ---------- */
 export const invoices = pgTable('invoices', {
   id: pk(),
+  organizationId: tenantId(),
   // invoices need their own document number, independent of the quote
   seqNo: serial('seq_no').notNull(),
   quotationId: uuid('quotation_id')
@@ -326,6 +364,7 @@ export const invoices = pgTable('invoices', {
 
 export const billingSchedules = pgTable('billing_schedules', {
   id: pk(),
+  organizationId: tenantId(),
   quotationId: uuid('quotation_id')
     .notNull()
     .references(() => quotations.id, { onDelete: 'cascade' }),
@@ -342,6 +381,7 @@ export const billingSchedules = pgTable('billing_schedules', {
 
 export const payments = pgTable('payments', {
   id: pk(),
+  organizationId: tenantId(),
   invoiceId: uuid('invoice_id')
     .notNull()
     .references(() => invoices.id, { onDelete: 'cascade' }),
@@ -352,6 +392,7 @@ export const payments = pgTable('payments', {
 
 export const creditNotes = pgTable('credit_notes', {
   id: pk(),
+  organizationId: tenantId(),
   quotationId: uuid('quotation_id')
     .notNull()
     .references(() => quotations.id, { onDelete: 'cascade' }),
@@ -363,6 +404,7 @@ export const creditNotes = pgTable('credit_notes', {
 /* ---------- customer portal negotiation ---------- */
 export const negotiationRequests = pgTable('negotiation_requests', {
   id: pk(),
+  organizationId: tenantId(),
   quotationId: uuid('quotation_id')
     .notNull()
     .references(() => quotations.id, { onDelete: 'cascade' }),

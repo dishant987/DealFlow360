@@ -1,8 +1,8 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { and, eq, gt } from 'drizzle-orm'
-import { db } from '../config/db.js'
-import { users } from '../models/schema.js'
+import { db, runInTenant } from '../config/db.js'
+import { appSettings, discountTiers, organizations, users } from '../models/schema.js'
 import {
   hashPassword,
   verifyPassword,
@@ -18,12 +18,28 @@ import { completeSignIn } from './mfa.controller.js'
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 
-// self-signup is always a rep; other roles are created by an admin
+// Self-signup starts a new company with the person as its admin; teammates are
+// added by that admin (Config → Users) and join the same company.
 const signupSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
+  company: z.string().trim().min(1).max(120).optional(),
 })
+
+/** A new company with the defaults the pricing engine needs (no tiers = every discount is over the limit). */
+export async function createCompany(name: string) {
+  const [org] = await db.insert(organizations).values({ name }).returning()
+  await runInTenant(org.id, async () => {
+    await db.insert(appSettings).values({})
+    await db.insert(discountTiers).values([
+      { tier: 'bronze', maxDiscountPct: '5' },
+      { tier: 'silver', maxDiscountPct: '10' },
+      { tier: 'gold', maxDiscountPct: '15' },
+    ])
+  })
+  return org
+}
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) })
 const forgotSchema = z.object({ email: z.string().email() })
 const resetSchema = z.object({ token: z.string().min(1), password: z.string().min(6) })
@@ -36,9 +52,10 @@ export async function signup(req: Request, res: Response) {
   const existing = await db.select().from(users).where(eq(users.email, email))
   if (existing.length) return res.status(409).json({ error: 'email already registered' })
 
+  const org = await createCompany(parsed.data.company || `${name}'s company`)
   const [u] = await db
     .insert(users)
-    .values({ name, email, passwordHash: await hashPassword(password), role: 'rep' })
+    .values({ name, email, passwordHash: await hashPassword(password), role: 'admin', organizationId: org.id })
     .returning()
   const token = signToken({ id: u.id, role: u.role, email: u.email })
   res

@@ -159,8 +159,9 @@ export async function getReport(req: Request, res: Response) {
   res.json(await buildReport(req.query))
 }
 
-export async function getReportFilters(_req: Request, res: Response) {
-  const reps = await db.select({ id: users.id, name: users.name }).from(users)
+export async function getReportFilters(req: Request, res: Response) {
+  // users aren't under RLS, so scope the rep list by company here
+  const reps = await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.organizationId, req.orgId!))
   const cats = await db.select({ id: categories.id, name: categories.name }).from(categories)
   res.json({
     reps,

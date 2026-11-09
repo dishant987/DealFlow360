@@ -47,9 +47,10 @@ createdb dealwise
 
 ```bash
 cd server
-cp .env.example .env        # set DATABASE_URL and JWT_SECRET
+cp .env.example .env        # set MIGRATE_DATABASE_URL, APP_DB_PASSWORD, JWT_SECRET
 npm install
-npm run db:migrate          # create the schema from committed migrations
+npm run db:migrate          # create the schema from committed migrations (owner login)
+npm run db:app-role         # create the app's own login, then set DATABASE_URL to it
 npm run db:seed             # sample data — see below
 npm run dev                 # http://localhost:4000
 ```
@@ -66,7 +67,9 @@ npm run dev                 # http://localhost:5173
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | Postgres connection string. Append `?sslmode=require` for a hosted DB and SSL turns on automatically. |
+| `DATABASE_URL` | The **app login** (created by `npm run db:app-role`). Must not be a superuser or have BYPASSRLS — in production the server refuses to start if it does. Append `?sslmode=require` for a hosted DB. |
+| `MIGRATE_DATABASE_URL` | The **owner login**, used only by migrations, `db:baseline` and `db:app-role`. |
+| `APP_DB_PASSWORD`, `APP_DB_USER` | Password (16+ chars) and name (default `dealwise_app`) for the app login. |
 | `JWT_SECRET` | Signs the session cookie. Use a long random string. |
 | `CLIENT_URL` | Used to build customer portal links. |
 | `SMTP_*` | Optional. Without it, portal and password-reset links print to the server console. |
@@ -100,6 +103,22 @@ approvals, negotiations, fulfilments, invoices and payments.
 
 ---
 
+## Companies (multi-tenancy)
+
+Dealwise hosts many companies in one database. Signing up creates a **new company** with you as
+its admin (default settings and discount tiers included); teammates are added by that admin and
+join the same company. Existing data from before multi-tenancy lives in "Default company".
+
+Isolation is enforced by Postgres, not by remembering a filter in every query:
+
+- every company table has `organization_id`, defaulted from the request's company;
+- **row-level security** shows a session only its company's rows (no company set = no rows);
+- **same-company foreign keys** stop a row pointing at another company's record by id;
+- each request runs in one transaction tagged with the signed-in user's company
+  (`server/src/config/db.ts`); live-update signals go to the company's room only.
+
+The app's database login therefore must not bypass row-level security — see `npm run db:app-role`.
+
 ## Deploying
 
 One Docker image runs the whole app: it builds the client, compiles the API, applies committed
@@ -108,7 +127,17 @@ origin, so cookies, live updates and the Content-Security-Policy stay same-origi
 
 ```bash
 docker build -t dealwise .
-docker run -p 4000:4000   -e DATABASE_URL=postgresql://user:pass@host:5432/dealwise?sslmode=require   -e JWT_SECRET=<at least 32 random characters>   -e CLIENT_URL=https://app.yourdomain.com   dealwise
+
+# first deploy only: create the app's own login, using the owner login
+docker run --rm -e DATABASE_URL=<owner url> -e APP_DB_PASSWORD=<16+ chars> \
+  dealwise npm run app-role:prod
+
+docker run -p 4000:4000 \
+  -e MIGRATE_DATABASE_URL=<owner url> \
+  -e DATABASE_URL=postgresql://dealwise_app:<password>@host:5432/dealwise?sslmode=require \
+  -e JWT_SECRET=<at least 32 random characters> \
+  -e CLIENT_URL=https://app.yourdomain.com \
+  dealwise
 ```
 
 Put it behind HTTPS (the session cookie is HTTPS-only in production). Without Docker:

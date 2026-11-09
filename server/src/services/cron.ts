@@ -1,6 +1,6 @@
 import cron from 'node-cron'
 import { and, inArray, lt } from 'drizzle-orm'
-import { db } from '../config/db.js'
+import { db, runInTenant } from '../config/db.js'
 import { quotations, appSettings } from '../models/schema.js'
 
 const ACTIVE = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
@@ -9,7 +9,8 @@ const ACTIVE = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as con
 // triggered manually from the dashboard. A full job queue is overkill here.
 export function startCron() {
   cron.schedule('0 * * * *', async () => {
-    try {
+    // internal job across every company; it only counts and logs
+    try { await runInTenant(null, async () => {
       const [s] = await db.select().from(appSettings).limit(1)
       const days = s ? s.stalledDays : 7
       const cutoff = new Date(Date.now() - days * 86_400_000)
@@ -18,7 +19,7 @@ export function startCron() {
         .from(quotations)
         .where(and(inArray(quotations.status, [...ACTIVE]), lt(quotations.lastActivityAt, cutoff)))
       if (stalled.length) console.log(`[cron] ${stalled.length} stalled deal(s) need attention`)
-    } catch (e) {
+    }, { bypass: true }) } catch (e) {
       console.error('[cron] stalled check failed:', (e as Error).message)
     }
   })

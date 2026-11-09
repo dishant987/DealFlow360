@@ -2,7 +2,10 @@ import 'dotenv/config'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { sql } from 'drizzle-orm'
-import { db, pool } from './config/db.js'
+import { db, pool, runInTenant } from './config/db.js'
+
+// fixed id: the same company the 0006 migration created for pre-existing data
+const DEMO_ORG = '00000000-0000-4000-8000-000000000001'
 import * as s from './models/schema.js'
 import { computeBlendedRisk } from './services/risk.js'
 import { computeLine } from './services/pricing.js'
@@ -51,8 +54,11 @@ async function wipe() {
   await db.delete(s.appSettings)
   // DELETE leaves the serial sequences where they were, so a reseeded database
   // would start at QT-2026-0093. Restart them for a clean demo.
-  await db.execute(sql`ALTER SEQUENCE quotations_seq_no_seq RESTART WITH 1`)
-  await db.execute(sql`ALTER SEQUENCE invoices_seq_no_seq RESTART WITH 1`)
+  // setval (not ALTER SEQUENCE) so the app's own non-owner login can run the seed
+  await db.execute(sql`select setval('quotations_seq_no_seq', 1, false)`)
+  await db.execute(sql`select setval('invoices_seq_no_seq', 1, false)`)
+  // last: every other table points at a company
+  await db.delete(s.organizations)
 }
 
 // Deterministic PRNG. The generated trading history has to be identical on every
@@ -83,6 +89,7 @@ async function seed() {
   /* Reference data                                                      */
   /* ------------------------------------------------------------------ */
 
+  await db.insert(s.organizations).values({ id: DEMO_ORG, name: 'Dealwise Demo Co' })
   await db.insert(s.appSettings).values({})
 
   // every account shares the password "password123"
@@ -90,14 +97,14 @@ async function seed() {
   const [riya, manoj, farah, aditi, dev, sana] = await db
     .insert(s.users)
     .values([
-      { name: 'Riya Rep', email: 'rep@dealflow.com', passwordHash: pw, role: 'rep' },
-      { name: 'Manoj Manager', email: 'manager@dealflow.com', passwordHash: pw, role: 'manager' },
-      { name: 'Farah Finance', email: 'finance@dealflow.com', passwordHash: pw, role: 'finance' },
-      { name: 'Aditi Admin', email: 'admin@dealflow.com', passwordHash: pw, role: 'admin' },
+      { name: 'Riya Rep', email: 'rep@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG },
+      { name: 'Manoj Manager', email: 'manager@dealflow.com', passwordHash: pw, role: 'manager', organizationId: DEMO_ORG },
+      { name: 'Farah Finance', email: 'finance@dealflow.com', passwordHash: pw, role: 'finance', organizationId: DEMO_ORG },
+      { name: 'Aditi Admin', email: 'admin@dealflow.com', passwordHash: pw, role: 'admin', organizationId: DEMO_ORG },
       // a second and third rep: needed for per-rep report filters, and so the
       // discount-anomaly detector has more than one baseline to compare against
-      { name: 'Dev Rep', email: 'dev@dealflow.com', passwordHash: pw, role: 'rep' },
-      { name: 'Sana Rep', email: 'sana@dealflow.com', passwordHash: pw, role: 'rep' },
+      { name: 'Dev Rep', email: 'dev@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG },
+      { name: 'Sana Rep', email: 'sana@dealflow.com', passwordHash: pw, role: 'rep', organizationId: DEMO_ORG },
     ])
     .returning()
 
@@ -999,7 +1006,8 @@ async function seed() {
   if (first) console.log(`    under negotiation : http://localhost:5173/portal/${negotiationToken}  (${quoteNumber(first.seqNo, first.createdAt)})`)
 }
 
-seed()
+// The whole seed runs as the demo company; bypass lets the wipe clear every company.
+runInTenant(DEMO_ORG, seed, { bypass: true })
   .catch((e) => {
     console.error('seed failed:', e)
     process.exitCode = 1

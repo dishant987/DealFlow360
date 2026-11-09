@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
-import { db } from '../config/db.js'
+import type { NextFunction } from 'express'
+import { db, runInTenant, scopeRequest } from '../config/db.js'
 import {
   quotations,
   quoteLines,
@@ -24,6 +25,23 @@ const closedMsg = (status: string) =>
     : `This quotation is ${status.replace(/_/g, ' ')} and is no longer open for changes.`
 
 // Resolve a quote by its portal token. Returns null if not found.
+/** router.param('token'): find which company the link belongs to, then run the request as that company. */
+export function portalScope(req: Request, res: Response, next: NextFunction, token: string) {
+  // the customer isn't signed in, so this one lookup crosses companies (internal bypass)
+  runInTenant(
+    null,
+    async () =>
+      (await db.select({ org: quotations.organizationId }).from(quotations).where(eq(quotations.portalToken, String(token))))[0]?.org,
+    { bypass: true },
+  )
+    .then((org) => {
+      if (!org) return res.status(404).json({ error: 'invalid link' })
+      req.orgId = org
+      scopeRequest(org, res, next)
+    })
+    .catch(next)
+}
+
 /** A link with no expiry counts as expired (fail closed). */
 export const portalLinkLive = (expiresAt: Date | null, now = new Date()) => !!expiresAt && expiresAt > now
 
