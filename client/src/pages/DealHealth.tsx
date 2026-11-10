@@ -6,6 +6,7 @@ import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 type Stalled = { id: string; quoteNumber: string; customer: string; rep: string; status: string; daysInactive: number }
 type Anomaly = { id: string; quoteNumber: string; customer: string; rep: string; riskScore: number; repAvg: number }
@@ -116,66 +117,71 @@ export default function DealHealth() {
     },
   ]
 
-  const card = 'rounded-lg border bg-background p-4'
+  const card = 'rounded-xl border bg-background p-5'
 
   return (
     <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Deal Health' }]}>
-      <div className="space-y-8">
-        <section className={card}>
-          <h2 className="font-semibold mb-3">
-            Stalled deals{' '}
-            <span className="text-muted-foreground text-sm font-normal">
-              (&gt; {h?.stalledDays ?? '…'}d inactive)
-            </span>
-          </h2>
-          <DataTable
-            rows={h?.stalled ?? []}
-            columns={stalledCols}
-            loading={health.isLoading}
-            pageSize={8}
-            searchPlaceholder="Search customer or rep…"
-            emptyMessage="No stalled deals."
-          />
-        </section>
+      {/* one list at a time: tabs instead of three long tables stacked on one page */}
+      <div className="space-y-4">
+        <div>
+          <h1 className="font-heading text-xl font-semibold">Deal health</h1>
+          <p className="text-sm text-muted-foreground">Deals that need a push, discounts out of line, and deliveries running late.</p>
+        </div>
+        <Tabs defaultValue="stalled">
+          <TabsList className="h-auto flex-wrap">
+            <TabsTrigger value="stalled">Stalled · {h?.stalled.length ?? '…'}</TabsTrigger>
+            <TabsTrigger value="anomalies">Discount anomalies · {h?.anomalies.length ?? '…'}</TabsTrigger>
+            <TabsTrigger value="slippage">Delivery slippage · {h?.slippage.length ?? '…'}</TabsTrigger>
+          </TabsList>
 
-        <section className={card}>
-          <h2 className="font-semibold mb-3">Discount anomalies</h2>
-          <DataTable
-            rows={h?.anomalies ?? []}
-            columns={anomalyCols}
-            loading={health.isLoading}
-            pageSize={8}
-            onRowClick={(r) => nav(`/quotations/${r.id}`)}
-            searchPlaceholder="Search customer or rep…"
-            emptyMessage="No anomalies."
-          />
-        </section>
+          <TabsContent value="stalled" className={card}>
+            <p className="mb-3 text-sm text-muted-foreground">No activity for more than {h?.stalledDays ?? '…'} days. Nudge the rep or escalate to their manager.</p>
+            <DataTable
+              rows={h?.stalled ?? []}
+              columns={stalledCols}
+              loading={health.isLoading}
+              pageSize={10}
+              searchPlaceholder="Search customer or rep…"
+              emptyMessage="No stalled deals."
+            />
+          </TabsContent>
 
-        <section className={card}>
-          <h2 className="font-semibold mb-2">Delivery slippage (backorders)</h2>
-          {(h?.slippage.length ?? 0) === 0 ? (
-            <p className="text-muted-foreground text-sm">No backordered deliveries.</p>
-          ) : (
-            <ul className="text-sm space-y-1">
-              {h!.slippage.map((s) => (
-                <li key={s.id} className="flex justify-between border-b py-1">
-                  <span>
-                    <Link
-                      to={`/quotations/${s.id}`}
-                      className="font-mono text-xs text-primary hover:underline mr-2"
-                    >
-                      {s.quoteNumber}
-                    </Link>
-                    {s.customer}
-                  </span>
-                  <Button size="sm" variant="ghost" onClick={() => nav(`/quotations/${s.id}/fulfillment`)}>
-                    Open
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+          <TabsContent value="anomalies" className={card}>
+            <p className="mb-3 text-sm text-muted-foreground">Quotes whose discount risk is well above the rep's own average.</p>
+            <DataTable
+              rows={h?.anomalies ?? []}
+              columns={anomalyCols}
+              loading={health.isLoading}
+              pageSize={10}
+              onRowClick={(r) => nav(`/quotations/${r.id}`)}
+              searchPlaceholder="Search customer or rep…"
+              emptyMessage="No anomalies."
+            />
+          </TabsContent>
+
+          <TabsContent value="slippage" className={card}>
+            <p className="mb-3 text-sm text-muted-foreground">Orders with items on backorder.</p>
+            {(h?.slippage.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">No backordered deliveries.</p>
+            ) : (
+              <ul className="divide-y text-sm">
+                {h!.slippage.map((x) => (
+                  <li key={x.id} className="flex items-center justify-between gap-3 py-2">
+                    <span>
+                      <Link to={`/quotations/${x.id}`} className="mr-2 font-mono text-xs text-primary hover:underline">
+                        {x.quoteNumber}
+                      </Link>
+                      {x.customer}
+                    </span>
+                    <Button size="sm" variant="outline" onClick={() => nav(`/quotations/${x.id}/fulfillment`)}>
+                      Open fulfilment
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </AppShell>
   )

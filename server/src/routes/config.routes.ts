@@ -18,6 +18,7 @@ import {
   productVariants,
   customers,
 } from '../models/schema.js'
+import { getCompany, updateCompany } from '../controllers/company.controller.js'
 import {
   listStock,
   upsertStock,
@@ -188,6 +189,9 @@ router.get('/categories-list', managerConfig, async (_req, res) => {
 
 router.get('/audit', managerConfig, listAudit)
 
+// company profile + defaults: every signed-in user reads it, only an admin changes it
+router.get('/company', getCompany)
+router.patch('/company', adminOnly, updateCompany)
 router.get('/settings', managerConfig, getSettings)
 router.patch('/settings', managerConfig, updateSettings)
 

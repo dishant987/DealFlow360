@@ -1,5 +1,5 @@
 import { test, expect, request, type APIRequestContext } from '@playwright/test'
-import { API, apiAs, login } from './helpers'
+import { API, apiAs, login, signPortal, SIGN } from './helpers'
 
 /** An approved quote, sent to the customer, with its portal token. */
 async function sentQuote(rep: APIRequestContext, discountPct = 0) {
@@ -197,6 +197,7 @@ test.describe.serial('B8 — customer portal negotiation', () => {
 
     await page.context().clearCookies()
     await page.goto(`/portal/${token}`)
+    await signPortal(page)
     await page.getByRole('button', { name: /Confirm quotation/i }).click()
 
     await expect(async () => {
@@ -214,6 +215,7 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     const { id, token } = await sentQuote(rep)
     await page.context().clearCookies()
     await page.goto(`/portal/${token}`)
+    await signPortal(page)
     await page.getByRole('button', { name: /Confirm quotation/i }).click()
 
     await expect(async () => {
@@ -252,6 +254,7 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     // the customer accepts exactly what they were sent — no counter, no changes
     await page.context().clearCookies()
     await page.goto(`/portal/${sent.portalToken}`)
+    await signPortal(page)
     await page.getByRole('button', { name: /Confirm quotation/i }).click()
 
     await expect(async () => {
@@ -274,7 +277,7 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     await anon.post(`/api/portal/${token}/negotiate`, {
       data: { type: 'counter_discount', counterDiscountPct: 45 },
     })
-    await anon.post(`/api/portal/${token}/confirm`)
+    await anon.post(`/api/portal/${token}/confirm`, { data: SIGN })
     expect((await (await rep.get(`/api/quotations/${id}`)).json()).status).toBe('pending_approval')
 
     await page.context().clearCookies()
@@ -297,7 +300,7 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     await anon.post(`/api/portal/${token}/negotiate`, {
       data: { type: 'counter_discount', counterDiscountPct: 45 },
     })
-    await anon.post(`/api/portal/${token}/confirm`)
+    await anon.post(`/api/portal/${token}/confirm`, { data: SIGN })
     expect((await (await rep.get(`/api/quotations/${id}`)).json()).status).toBe('pending_approval')
 
     // a 45% counter clears both thresholds, so both approvers sign it off
@@ -326,7 +329,7 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     await anon.post(`/api/portal/${token}/negotiate`, {
       data: { type: 'counter_discount', counterDiscountPct: 45 },
     })
-    await anon.post(`/api/portal/${token}/confirm`)
+    await anon.post(`/api/portal/${token}/confirm`, { data: SIGN })
     await mgr.post(`/api/approvals/${id}/action`, {
       data: { action: 'reject', reason: 'margin below floor' },
     })
@@ -356,7 +359,7 @@ test.describe.serial('B8 — customer portal negotiation', () => {
     const rep = await apiAs('rep')
     const { token } = await sentQuote(rep)
     const anon = await apiAs('rep')
-    await anon.post(`/api/portal/${token}/confirm`)
+    await anon.post(`/api/portal/${token}/confirm`, { data: SIGN })
     const again = await anon.post(`/api/portal/${token}/confirm`)
     expect(again.status()).toBe(400)
     expect((await again.json()).error).toMatch(/already confirmed/i)

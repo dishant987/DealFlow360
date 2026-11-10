@@ -6,7 +6,9 @@ import {
   listFulfillmentQueue,
   listSubscriptions,
   invoicePdf,
+  emailInvoice,
   getWorkspaceSummary,
+  getBadges,
 } from '../controllers/ops.controller.js'
 import { receiveStock } from '../controllers/fulfillment.controller.js'
 import { listNotifications } from '../controllers/notification.controller.js'
@@ -18,6 +20,7 @@ router.use(requireAuth)
 // The workspace summary is already scoped per role inside the handler — a rep
 // gets their own deals counted, everyone else gets the pipeline.
 router.get('/summary', getWorkspaceSummary)
+router.get('/badges', getBadges)
 // scoped per role inside the handler, like the summary above
 router.get('/notifications', listNotifications)
 
@@ -30,6 +33,7 @@ const crossPipeline = requireRole('manager', 'finance', 'admin')
 router.get('/invoices', crossPipeline, listInvoices)
 router.get('/invoices/:id', crossPipeline, getInvoice)
 router.get('/invoices/:id/pdf', crossPipeline, invoicePdf)
+router.post('/invoices/:id/email', crossPipeline, emailInvoice)
 router.get('/fulfillment-queue', crossPipeline, requireFeature('fulfilment'), listFulfillmentQueue)
 router.get('/subscriptions', crossPipeline, requireFeature('subscriptions'), listSubscriptions)
 

@@ -11,11 +11,18 @@ if (!connectionString) throw new Error('DATABASE_URL is not set (see .env.exampl
 
 // Local Postgres needs no SSL; hosted providers ask for it via ?sslmode=require.
 const verifyCert = process.env.DB_SSL_ALLOW_SELF_SIGNED !== 'true'
-export const poolFor = (url: string) =>
-  new Pool({
+export const poolFor = (url: string) => {
+  const p = new Pool({
     connectionString: url,
     ...(/sslmode=require/i.test(url) ? { ssl: { rejectUnauthorized: verifyCert } } : {}),
   })
+  // A database restart or dropped connection must fail only the requests in flight, never the
+  // process: without these listeners pg's 'error' event was unhandled and crashed the server.
+  const log = (e: Error) => console.error('[db] connection error:', e.message)
+  p.on('error', log) // idle clients
+  p.on('connect', (client) => client.on('error', log)) // clients checked out by a request
+  return p
+}
 
 // DATABASE_URL is the app's own login. It must NOT be a superuser or owner with
 // BYPASSRLS, or row-level security (one company never sees another's rows) is skipped.

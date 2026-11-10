@@ -105,7 +105,8 @@ function planMove(quote: Quote, to: StageKey): { run: () => Promise<string> } | 
   return 'That move is not allowed from this stage.'
 }
 
-export default function KanbanBoard({ quotes, loading }: { quotes: Quote[]; loading?: boolean }) {
+/** `counts`: true totals per status from the server; columns then show the newest cards of each. */
+export default function KanbanBoard({ quotes, loading, counts }: { quotes: Quote[]; loading?: boolean; counts?: Record<string, number> }) {
   const nav = useNavigate()
   const qc = useQueryClient()
   const [dragId, setDragId] = useState<string | null>(null)
@@ -191,7 +192,10 @@ export default function KanbanBoard({ quotes, loading }: { quotes: Quote[]; load
               <span className={`h-2 w-2 rounded-full ${stage.accent}`} />
               <h2 className="text-sm font-medium">{stage.title}</h2>
               <span className="text-xs text-muted-foreground ml-auto">
-                {cards.length} · ${value.toFixed(0)}
+                {(() => {
+                  const total = counts ? stage.statuses.reduce((n, st) => n + (counts[st] ?? 0), 0) : cards.length
+                  return total > cards.length ? `${total.toLocaleString()} · newest ${cards.length}` : `${total} · ${money(value)}`
+                })()}
               </span>
             </div>
 

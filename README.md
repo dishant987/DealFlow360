@@ -108,6 +108,47 @@ approvals, negotiations, fulfilments, invoices and payments.
 
 ---
 
+## Quote versions and e-signature
+
+Every time a quotation is **sent** to the customer, Dealwise freezes exactly what the customer sees
+(lines, prices, discounts, terms, totals — never cost) as a numbered **version** with a sha-256
+fingerprint. Re-sending an unchanged quote keeps the same version. To confirm in the portal the
+customer **signs**: types their full name and ticks "I agree". The signature (name, time, IP, browser)
+is stored on the exact version they accepted; if they had an open counter-offer, it's applied first and
+becomes a new version, so the signed terms are always the ones that were agreed. On the quote page,
+**Versions** lists every version, shows the signature, and compares any two (header fields, lines
+added/removed/changed). Rules: `server/src/services/quoteVersion.ts` (unit-tested).
+
+## Big lists (server-side paging)
+
+The **Quotations** and **Invoices** lists page, search, filter and sort **on the server**: the browser
+gets one page (about 3 KB instead of ~1 MB for the quotations list), and the summary cards are SQL
+totals over everything. Send `?page=` (1-based) with optional `pageSize` (≤ 100), `q` (customer name or
+quote/invoice number), filters and `sort`/`dir`; without `?page` the endpoints return the full list as
+before, so other screens keep working. The Kanban view uses `/quotations/board` (newest cards per
+status with true counts). In the client, `DataTable` has a `server` mode (`total` + `onChange`) and only
+columns with a `sortKey` sort. Quote **amount** is computed from the lines, so it can't be sorted on
+the server. Rules: `server/src/services/paging.ts` (unit-tested). Still client-side for now: approvals,
+fulfilment queue, subscriptions, customers.
+
+## Company settings
+
+**Settings → Company profile** (admins; everyone can read it): company name, industry, contact email,
+phone, website, address and tax ID — printed as the seller on every invoice — plus the **currency**
+(moved here from Thresholds) and **defaults for new work**: payment terms for new customers (Net N),
+how long new quotes stay valid, default terms & conditions pre-filled on new quotes, and payment
+instructions (e.g. bank details) printed on invoices. Each customer or quote can still override them.
+
+## Invoices
+
+Each invoice has a page with a progress stepper (order confirmed → shipped → invoiced → paid; steps a
+deal passed over show as *skipped*), line items, payments and a summary, plus **Preview** (the real
+PDF, inline), **Email** (PDF attached; the customer's address is filled in and can be changed, with an
+optional message) and **Download PDF**. The PDF follows the usual commercial layout: seller and
+"INVOICE" header with a PAID / OVERDUE stamp, bill-to block (name, attention, billing address, tax ID),
+invoice details (number, dates, payment terms, PO, quote reference), numbered line items, totals with
+any order discount, amount paid and balance due, then notes, payment instructions and terms.
+
 ## Plans and billing
 
 Every new company gets a **14-day free trial of every feature** (no card). After that it needs a
@@ -483,7 +524,7 @@ is a genuinely separate unauthenticated router whose projection omits cost and m
 
 ## Data model
 
-24 tables. The spine:
+25 tables. The spine:
 
 ```
 users ──< quotations >── customers
@@ -498,6 +539,7 @@ users ──< quotations >── customers
               ├──< approvals            (manager / finance steps)
               ├──< audit_log            (immutable history)
               ├──< negotiation_requests (customer portal)
+              ├──< quote_versions       (frozen copy per send; the signed one)
               ├──< invoices >── payments
               └──< credit_notes
 
@@ -522,14 +564,16 @@ session cookie.
 | --- | --- |
 | Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback`, `POST /auth/verify-email[/resend]`, `GET /auth/sessions`, `POST /auth/sessions/revoke-others`, `DELETE /auth/sessions/:id` |
 | Plan | `GET /plan` (any signed-in user), `POST /plan/checkout·confirm·portal` (admin), `POST /plan/webhook` *(Stripe, signature-checked)* |
+| Company | `GET /config/company` (signed-in), `PATCH /config/company` (admin) |
 | Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |
-| Quotations | `GET·POST /quotations`, `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |
+| Quotations | `GET·POST /quotations` (with `?page` it returns `{ rows, total }` — paged, searchable `q`, `status`, `customerId`, `flagged`, `sort`, `dir`), `GET /quotations/board` (Kanban: newest 25 per status + true counts), `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |
+| Versions | `GET /quotations/:id/versions`, `GET /quotations/:id/versions/:version`, `GET /quotations/:id/versions/compare?from=&to=` |
 | Approvals | `GET /approvals`, `GET /approvals/:id`, `POST /approvals/:id/action` |
 | Fulfilment | `GET /quotations/:id/fulfillment/suggestion·allocations`, `POST /:id/fulfillment/accept·consolidate`, `POST /stock/:id/receive` |
 | Billing | `GET·POST /quotations/:id/billing[/generate]`, `POST /:id/billing/subscriptions/:lineId/change·cancel·pause·resume`, `POST /invoices/:id/pay` |
-| Portal *(public)* | `GET /portal/:token`, `POST /portal/:token/negotiate·confirm` |
-| Ops | `GET /summary` (tasks, KPIs, charts, setup checklist; scoped per role), `GET /notifications`, `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf]` (manager, finance, admin only) |
+| Portal *(public)* | `GET /portal/:token`, `POST /portal/:token/negotiate·confirm` (confirm needs `{ signerName, agree: true }`) |
+| Ops | `GET /summary` (tasks, KPIs, charts, setup checklist; scoped per role), `GET /notifications`, `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf[?inline=1]]`, `POST /invoices/:id/email` `{ to, message? }` (manager, finance, admin only) |
 | Dashboard | `GET /dashboard`, `POST /dashboard/quotations/:id/nudge·escalate` |
 | Reports | `GET /reports·/filters·/export?format=pdf\|xls` |
 | Config | `GET·POST·PATCH·DELETE /config/{products,categories,customers,variants,price-list,pairings,warehouses,stock,subscription-plans,discount-tiers,category-ceilings,users}`, `GET·PATCH /config/settings`, `GET /config/products/:id/stock·/config/categories-list·/config/audit` |

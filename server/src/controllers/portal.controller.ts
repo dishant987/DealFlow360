@@ -11,13 +11,13 @@ import {
   customers,
   negotiationRequests,
   approvals,
-  auditLog,
-} from '../models/schema.js'
+  auditLog, quoteVersions } from '../models/schema.js'
 import { contacts } from '../models/schema.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { scoreQuotation } from './quotation.controller.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 import { orgCurrency } from '../utils/format.js'
+import { customerView, saveVersion, versionInfo } from './versions.controller.js'
 
 // the customer may only act while the quote is genuinely open to them
 const OPEN_TO_CUSTOMER = ['sent', 'under_negotiation']
@@ -60,65 +60,17 @@ async function findByToken(token: string) {
 export async function getPortalQuote(req: Request<{ token: string }>, res: Response) {
   const q = await findByToken(req.params.token)
   if (!q) return res.status(404).json({ error: 'invalid link' })
-
-  const [customer] = await db.select().from(customers).where(eq(customers.id, q.customerId))
-  // The variant is part of WHAT the customer is buying and can carry its own
-  // extra price, so leaving it off turned a "27 inch" line into a bare product
-  // name at a price the catalogue does not show — and made two variants of the
-  // same product read as two identical lines at different prices.
-  const lines = await db
-    .select({
-      id: quoteLines.id,
-      product: products.name,
-      variantAttribute: productVariants.attribute,
-      variantValue: productVariants.value,
-      quantity: quoteLines.quantity,
-      unitPrice: quoteLines.unitPrice,
-      unitCost: quoteLines.unitCost, // used only for totals below, not returned
-      discountPct: quoteLines.discountPct,
-      lineType: quoteLines.lineType,
-    })
-    .from(quoteLines)
-    .innerJoin(products, eq(quoteLines.productId, products.id))
-    .leftJoin(productVariants, eq(quoteLines.variantId, productVariants.id))
-    .where(eq(quoteLines.quotationId, q.id))
-
-  const totals = computeQuoteTotals(lines, q.orderDiscountPct)
   const negotiations = await db
     .select()
     .from(negotiationRequests)
     .where(eq(negotiationRequests.quotationId, q.id))
-
+  // the same customer-facing view every saved version freezes (no cost, no internal notes)
   res.json({
-    currency: await orgCurrency(req.orgId),
-    quoteNumber: quoteNumber(q.seqNo, q.createdAt),
-    customer: customer?.name,
+    ...(await customerView(q, req.orgId)),
     status: q.status,
-    // customer-facing details only: internal notes never leave the server
-    validUntil: q.validUntil,
     expired: quoteExpired(q.validUntil),
-    contactName: q.contactId
-      ? (await db.select({ n: contacts.name }).from(contacts).where(eq(contacts.id, q.contactId)))[0]?.n ?? null
-      : null,
-    customerPo: q.customerPo,
-    paymentTermsDays: q.paymentTermsDays,
-    notesToCustomer: q.notesToCustomer,
-    terms: q.terms,
-    orderDiscountPct: q.orderDiscountPct,
-    // strip cost — customers only see selling price
-    lines: lines.map((l) => ({
-      id: l.id,
-      product: l.product,
-      variantAttribute: l.variantAttribute,
-      variantValue: l.variantValue,
-      quantity: l.quantity,
-      unitPrice: l.unitPrice,
-      discountPct: l.discountPct,
-      lineType: l.lineType,
-    })),
-    total: totals.total,
-    subtotal: totals.subtotal,
     negotiations,
+    ...(await versionInfo(q.id)),
   })
 }
 
@@ -181,6 +133,9 @@ export async function submitNegotiation(req: Request<{ token: string }>, res: Re
 // Re-scoring unconditionally therefore bounced every discounted deal straight
 // back to the manager who had just signed it off, for a decision they had
 // already made on exactly these numbers. Only a counter re-opens the chain.
+// Typed signature: the customer's full name plus an explicit "I agree".
+const signSchema = z.object({ signerName: z.string().trim().min(2).max(120), agree: z.literal(true) })
+
 export async function confirmPortal(req: Request<{ token: string }>, res: Response) {
   const q = await findByToken(req.params.token)
   if (!q) return res.status(404).json({ error: 'invalid link' })
@@ -191,6 +146,10 @@ export async function confirmPortal(req: Request<{ token: string }>, res: Respon
     return res.status(400).json({
       error: `This quotation expired on ${q.validUntil!.toDateString()}. Please ask for an updated quote.`,
     })
+
+  // after the status/expiry checks, so a closed quote still explains itself
+  const sign = signSchema.safeParse(req.body)
+  if (!sign.success) return res.status(400).json({ error: 'Type your full name and tick “I agree” to sign.' })
 
   // apply the largest open counter-discount as the order discount
   const openCounters = await db
@@ -213,6 +172,19 @@ export async function confirmPortal(req: Request<{ token: string }>, res: Respon
       .set({ status: 'addressed' })
       .where(eq(negotiationRequests.quotationId, q.id))
   }
+
+  // freeze exactly what is being accepted (after any counter-discount) and sign that version
+  const [now] = await db.select().from(quotations).where(eq(quotations.id, q.id))
+  const signed = await saveVersion(now, req.orgId, null)
+  await db
+    .update(quoteVersions)
+    .set({
+      signedName: sign.data.signerName,
+      signedAt: new Date(),
+      signedIp: req.ip ?? null,
+      signedUserAgent: req.get('user-agent')?.slice(0, 300) ?? null,
+    })
+    .where(eq(quoteVersions.id, signed.id))
 
   const risk = await scoreQuotation(q.id)
   // the sign-off the quote already carries still stands unless the customer moved
@@ -240,8 +212,8 @@ export async function confirmPortal(req: Request<{ token: string }>, res: Respon
   await db.insert(auditLog).values({
     quotationId: q.id,
     action: needsApproval ? 'customer_confirm_reapproval' : 'customer_confirmed',
-    detail: { score: risk?.score, level: risk?.level },
+    detail: { score: risk?.score, level: risk?.level, signedBy: sign.data.signerName, version: signed.version },
   })
 
-  res.json({ status, reEnteredApproval: needsApproval, risk })
+  res.json({ status, reEnteredApproval: needsApproval, risk, version: signed.version })
 }

@@ -14,9 +14,9 @@ import {
   getUpsell,
   addLine,
   updateLine,
-  deleteLine,
-} from '../controllers/quotation.controller.js'
+  deleteLine, quotationBoard } from '../controllers/quotation.controller.js'
 import { listCustomers, listProducts } from '../controllers/catalog.controller.js'
+import { compareQuoteVersions, getVersion, listVersions } from '../controllers/versions.controller.js'
 
 const router = Router()
 router.use(requireAuth) // any authenticated internal user
@@ -28,6 +28,7 @@ router.get('/customers', listCustomers)
 router.get('/products', listProducts)
 
 // quotations
+router.get('/quotations/board', quotationBoard) // before /quotations/:id
 router.get('/quotations', listQuotations)
 router.post('/quotations', createQuotation)
 router.get('/quotations/:id', getQuotation)
@@ -39,6 +40,10 @@ router.post('/quotations/:id/send', sendToCustomer)
 router.get('/quotations/:id/negotiations', listNegotiations)
 router.patch('/quotations/:id/negotiations/:negotiationId', resolveNegotiation)
 router.get('/quotations/:id/upsell', requireFeature('upsell'), getUpsell)
+// versions the customer was sent, and the one they signed (static path before :version)
+router.get('/quotations/:id/versions', listVersions)
+router.get('/quotations/:id/versions/compare', compareQuoteVersions)
+router.get('/quotations/:id/versions/:version', getVersion)
 router.post('/quotations/:id/lines', addLine)
 router.patch('/quotations/:id/lines/:lineId', updateLine)
 router.delete('/quotations/:id/lines/:lineId', deleteLine)

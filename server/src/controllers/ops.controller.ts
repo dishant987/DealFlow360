@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import {
   quotations,
@@ -18,6 +18,9 @@ import {
   warehouses,
   stock,
   negotiationRequests,
+  organizations,
+  contacts,
+  productVariants,
 } from '../models/schema.js'
 import { findDiscountAnomalies } from '../services/anomaly.js'
 import { replenishmentPlan, type StockRule } from '../services/replenishment.js'
@@ -26,10 +29,20 @@ import { quoteNumber, invoiceNumber } from '../services/quoteNumber.js'
 import { computeLine, computeQuoteTotals } from '../services/pricing.js'
 import { buildOverview } from '../services/overview.js'
 import { money as fmt, orgCurrency } from '../utils/format.js'
+import { z } from 'zod'
+import { sendInvoice } from '../utils/mailer.js'
+import { likeTerm, parsePaging, seqFromSearch } from '../services/paging.js'
 
 const ACTIVE_STATUSES = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
 
 /* ---- Workspace summary: the KPI tiles + activity feed on the home screen ---- */
+/** The sidebar's Approvals badge: one cheap count, so other pages don't load the whole dashboard for it. */
+export async function getBadges(req: Request, res: Response) {
+  const mine = req.user!.role === 'rep' ? eq(quotations.repId, req.user!.id) : undefined
+  const [{ n }] = await db.select({ n: count() }).from(quotations).where(and(eq(quotations.status, 'pending_approval'), mine))
+  res.json({ pendingApprovals: n })
+}
+
 export async function getWorkspaceSummary(req: Request, res: Response) {
   // a rep's home screen counts their own deals; everyone else sees the pipeline
   const mine = req.user!.role === 'rep' ? eq(quotations.repId, req.user!.id) : undefined
@@ -180,7 +193,78 @@ export async function getWorkspaceSummary(req: Request, res: Response) {
 }
 
 /* ---- #12 Invoices list (cross-quotation) ---- */
+/* ---- step 18: paged invoices; the summary cards are SQL aggregates over all of them ---- */
+const INVOICE_SORTS = ['issued', 'due', 'amount', 'customer', 'status'] as const
+const INVOICE_SORT_COL = {
+  issued: invoices.issuedAt,
+  due: invoices.dueAt,
+  amount: invoices.amount,
+  customer: customers.name,
+  status: invoices.status,
+}
+async function listInvoicesPage(req: Request, res: Response) {
+  const p = parsePaging(req.query, INVOICE_SORTS, { sort: 'issued', dir: 'desc' })
+  const isOverdue = sql`${invoices.status} <> 'paid' and ${invoices.dueAt} < now()`
+  const where: SQL[] = []
+  const status = typeof req.query.status === 'string' ? req.query.status : ''
+  if (status === 'overdue') where.push(isOverdue)
+  else if (status) where.push(eq(invoices.status, status as never))
+  if (typeof req.query.type === 'string' && req.query.type) where.push(eq(invoices.type, req.query.type as never))
+  if (p.q) {
+    const seq = seqFromSearch(p.q)
+    where.push(or(ilike(customers.name, likeTerm(p.q)), ...(seq != null ? [eq(invoices.seqNo, seq), eq(quotations.seqNo, seq)] : []))!)
+  }
+  const w = where.length ? and(...where) : undefined
+  const order = p.dir === 'asc' ? asc(INVOICE_SORT_COL[p.sort]) : desc(INVOICE_SORT_COL[p.sort])
+  const [[{ n }], rows, [sum]] = await Promise.all([
+    db.select({ n: count() }).from(invoices).innerJoin(quotations, eq(invoices.quotationId, quotations.id)).innerJoin(customers, eq(quotations.customerId, customers.id)).where(w),
+    db
+      .select({
+        id: invoices.id,
+        seqNo: invoices.seqNo,
+        type: invoices.type,
+        status: invoices.status,
+        amount: invoices.amount,
+        issuedAt: invoices.issuedAt,
+        dueAt: invoices.dueAt,
+        paidAt: invoices.paidAt,
+        quotationId: invoices.quotationId,
+        quoteSeqNo: quotations.seqNo,
+        quoteCreatedAt: quotations.createdAt,
+        customer: customers.name,
+      })
+      .from(invoices)
+      .innerJoin(quotations, eq(invoices.quotationId, quotations.id))
+      .innerJoin(customers, eq(quotations.customerId, customers.id))
+      .where(w)
+      .orderBy(order, desc(invoices.seqNo))
+      .limit(p.pageSize)
+      .offset(p.offset),
+    db
+      .select({
+        count: count(),
+        outstanding: sql<string>`coalesce(sum(${invoices.amount}) filter (where ${invoices.status} <> 'paid'), 0)`,
+        paid: sql<string>`coalesce(sum(${invoices.amount}) filter (where ${invoices.status} = 'paid'), 0)`,
+        overdue: sql<number>`count(*) filter (where ${isOverdue})`,
+      })
+      .from(invoices),
+  ])
+  res.json({
+    invoices: rows.map((r) => ({
+      ...r,
+      invoiceNumber: invoiceNumber(r.seqNo, r.issuedAt),
+      quoteNumber: quoteNumber(r.quoteSeqNo, r.quoteCreatedAt),
+      overdue: r.status !== 'paid' && !!r.dueAt && new Date(r.dueAt) < new Date(),
+    })),
+    total: n,
+    page: p.page,
+    pageSize: p.pageSize,
+    summary: { count: sum.count, outstanding: round2(Number(sum.outstanding)), paid: round2(Number(sum.paid)), overdue: Number(sum.overdue) },
+  })
+}
+
 export async function listInvoices(req: Request, res: Response) {
+  if (req.query.page) return listInvoicesPage(req, res)
   const conds: SQL[] = []
   if (req.query.status) conds.push(eq(invoices.status, String(req.query.status) as any))
   if (req.query.type) conds.push(eq(invoices.type, String(req.query.type) as any))
@@ -522,8 +606,9 @@ export async function listSubscriptions(_req: Request, res: Response) {
 }
 
 /* ---- downloadable invoice PDF ---- */
-export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
-  const cur = await orgCurrency(req.orgId)
+/** The invoice as a PDF document (pdfmake), shared by download, preview and email. Null when not found. */
+async function invoiceDoc(id: string, orgId: string | undefined) {
+  const cur = await orgCurrency(orgId)
   const [inv] = await db
     .select({
       id: invoices.id,
@@ -536,19 +621,29 @@ export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
       quotationId: invoices.quotationId,
       quoteSeqNo: quotations.seqNo,
       quoteCreatedAt: quotations.createdAt,
+      orderDiscountPct: quotations.orderDiscountPct,
+      customerPo: quotations.customerPo,
+      paymentTermsDays: quotations.paymentTermsDays,
+      notesToCustomer: quotations.notesToCustomer,
+      terms: quotations.terms,
+      contactId: quotations.contactId,
       customer: customers.name,
       customerEmail: customers.email,
+      billingAddress: customers.billingAddress,
+      taxId: customers.taxId,
     })
     .from(invoices)
     .innerJoin(quotations, eq(invoices.quotationId, quotations.id))
     .innerJoin(customers, eq(quotations.customerId, customers.id))
-    .where(eq(invoices.id, req.params.id))
-  if (!inv) return res.status(404).json({ error: 'not found' })
+    .where(eq(invoices.id, id))
+  if (!inv) return null
 
   const wanted = inv.type === 'onetime' ? 'onetime' : 'subscription'
   const rawLines = await db
     .select({
       product: products.name,
+      variantAttribute: productVariants.attribute,
+      variantValue: productVariants.value,
       quantity: quoteLines.quantity,
       unitPrice: quoteLines.unitPrice,
       unitCost: quoteLines.unitCost,
@@ -556,127 +651,273 @@ export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
     })
     .from(quoteLines)
     .innerJoin(products, eq(quoteLines.productId, products.id))
+    .leftJoin(productVariants, eq(quoteLines.variantId, productVariants.id))
     .where(and(eq(quoteLines.quotationId, inv.quotationId), eq(quoteLines.lineType, wanted)))
 
   const pays = await db.select().from(payments).where(eq(payments.invoiceId, inv.id))
   const paid = round2(pays.reduce((s, p) => s + Number(p.amount), 0))
   const balance = round2(Number(inv.amount) - paid)
   const invNo = invoiceNumber(inv.seqNo, inv.issuedAt)
+  // organizations isn't under row-level security; the id comes from the signed-in request
+  const [org] = orgId
+    ? await db
+        .select({
+          name: organizations.name,
+          address: organizations.address,
+          taxId: organizations.taxId,
+          contactEmail: organizations.contactEmail,
+          phone: organizations.phone,
+          website: organizations.website,
+          paymentInstructions: organizations.paymentInstructions,
+        })
+        .from(organizations)
+        .where(eq(organizations.id, orgId))
+    : []
+  const seller = org?.name ?? 'Dealwise'
+  const [contact] = inv.contactId
+    ? await db.select({ name: contacts.name, email: contacts.email }).from(contacts).where(eq(contacts.id, inv.contactId))
+    : []
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const day = (d: Date | string | null) => {
+    if (!d) return '—'
+    const x = new Date(d)
+    return `${x.getDate()} ${MONTHS[x.getMonth()]} ${x.getFullYear()}`
+  }
+  const m = (n: number) => fmt(n, cur)
+  const nets = rawLines.map((l) => computeLine(l).net)
+  const subtotal = round2(nets.reduce((s, n) => s + n, 0))
+  const total = Number(inv.amount)
+  // the stored invoice amount is the truth; anything between it and the lines is shown, never hidden
+  const adjustment = round2(total - subtotal)
+  const adjustmentLabel =
+    adjustment < 0 && Number(inv.orderDiscountPct) > 0 ? `Order discount (${Number(inv.orderDiscountPct)}%)` : 'Adjustments'
+  const overdue = balance > 0 && !!inv.dueAt && new Date(inv.dueAt) < new Date()
+  const stamp = balance <= 0 ? { text: 'PAID', color: '#0F8A5F' } : overdue ? { text: 'OVERDUE', color: '#C0392B' } : null
 
   const PdfPrinter = require('pdfmake')
   const printer = new PdfPrinter({
-    Helvetica: {
-      normal: 'Helvetica',
-      bold: 'Helvetica-Bold',
-      italics: 'Helvetica-Oblique',
-      bolditalics: 'Helvetica-BoldOblique',
-    },
+    Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' },
   })
+  const INK = '#1F2430'
+  const MUTED = '#6B7280'
+  const RULE = '#E5E7EB'
+  const W = 515 // A4 width minus margins
 
-  const body = [
-    [
-      { text: 'Description', style: 'th' },
-      { text: 'Qty', style: 'th', alignment: 'right' },
-      { text: 'Unit price', style: 'th', alignment: 'right' },
-      { text: 'Discount', style: 'th', alignment: 'right' },
-      { text: 'Amount', style: 'th', alignment: 'right' },
-    ],
-    ...rawLines.map((l) => [
-      l.product,
-      { text: String(l.quantity), alignment: 'right' },
-      { text: fmt(Number(l.unitPrice), cur), alignment: 'right' },
-      { text: `${Number(l.discountPct).toFixed(0)}%`, alignment: 'right' },
-      { text: fmt(computeLine(l).net, cur), alignment: 'right' },
+  const label = (text: string) => ({ text: text.toUpperCase(), fontSize: 7.5, bold: true, color: MUTED, characterSpacing: 0.6, margin: [0, 0, 0, 3] })
+  const kv = (k: string, v: string) => [
+    { text: k, color: MUTED, fontSize: 9 },
+    { text: v, fontSize: 9, alignment: 'right', bold: k === 'Due date' },
+  ]
+  const totalRow = (k: string, v: string, opts: { bold?: boolean; big?: boolean; fill?: string; color?: string } = {}) => [
+    { text: k, bold: opts.bold, fontSize: opts.big ? 11 : 9.5, fillColor: opts.fill, color: opts.color ?? INK, margin: [6, opts.big ? 5 : 2, 0, opts.big ? 5 : 2] },
+    { text: v, bold: opts.bold, fontSize: opts.big ? 11 : 9.5, alignment: 'right', fillColor: opts.fill, color: opts.color ?? INK, margin: [0, opts.big ? 5 : 2, 6, opts.big ? 5 : 2] },
+  ]
+
+  const items = [
+    ['#', 'Description', 'Qty', 'Unit price', 'Disc.', 'Amount'].map((h, i) => ({
+      text: h,
+      bold: true,
+      fontSize: 8.5,
+      color: 'white',
+      fillColor: BRAND,
+      alignment: i >= 2 ? 'right' : 'left',
+      margin: [0, 3, 0, 3],
+    })),
+    ...rawLines.map((l, i) => [
+      { text: String(i + 1), color: MUTED, fontSize: 9 },
+      {
+        stack: [
+          { text: l.product, fontSize: 9.5 },
+          ...(l.variantValue ? [{ text: `${l.variantAttribute ?? 'Option'}: ${l.variantValue}`, fontSize: 8, color: MUTED }] : []),
+        ],
+      },
+      { text: String(l.quantity), alignment: 'right', fontSize: 9.5 },
+      { text: m(Number(l.unitPrice)), alignment: 'right', fontSize: 9.5 },
+      { text: Number(l.discountPct) ? `${Number(l.discountPct)}%` : '—', alignment: 'right', fontSize: 9.5, color: Number(l.discountPct) ? INK : MUTED },
+      { text: m(nets[i]), alignment: 'right', fontSize: 9.5 },
     ]),
   ]
 
-  const money = (label: string, value: string, bold = false) => ({
-    columns: [
-      { text: label, alignment: 'right', bold },
-      { text: value, alignment: 'right', width: 90, bold },
-    ],
-    margin: [0, 2, 0, 0],
-  })
+  const billTo = [
+    label('Bill to'),
+    { text: inv.customer, bold: true, fontSize: 11 },
+    ...(contact?.name ? [{ text: `Attn: ${contact.name}`, fontSize: 9 }] : []),
+    ...(inv.billingAddress ? [{ text: inv.billingAddress, fontSize: 9, color: INK, margin: [0, 2, 0, 0] }] : []),
+    ...(inv.taxId ? [{ text: `Tax ID: ${inv.taxId}`, fontSize: 9, margin: [0, 2, 0, 0] }] : []),
+    { text: contact?.email ?? inv.customerEmail, fontSize: 9, color: MUTED, margin: [0, 2, 0, 0] },
+  ]
+  const details = {
+    table: {
+      widths: ['*', 'auto'],
+      body: [
+        kv('Invoice no.', invNo),
+        kv('Issue date', day(inv.issuedAt)),
+        kv('Due date', day(inv.dueAt)),
+        kv('Payment terms', `Net ${inv.paymentTermsDays}`),
+        ...(inv.customerPo ? [kv('PO number', inv.customerPo)] : []),
+        kv('Quote ref.', quoteNumber(inv.quoteSeqNo, inv.quoteCreatedAt)),
+      ],
+    },
+    layout: 'noBorders',
+  }
+
+  const notes = [
+    ...(inv.notesToCustomer ? [label('Notes'), { text: inv.notesToCustomer, fontSize: 9, margin: [0, 0, 0, 10] }] : []),
+    label('Payment'),
+    {
+      text:
+        balance <= 0
+          ? `Paid in full — thank you.`
+          : `Please pay ${m(balance)} by ${day(inv.dueAt)} and quote ${invNo} as the payment reference.`,
+      fontSize: 9,
+      margin: [0, 0, 0, org?.paymentInstructions && balance > 0 ? 4 : 10],
+    },
+    ...(org?.paymentInstructions && balance > 0 ? [{ text: org.paymentInstructions, fontSize: 9, margin: [0, 0, 0, 10] }] : []),
+    ...(inv.type !== 'onetime' ? [{ text: 'Recurring charge: later periods are billed automatically on the same schedule.', fontSize: 8.5, color: MUTED, margin: [0, 0, 0, 10] }] : []),
+    ...(inv.terms ? [label('Terms'), { text: inv.terms, fontSize: 8.5, color: MUTED }] : []),
+  ]
 
   const doc = printer.createPdfKitDocument({
-    pageMargins: [40, 50, 40, 50],
-    defaultStyle: { font: 'Helvetica', fontSize: 10 },
-    styles: {
-      th: { bold: true, color: 'white', fillColor: BRAND },
-      label: { fontSize: 8, color: '#888' },
-    },
-    footer: (current: number, total: number) => ({
-      margin: [40, 0, 40, 20],
-      columns: [
-        { text: 'Dealwise', fontSize: 7, color: '#999' },
-        { text: `Page ${current} of ${total}`, alignment: 'right', fontSize: 7, color: '#999' },
+    pageSize: 'A4',
+    pageMargins: [40, 44, 40, 56],
+    info: { title: `Invoice ${invNo}`, author: seller, subject: `Invoice for ${inv.customer}` },
+    defaultStyle: { font: 'Helvetica', fontSize: 10, color: INK, lineHeight: 1.2 },
+    footer: (current: number, count: number) => ({
+      margin: [40, 16, 40, 0],
+      stack: [
+        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: W, y2: 0, lineWidth: 0.5, lineColor: RULE }] },
+        {
+          columns: [
+            { text: `${seller} · ${invNo}`, fontSize: 7.5, color: MUTED },
+            { text: `Page ${current} of ${count}`, fontSize: 7.5, color: MUTED, alignment: 'right' },
+          ],
+          margin: [0, 6, 0, 0],
+        },
       ],
     }),
     content: [
       {
         columns: [
-          { text: 'Dealwise', fontSize: 16, bold: true, color: BRAND },
-          { text: 'INVOICE', fontSize: 16, bold: true, alignment: 'right', color: '#333' },
+          {
+            // the seller, from Settings → Company
+            stack: [
+              { text: seller, fontSize: 16, bold: true, color: BRAND },
+              ...(org?.address ? [{ text: org.address, fontSize: 8.5, color: MUTED, margin: [0, 3, 0, 0] }] : []),
+              ...(org?.taxId ? [{ text: `Tax ID: ${org.taxId}`, fontSize: 8.5, color: MUTED }] : []),
+              ...([org?.contactEmail, org?.phone, org?.website].some(Boolean)
+                ? [{ text: [org?.contactEmail, org?.phone, org?.website].filter(Boolean).join('  ·  '), fontSize: 8.5, color: MUTED }]
+                : []),
+            ],
+          },
+          {
+            stack: [
+              { text: 'INVOICE', fontSize: 24, bold: true, characterSpacing: 2, alignment: 'right' },
+              { text: invNo, fontSize: 10, color: MUTED, alignment: 'right', margin: [0, 2, 0, 0] },
+              ...(stamp
+                ? [
+                    {
+                      // tables ignore `alignment`; an empty star column pushes the stamp right
+                      columns: [
+                        { width: '*', text: '' },
+                        {
+                          width: 'auto',
+                          table: { body: [[{ text: stamp.text, bold: true, fontSize: 10, color: stamp.color, characterSpacing: 1.5, margin: [8, 2, 8, 2] }]] },
+                          layout: { hLineColor: () => stamp.color, vLineColor: () => stamp.color, hLineWidth: () => 1.2, vLineWidth: () => 1.2 },
+                        },
+                      ],
+                      margin: [0, 6, 0, 0],
+                    },
+                  ]
+                : []),
+            ],
+            alignment: 'right',
+          },
         ],
       },
-      { text: invNo, alignment: 'right', fontSize: 11, margin: [0, 2, 0, 16] },
+      { canvas: [{ type: 'line', x1: 0, y1: 0, x2: W, y2: 0, lineWidth: 2, lineColor: BRAND }], margin: [0, 14, 0, 18] },
+      { columns: [{ width: '*', stack: billTo }, { width: 210, stack: [label('Invoice details'), details] }], columnGap: 24, margin: [0, 0, 0, 22] },
+      {
+        table: { headerRows: 1, widths: [16, '*', 34, 72, 40, 78], body: items.length > 1 ? items : [...items, [{ text: 'No line items.', colSpan: 6, color: MUTED }, '', '', '', '', '']] },
+        layout: {
+          hLineWidth: (i: number) => (i === 0 ? 0 : 0.5),
+          vLineWidth: () => 0,
+          hLineColor: () => RULE,
+          paddingTop: () => 6,
+          paddingBottom: () => 6,
+          paddingLeft: (i: number) => (i === 0 ? 6 : 4),
+          paddingRight: (i: number, node: { table: { widths: unknown[] } }) => (i === node.table.widths.length - 1 ? 6 : 4),
+        },
+      },
       {
         columns: [
-          [
-            { text: 'BILL TO', style: 'label' },
-            { text: inv.customer, bold: true },
-            { text: inv.customerEmail, fontSize: 9, color: '#666' },
-          ],
-          [
-            { text: 'DETAILS', style: 'label', alignment: 'right' },
-            {
-              text: `Issued  ${new Date(inv.issuedAt).toLocaleDateString()}`,
-              alignment: 'right',
-              fontSize: 9,
+          { width: '*', text: '' },
+          {
+            width: 230,
+            table: {
+              widths: ['*', 'auto'],
+              body: [
+                totalRow('Subtotal', m(subtotal)),
+                ...(Math.abs(adjustment) >= 0.01 ? [totalRow(adjustmentLabel, `${adjustment < 0 ? '-' : '+'}${m(Math.abs(adjustment))}`)] : []),
+                totalRow('Total', m(total), { bold: true }),
+                ...(paid > 0 ? [totalRow('Amount paid', `-${m(paid)}`)] : []),
+                totalRow('Balance due', m(balance), { bold: true, big: true, fill: LIGHT, color: balance > 0 ? INK : '#0F8A5F' }),
+              ],
             },
-            {
-              text: `Due     ${inv.dueAt ? new Date(inv.dueAt).toLocaleDateString() : '—'}`,
-              alignment: 'right',
-              fontSize: 9,
+            layout: {
+              hLineWidth: (i: number, node: { table: { body: unknown[] } }) => (i === node.table.body.length - 2 ? 0.8 : 0),
+              vLineWidth: () => 0,
+              hLineColor: () => RULE,
             },
-            {
-              text: `Ref     ${quoteNumber(inv.quoteSeqNo, inv.quoteCreatedAt)}`,
-              alignment: 'right',
-              fontSize: 9,
-            },
-            {
-              text: inv.status.toUpperCase(),
-              alignment: 'right',
-              bold: true,
-              color: inv.status === 'paid' ? '#0a7' : '#c80',
-              margin: [0, 4, 0, 0],
-            },
-          ],
+          },
         ],
-        margin: [0, 0, 0, 18],
+        margin: [0, 12, 0, 26],
       },
-      {
-        table: { headerRows: 1, widths: ['*', 'auto', 'auto', 'auto', 'auto'], body },
-        layout: { fillColor: (i: number) => (i > 0 && i % 2 === 0 ? LIGHT : null) },
-      },
-      { text: '', margin: [0, 10, 0, 0] },
-      money('Invoice total', fmt(Number(inv.amount), cur)),
-      money('Paid', fmt(paid, cur)),
-      money('Balance due', fmt(balance, cur), true),
-      {
-        text:
-          inv.type === 'recurring'
-            ? 'Recurring charge. Subsequent periods are billed automatically on the schedule.'
-            : 'Thank you for your business.',
-        margin: [0, 24, 0, 0],
-        fontSize: 9,
-        color: '#666',
-      },
+      ...notes,
     ],
   })
 
+  return { doc, invNo, inv, balance }
+}
+
+export async function invoicePdf(req: Request<{ id: string }>, res: Response) {
+  const r = await invoiceDoc(req.params.id, req.orgId)
+  if (!r) return res.status(404).json({ error: 'not found' })
   res.setHeader('Content-Type', 'application/pdf')
-  res.setHeader('Content-Disposition', `attachment; filename="${invNo}.pdf"`)
-  doc.pipe(res)
-  doc.end()
+  // ?inline=1 shows it in the browser (preview); otherwise it downloads
+  res.setHeader('Content-Disposition', `${req.query.inline ? 'inline' : 'attachment'}; filename="${r.invNo}.pdf"`)
+  r.doc.pipe(res)
+  r.doc.end()
+}
+
+/** Email the invoice PDF. The recipient defaults to the customer in the UI but can be anyone. */
+export async function emailInvoice(req: Request<{ id: string }>, res: Response) {
+  const p = z
+    .object({ to: z.string().trim().email('Enter a valid email address'), message: z.string().trim().max(2000).optional() })
+    .safeParse(req.body)
+  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'Enter a valid email address' })
+  const r = await invoiceDoc(req.params.id, req.orgId)
+  if (!r) return res.status(404).json({ error: 'not found' })
+  const chunks: Buffer[] = []
+  r.doc.on('data', (c: Buffer) => chunks.push(c))
+  const done = new Promise<void>((ok) => r.doc.on('end', () => ok()))
+  r.doc.end()
+  await done
+  const cur = await orgCurrency(req.orgId)
+  await sendInvoice(p.data.to, {
+    invoiceNumber: r.invNo,
+    customer: r.inv.customer,
+    amount: fmt(Number(r.inv.amount), cur),
+    balance: fmt(r.balance, cur),
+    due: r.inv.dueAt ? new Date(r.inv.dueAt).toLocaleDateString() : null,
+    message: p.data.message,
+    pdf: Buffer.concat(chunks),
+  })
+  await db.insert(auditLog).values({
+    quotationId: r.inv.quotationId,
+    userId: req.user!.id,
+    action: 'invoice_emailed',
+    detail: { invoice: r.invNo, to: p.data.to },
+  })
+  res.json({ ok: true, to: p.data.to })
 }

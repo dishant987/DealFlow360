@@ -148,12 +148,15 @@ function renderText({ heading, paragraphs, cta, footnote }: Template): string {
 /* Sending                                                             */
 /* ------------------------------------------------------------------ */
 
-async function send(to: string, template: Template) {
+type Attachment = { filename: string; content: Buffer; contentType: string }
+
+async function send(to: string, template: Template, attachments: Attachment[] = []) {
   const text = renderText(template)
   if (!transport) {
     // demo fallback — no SMTP needed. The plain-text body keeps the link
     // copy-pasteable straight out of the terminal.
-    console.log(`\n[mail:console] to=${to} | ${template.heading}\n${text}\n`)
+    const files = attachments.map((a) => `${a.filename} (${Math.round(a.content.length / 1024)} KB)`).join(', ')
+    console.log(`\n[mail:console] to=${to} | ${template.heading}${files ? ` | attached: ${files}` : ''}\n${text}\n`)
     return
   }
   await transport.sendMail({
@@ -162,6 +165,7 @@ async function send(to: string, template: Template) {
     subject: template.heading,
     text,
     html: renderHtml(template),
+    attachments,
   })
 }
 
@@ -219,4 +223,24 @@ export function sendInvite(to: string, link: string, inviter: string, company: s
     cta: { label: 'Join your team', url: link },
     footnote: "If you weren't expecting this, you can ignore this email.",
   })
+}
+
+export function sendInvoice(
+  to: string,
+  inv: { invoiceNumber: string; customer: string; amount: string; balance: string; due: string | null; message?: string; pdf: Buffer },
+) {
+  return send(
+    to,
+    {
+      heading: `Invoice ${inv.invoiceNumber} for ${inv.customer}`,
+      preheader: `${inv.balance} due${inv.due ? ` by ${inv.due}` : ''}. The invoice is attached as a PDF.`,
+      paragraphs: [
+        ...(inv.message ? [inv.message] : []),
+        `Please find invoice ${inv.invoiceNumber} attached, for a total of ${inv.amount}.`,
+        `Balance due: ${inv.balance}${inv.due ? `, by ${inv.due}` : ''}.`,
+      ],
+      footnote: 'Questions about this invoice? Just reply to this email.',
+    },
+    [{ filename: `${inv.invoiceNumber}.pdf`, content: inv.pdf, contentType: 'application/pdf' }],
+  )
 }

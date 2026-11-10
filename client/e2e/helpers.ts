@@ -103,13 +103,21 @@ export async function listProducts(ctx: APIRequestContext) {
   return (await (await ctx.get('/api/products')).json()) as any[]
 }
 
-/** Choose from a searchable picker (ui/combobox): open it, type, click the match. */
+/** Choose from an autocomplete (ui/combobox): type into the field, click the match. */
 export async function pick(scope: Page | Locator, label: string, option: string) {
-  const trigger = scope.getByRole('combobox', { name: label, exact: true })
-  await trigger.click()
-  const id = await trigger.getAttribute('aria-controls')
+  const field = scope.getByRole('combobox', { name: label, exact: true })
+  await field.fill(option)
+  const id = await field.getAttribute('aria-controls')
   const page = 'page' in scope ? scope.page() : scope
-  await page.locator(`input[aria-controls="${id}"]`).fill(option)
   await page.locator(`[id="${id}"]`).getByRole('option', { name: option }).first().click()
-  await expect(trigger).toContainText(option)
+  await expect.poll(() => field.inputValue()).toContain(option)
+}
+
+/** Body for POST /api/portal/:token/confirm — the customer's typed e-signature. */
+export const SIGN = { signerName: 'Pat Buyer', agree: true }
+
+/** Sign in the customer portal: type a name, tick "I agree" (then click the confirm button). */
+export async function signPortal(page: Page, name = 'Pat Buyer') {
+  await page.getByLabel('Sign by typing your full name').fill(name)
+  await page.getByRole('checkbox', { name: /I agree to this quotation/ }).check()
 }

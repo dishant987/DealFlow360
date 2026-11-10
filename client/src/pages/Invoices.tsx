@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import StatusBadge from '@/components/StatusBadge'
 import { errText } from '@/lib/errors'
 import AppShell from '@/components/AppShell'
-import DataTable, { type Column } from '@/components/DataTable'
+import DataTable, { type Column, type TableQuery } from '@/components/DataTable'
 import StatCard from '@/components/StatCard'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { money } from '@/lib/format'
+import { humanize, money } from '@/lib/format'
+import { format } from 'date-fns'
+import { Download } from 'lucide-react'
 
 type Invoice = {
   id: string
@@ -49,15 +51,23 @@ export default function Invoices() {
   }
 
 
+  // step 18: one page at a time; the summary cards are totals over every invoice
+  const [tq, setTq] = useState<TableQuery>({ page: 1, search: '', sort: null })
   const q = useQuery({
-    queryKey: ['invoices', status],
+    queryKey: ['invoices', 'page', status, tq],
     queryFn: async () =>
-      (await api.get('/invoices', { params: status ? { status } : {} })).data as Payload,
+      (
+        await api.get('/invoices', {
+          params: { status: status || undefined, page: tq.page, pageSize: 10, q: tq.search || undefined, sort: tq.sort?.key, dir: tq.sort?.dir },
+        })
+      ).data as Payload & { total: number },
+    placeholderData: keepPreviousData,
   })
 
   const columns: Column<Invoice>[] = [
     {
       key: 'invoiceNumber',
+      sortKey: 'issued',
       label: 'Invoice #',
       render: (r) => <span className="font-mono text-xs font-medium">{r.invoiceNumber}</span>,
     },
@@ -74,10 +84,12 @@ export default function Invoices() {
         </Link>
       ),
     },
-    { key: 'customer', label: 'Customer' },
-    { key: 'type', label: 'Type' },
+    { key: 'customer',
+      sortKey: 'customer', label: 'Customer' },
+    { key: 'type', label: 'Type', render: (r) => (r.type === 'onetime' ? 'One-time' : humanize(r.type)) },
     {
       key: 'status',
+      sortKey: 'status',
       label: 'Status',
       render: (r) => (
         <StatusBadge status={r.overdue && r.status !== 'paid' ? 'overdue' : r.status} />
@@ -85,6 +97,7 @@ export default function Invoices() {
     },
     {
       key: 'amount',
+      sortKey: 'amount',
       label: 'Amount',
       align: 'right',
       value: (r) => Number(r.amount),
@@ -92,15 +105,24 @@ export default function Invoices() {
     },
     {
       key: 'issuedAt',
+      sortKey: 'issued',
       label: 'Issued',
       value: (r) => new Date(r.issuedAt).getTime(),
-      render: (r) => new Date(r.issuedAt).toLocaleDateString(),
+      render: (r) => format(new Date(r.issuedAt), 'd MMM yyyy'),
     },
     {
       key: 'dueAt',
+      sortKey: 'due',
       label: 'Due',
       value: (r) => (r.dueAt ? new Date(r.dueAt).getTime() : 0),
-      render: (r) => (r.dueAt ? new Date(r.dueAt).toLocaleDateString() : '—'),
+      render: (r) =>
+        r.dueAt ? (
+          <span className={r.overdue && r.status !== 'paid' ? 'font-medium text-red-600 dark:text-red-400' : undefined}>
+            {format(new Date(r.dueAt), 'd MMM yyyy')}
+          </span>
+        ) : (
+          '—'
+        ),
     },
     {
       key: '__dl',
@@ -109,13 +131,14 @@ export default function Invoices() {
       render: (r) => (
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
+          aria-label={`Download ${r.invoiceNumber} as PDF`}
           onClick={(e) => {
             e.stopPropagation()
             downloadPdf(r.id, r.invoiceNumber)
           }}
         >
-          PDF
+          <Download className="size-4" /> PDF
         </Button>
       ),
     },
@@ -153,8 +176,10 @@ export default function Invoices() {
           rows={q.data?.invoices ?? []}
           columns={columns}
           loading={q.isLoading}
+          server={{ total: q.data?.total ?? 0, onChange: setTq }}
+          resetPageOn={status}
           onRowClick={(r) => nav(`/invoices/${r.id}`)}
-          searchPlaceholder="Search quote #, customer or status…"
+          searchPlaceholder="Search invoice #, quote # or customer…"
           emptyMessage="No invoices yet."
           toolbar={
             <Select
@@ -163,6 +188,7 @@ export default function Invoices() {
             >
               <option value="">All statuses</option>
               <option value="sent">Pending only</option>
+              <option value="overdue">Overdue</option>
               <option value="paid">Paid only</option>
               <option value="draft">Draft</option>
               <option value="void">Void</option>

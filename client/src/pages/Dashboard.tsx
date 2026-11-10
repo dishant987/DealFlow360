@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
-import { ArrowRight, CheckCircle2, Circle } from 'lucide-react'
+import { ArrowRight, CheckCircle2 } from 'lucide-react'
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
@@ -9,6 +9,7 @@ import { humanize, money } from '@/lib/format'
 import AppShell from '@/components/AppShell'
 import Panel from '@/components/Panel'
 import StatCard from '@/components/StatCard'
+import Stepper, { toSteps } from '@/components/Stepper'
 import { Skeleton } from '@/components/ui/skeleton'
 
 type Summary = {
@@ -58,16 +59,22 @@ function Checklist({ steps, canConfigure }: { steps: NonNullable<Summary['checkl
   ]
   return (
     <Panel title="Get set up" description="Four steps to your first quote. This disappears once you're done.">
-      <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        {items.map((i, n) => (
-          <li key={i.label} className="flex items-center gap-2 rounded-lg border p-3 text-sm">
-            {i.done ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600" aria-hidden /> : <Circle className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
-            <span className={i.done ? 'text-muted-foreground line-through' : ''}>
-              {n + 1}. {i.to && !i.done ? <Link to={i.to} className="font-medium text-primary hover:underline">{i.label}</Link> : i.label}
-            </span>
-          </li>
-        ))}
-      </ol>
+      <Stepper
+        label="Get set up"
+        steps={toSteps(
+          items.map((i) => ({
+            key: i.label,
+            label: i.to && !i.done ? (
+              <Link to={i.to} className="hover:underline">
+                {i.label}
+              </Link>
+            ) : (
+              i.label
+            ),
+            done: i.done,
+          })),
+        )}
+      />
     </Panel>
   )
 }

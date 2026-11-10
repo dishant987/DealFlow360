@@ -29,6 +29,18 @@ export const organizations = pgTable('organizations', {
   name: text('name').notNull(),
   // ISO 4217 code every amount is shown in; chosen at sign-up, editable in Settings
   currency: text('currency').notNull().default('USD'),
+  // company profile (Settings → Company): printed as the seller on invoices
+  industry: text('industry'),
+  website: text('website'),
+  phone: text('phone'),
+  contactEmail: text('contact_email'),
+  address: text('address'),
+  taxId: text('tax_id'),
+  // defaults for new work
+  defaultPaymentTermsDays: integer('default_payment_terms_days').notNull().default(30), // new customers
+  quoteValidityDays: integer('quote_validity_days').notNull().default(30), // new quotes' valid-until
+  defaultQuoteTerms: text('default_quote_terms'), // pre-filled terms on new quotes
+  paymentInstructions: text('payment_instructions'), // e.g. bank details, printed on invoices
   // Dealwise's own subscription (step 17): 'trial' until an admin pays for 'starter' or 'growth'.
   // Rules in services/plan.ts; Stripe is the source of truth for status once subscribed.
   plan: text('plan').notNull().default('trial'),
@@ -381,6 +393,30 @@ export const approvals = pgTable('approvals', {
 })
 
 // immutable trail for every approval/rejection/edit (A3)
+// Every version of a quote the customer was shown, frozen (step 26). `snapshot` is the
+// customer-facing view (no cost); `hash` is its sha256, so a signature proves which
+// exact terms were accepted. Signature fields are set when the customer signs it.
+export const quoteVersions = pgTable(
+  'quote_versions',
+  {
+    id: pk(),
+    organizationId: tenantId(),
+    quotationId: uuid('quotation_id')
+      .notNull()
+      .references(() => quotations.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    hash: text('hash').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    signedName: text('signed_name'),
+    signedAt: timestamp('signed_at', { withTimezone: true }),
+    signedIp: text('signed_ip'),
+    signedUserAgent: text('signed_user_agent'),
+  },
+  (t) => [uniqueIndex('quote_versions_quote_version_uq').on(t.quotationId, t.version)],
+)
+
 export const auditLog = pgTable('audit_log', {
   id: pk(),
   organizationId: tenantId(),

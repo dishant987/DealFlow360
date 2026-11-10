@@ -216,6 +216,8 @@ test.describe.serial('B6 — warehouse split & backorders', () => {
   test('fulfillment queue screen renders orders, stock and replenishment', async ({ page }) => {
     await login(page, 'finance')
     await page.goto('/fulfillment')
+    await expect(page.getByRole('tab', { name: /Orders to fulfil/ })).toBeVisible()
+    await page.getByRole('tab', { name: /Stock levels/ }).click()
     await expect(page.getByText('Stock by warehouse')).toBeVisible()
     await expect(page.getByText('In Stock').first()).toBeVisible()
     const fin = await apiAs('finance')

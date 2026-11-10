@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import StatusBadge from '@/components/StatusBadge'
 import AppShell from '@/components/AppShell'
-import DataTable, { type Column } from '@/components/DataTable'
+import DataTable, { type Column, type TableQuery } from '@/components/DataTable'
 import KanbanBoard, { type Quote } from '@/components/KanbanBoard'
 import { Plus, Trash2, X } from 'lucide-react'
 import { errText } from '@/lib/errors'
@@ -27,6 +27,9 @@ import { Combobox } from '@/components/ui/combobox'
 
 type Customer = { id: string; name: string; tier: string }
 
+const PAGE = 10
+const STATUSES = ['draft', 'pending_approval', 'approved', 'sent', 'under_negotiation', 'confirmed', 'fulfilled', 'invoiced', 'rejected', 'cancelled']
+
 export default function Quotations() {
   const nav = useNavigate()
   const qc = useQueryClient()
@@ -45,9 +48,27 @@ export default function Quotations() {
     localStorage.setItem('quotations.view', v)
   }
 
+  // step 18: the server pages, searches, filters and sorts; only one page comes down
+  const [tq, setTq] = useState<TableQuery>({ page: 1, search: '', sort: null })
+  const filterParams = { status: status || undefined, customerId: customerFilter || undefined, flagged: flaggedOnly ? '1' : undefined }
   const quotes = useQuery({
-    queryKey: ['quotations'],
-    queryFn: async () => (await api.get('/quotations')).data as Quote[],
+    queryKey: ['quotations', 'page', tq, filterParams],
+    queryFn: async () =>
+      (
+        await api.get('/quotations', {
+          params: { ...filterParams, page: tq.page, pageSize: PAGE, q: tq.search || undefined, sort: tq.sort?.key, dir: tq.sort?.dir },
+        })
+      ).data as { rows: Quote[]; total: number },
+    placeholderData: keepPreviousData,
+    enabled: view === 'table',
+  })
+  const board = useQuery({
+    queryKey: ['quotations', 'board', filterParams],
+    queryFn: async () =>
+      (await api.get('/quotations/board', { params: { customerId: filterParams.customerId, flagged: filterParams.flagged } })).data as {
+        columns: { status: string; total: number; rows: Quote[] }[]
+      },
+    enabled: view === 'kanban',
   })
   const customers = useQuery({
     queryKey: ['customers'],
@@ -89,21 +110,11 @@ export default function Quotations() {
     onError: (e) => toast.error(errText(e, 'Could not delete this quotation')),
   })
 
-  const all = useMemo(() => quotes.data ?? [], [quotes.data])
-  const uniq = (xs: string[]) => [...new Set(xs)].sort((a, b) => a.localeCompare(b))
-  const statuses = useMemo(() => uniq(all.map((q) => q.status)), [all])
-  const customerNames = useMemo(() => uniq(all.map((q) => q.customer)), [all])
-
-  const rows = useMemo(
-    () =>
-      all.filter(
-        (q) =>
-          (!status || q.status === status) &&
-          (!customerFilter || q.customer === customerFilter) &&
-          (!flaggedOnly || Number(q.riskScore) > 0),
-      ),
-    [all, status, customerFilter, flaggedOnly],
-  )
+  const rows = quotes.data?.rows ?? []
+  // the board shows the newest cards per column; a status filter narrows it to that column
+  const boardCols = (board.data?.columns ?? []).filter((c) => !status || c.status === status)
+  const boardCards = useMemo(() => boardCols.flatMap((c) => c.rows), [boardCols])
+  const boardCounts = Object.fromEntries(boardCols.map((c) => [c.status, c.total]))
   const activeFilters = (status ? 1 : 0) + (customerFilter ? 1 : 0) + (flaggedOnly ? 1 : 0)
   const clearFilters = () => {
     setStatus('')
@@ -115,16 +126,19 @@ export default function Quotations() {
     {
       key: 'quoteNumber',
       label: 'Quote #',
+      sortKey: 'created',
       render: (r) => <span className="font-mono text-xs">{r.quoteNumber}</span>,
     },
     {
       key: 'customer',
       label: 'Customer',
+      sortKey: 'customer',
       render: (r) => <span className="font-medium">{r.customer}</span>,
     },
     {
       key: 'status',
       label: 'Status',
+      sortKey: 'status',
       render: (r) => <StatusBadge status={r.status} />,
     },
     {
@@ -137,6 +151,7 @@ export default function Quotations() {
     {
       key: 'riskScore',
       label: 'Risk',
+      sortKey: 'risk',
       align: 'right',
       value: (r) => Number(r.riskScore),
       render: (r) => Number(r.riskScore).toFixed(1),
@@ -144,6 +159,7 @@ export default function Quotations() {
     {
       key: 'updatedAt',
       label: 'Updated',
+      sortKey: 'updated',
       value: (r) => new Date(r.updatedAt).getTime(),
       render: (r) => new Date(r.updatedAt).toLocaleDateString(),
     },
@@ -203,7 +219,7 @@ export default function Quotations() {
         onChange={(e) => setStatus(e.target.value)}
       >
         <option value="">All statuses</option>
-        {statuses.map((v) => (
+        {STATUSES.map((v) => (
           <option key={v} value={v}>
             {humanize(v)}
           </option>
@@ -217,7 +233,7 @@ export default function Quotations() {
         clearLabel="All customers"
         placeholder="All customers"
         searchPlaceholder="Search customers…"
-        options={customerNames.map((v) => ({ value: v, label: v }))}
+        options={(customers.data ?? []).map((c) => ({ value: c.id, label: c.name }))}
       />
       <Button
         size="sm"
@@ -315,8 +331,11 @@ export default function Quotations() {
           rows={rows}
           columns={columns}
           loading={quotes.isLoading}
+          pageSize={PAGE}
+          server={{ total: quotes.data?.total ?? 0, onChange: setTq }}
+          resetPageOn={JSON.stringify(filterParams)}
           onRowClick={(r) => nav(`/quotations/${r.id}`)}
-          searchPlaceholder="Search quote #, customer or status…"
+          searchPlaceholder="Search quote # or customer…"
           emptyMessage={
             activeFilters
               ? 'No quotation matches these filters.'
@@ -341,7 +360,7 @@ export default function Quotations() {
             Drag a deal to move it forward — the system applies the right action and blocks moves
             that need approval or the customer.
           </p>
-          <KanbanBoard quotes={rows} loading={quotes.isLoading} />
+          <KanbanBoard quotes={boardCards} counts={boardCounts} loading={board.isLoading} />
         </div>
       )}
     </AppShell>

@@ -55,7 +55,8 @@ export default function Approvals() {
   const nav = useNavigate()
   const { user } = useAuth()
 
-  const [outcome, setOutcome] = useState<Outcome | 'all'>('all')
+  // null = not chosen: admins open on what's still waiting, not 1,000+ rows of history
+  const [outcomeChoice, setOutcome] = useState<Outcome | 'all' | null>(null)
   const [stage, setStage] = useState('')
   const [risk, setRisk] = useState('')
   const [customer, setCustomer] = useState('')
@@ -79,6 +80,7 @@ export default function Approvals() {
   const [scope, setScope] = useState<'todo' | 'mine' | 'all' | null>(null)
   const isApprover = user?.role === 'manager' || user?.role === 'finance'
   const view = scope ?? (isApprover ? 'todo' : 'all')
+  const outcome = outcomeChoice ?? (isApprover ? 'all' : 'pending')
 
   const list = useQuery({
     queryKey: ['approvals'],
@@ -115,7 +117,7 @@ export default function Approvals() {
   )
 
   const active =
-    (outcome !== 'all' ? 1 : 0) +
+    (outcomeChoice && outcomeChoice !== 'all' ? 1 : 0) +
     (stage ? 1 : 0) +
     (risk ? 1 : 0) +
     (customer ? 1 : 0) +
