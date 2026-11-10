@@ -69,4 +69,12 @@ test.describe('Landing page', () => {
     expect(failed, 'first load failed, the reload succeeded').toBeGreaterThanOrEqual(2)
     await expect(page.getByText('Something broke on this screen')).toHaveCount(0)
   })
+
+  test('privacy policy and terms are reachable from the footer', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('contentinfo').getByRole('link', { name: 'Privacy Policy' }).click()
+    await expect(page.getByRole('heading', { name: 'Privacy Policy', level: 1 })).toBeVisible()
+    await page.getByRole('link', { name: 'Terms of Service' }).click()
+    await expect(page.getByRole('heading', { name: 'Terms of Service', level: 1 })).toBeVisible()
+  })
 })
