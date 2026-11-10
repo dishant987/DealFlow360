@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext } from '@playwright/test'
-import { apiAs, login, pick } from './helpers'
+import { apiAs, login, pick, signPortal } from './helpers'
 
 /**
  * §3 User Roles — one test per bullet in the brief, driven through the UI the
@@ -285,6 +285,7 @@ test.describe('Customer (Portal User)', () => {
     await expect(page.getByText('Counter: 12%')).toBeVisible({ timeout: 15_000 })
 
     // confirms with one click
+    await signPortal(page)
     await page.getByRole('button', { name: /Confirm quotation/i }).click()
     await expect(page.getByText(/You've confirmed this quotation/)).toBeVisible({ timeout: 15_000 })
     const d = await (await rep.get(`/api/quotations/${id}`)).json()

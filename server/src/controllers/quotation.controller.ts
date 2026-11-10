@@ -25,6 +25,7 @@ import { sendPortalLink } from '../utils/mailer.js'
 import { computeQuoteTotals } from '../services/pricing.js'
 import { computeBlendedRisk } from '../services/risk.js'
 import { quoteNumber } from '../services/quoteNumber.js'
+import { saveVersion } from './versions.controller.js'
 
 // A quote is only editable while it belongs to the rep. Once submitted, an
 // approver is reviewing a specific set of numbers — changing them underneath
@@ -548,11 +549,13 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
       .catch((e: Error) => console.error('portal link audit failed:', e.message))
   }
 
+  // every send freezes what the customer is shown (unchanged content keeps its version)
+  const version = await saveVersion(q, req.orgId, req.user!.id)
   await db.insert(auditLog).values({
     quotationId: q.id,
     userId: req.user!.id,
     action: 'sent_to_customer',
-    detail: { to: customer?.email ?? null },
+    detail: { to: customer?.email ?? null, version: version.version },
   })
   // `emailed` reports that delivery was STARTED, not that it landed — the
   // portal_link_emailed / _failed audit entry carries the real outcome.

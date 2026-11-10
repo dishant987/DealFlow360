@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, Clock, Lock, MessageSquarePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
+import { errText } from '@/lib/errors'
 import StatusBadge from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,6 +53,9 @@ type PortalQuote = {
     status: string
     quoteLineId: string | null
   }[]
+  /** latest version sent, and the signature if the customer has signed */
+  version: number | null
+  signature: { name: string; at: string; version: number } | null
 }
 
 
@@ -62,6 +66,8 @@ export default function Portal() {
   const [counter, setCounter] = useState('')
   const [deliveryDate, setDeliveryDate] = useState('')
   const [busy, setBusy] = useState(false)
+  const [signer, setSigner] = useState('')
+  const [agree, setAgree] = useState(false)
   const [openLine, setOpenLine] = useState<string | null>(null)
   const [lineNote, setLineNote] = useState('')
 
@@ -121,15 +127,15 @@ export default function Portal() {
   const confirm = async () => {
     setBusy(true)
     try {
-      const { data } = await api.post(`/portal/${token}/confirm`)
+      const { data } = await api.post(`/portal/${token}/confirm`, { signerName: signer.trim(), agree })
       toast.success(
         data.reEnteredApproval
           ? 'Confirmed — your requested terms need internal approval; we will follow up.'
           : 'Quotation confirmed. Thank you!',
       )
       refresh()
-    } catch {
-      toast.error('Could not confirm')
+    } catch (e) {
+      toast.error(errText(e, 'Could not confirm'))
     } finally {
       setBusy(false)
     }
@@ -222,6 +228,12 @@ export default function Portal() {
             <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" />
             <div>
               <p className="font-medium text-emerald-900">You've confirmed this quotation</p>
+              {q.signature && (
+                <p className="text-sm text-emerald-900">
+                  Signed by <span className="font-[cursive] text-base">{q.signature.name}</span> on{' '}
+                  {new Date(q.signature.at).toLocaleString()} · version {q.signature.version}
+                </p>
+              )}
               <p className="text-sm text-emerald-800/80">
                 Our team has been notified and will be in touch about next steps. No further action
                 is needed from you.
@@ -456,8 +468,26 @@ export default function Portal() {
 
             {open && !q.expired ? (
               <>
-                <Button className="mt-4 w-full" onClick={confirm} disabled={busy}>
-                  {busy ? 'Working…' : 'Confirm quotation'}
+                {/* typed e-signature: full name + explicit agreement, stored with the exact version signed */}
+                <div className="mt-4 space-y-2 border-t pt-4">
+                  <label htmlFor="signer" className="text-xs font-medium">
+                    Sign by typing your full name
+                  </label>
+                  <Input id="signer" autoComplete="name" value={signer} onChange={(e) => setSigner(e.target.value)} placeholder="Full name" />
+                  {signer.trim() && <p className="font-[cursive] text-2xl leading-tight text-foreground">{signer}</p>}
+                  <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <input type="checkbox" className="mt-0.5" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+                    <span>
+                      {/* an open counter-offer is applied on signing, so the signed version isn't the one shown */}
+                      {q.negotiations.some((n) => n.type === 'counter_discount' && n.status === 'open')
+                        ? 'I agree to this quotation with my requested discount applied, and its terms,'
+                        : `I agree to this quotation${q.version ? ` (version ${q.version})` : ''} and its terms,`}{' '}
+                      and that typing my name is my electronic signature.
+                    </span>
+                  </label>
+                </div>
+                <Button className="mt-3 w-full" onClick={confirm} disabled={busy || signer.trim().length < 2 || !agree}>
+                  {busy ? 'Working…' : 'Sign and confirm quotation'}
                 </Button>
                 <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
                   Confirming accepts these terms and hands the order to our fulfilment team. If

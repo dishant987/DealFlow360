@@ -381,6 +381,30 @@ export const approvals = pgTable('approvals', {
 })
 
 // immutable trail for every approval/rejection/edit (A3)
+// Every version of a quote the customer was shown, frozen (step 26). `snapshot` is the
+// customer-facing view (no cost); `hash` is its sha256, so a signature proves which
+// exact terms were accepted. Signature fields are set when the customer signs it.
+export const quoteVersions = pgTable(
+  'quote_versions',
+  {
+    id: pk(),
+    organizationId: tenantId(),
+    quotationId: uuid('quotation_id')
+      .notNull()
+      .references(() => quotations.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    snapshot: jsonb('snapshot').notNull(),
+    hash: text('hash').notNull(),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    signedName: text('signed_name'),
+    signedAt: timestamp('signed_at', { withTimezone: true }),
+    signedIp: text('signed_ip'),
+    signedUserAgent: text('signed_user_agent'),
+  },
+  (t) => [uniqueIndex('quote_versions_quote_version_uq').on(t.quotationId, t.version)],
+)
+
 export const auditLog = pgTable('audit_log', {
   id: pk(),
   organizationId: tenantId(),

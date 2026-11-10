@@ -108,6 +108,17 @@ approvals, negotiations, fulfilments, invoices and payments.
 
 ---
 
+## Quote versions and e-signature
+
+Every time a quotation is **sent** to the customer, Dealwise freezes exactly what the customer sees
+(lines, prices, discounts, terms, totals — never cost) as a numbered **version** with a sha-256
+fingerprint. Re-sending an unchanged quote keeps the same version. To confirm in the portal the
+customer **signs**: types their full name and ticks "I agree". The signature (name, time, IP, browser)
+is stored on the exact version they accepted; if they had an open counter-offer, it's applied first and
+becomes a new version, so the signed terms are always the ones that were agreed. On the quote page,
+**Versions** lists every version, shows the signature, and compares any two (header fields, lines
+added/removed/changed). Rules: `server/src/services/quoteVersion.ts` (unit-tested).
+
 ## Plans and billing
 
 Every new company gets a **14-day free trial of every feature** (no card). After that it needs a
@@ -483,7 +494,7 @@ is a genuinely separate unauthenticated router whose projection omits cost and m
 
 ## Data model
 
-24 tables. The spine:
+25 tables. The spine:
 
 ```
 users ──< quotations >── customers
@@ -498,6 +509,7 @@ users ──< quotations >── customers
               ├──< approvals            (manager / finance steps)
               ├──< audit_log            (immutable history)
               ├──< negotiation_requests (customer portal)
+              ├──< quote_versions       (frozen copy per send; the signed one)
               ├──< invoices >── payments
               └──< credit_notes
 
@@ -525,10 +537,11 @@ session cookie.
 | Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |
 | Quotations | `GET·POST /quotations`, `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |
+| Versions | `GET /quotations/:id/versions`, `GET /quotations/:id/versions/:version`, `GET /quotations/:id/versions/compare?from=&to=` |
 | Approvals | `GET /approvals`, `GET /approvals/:id`, `POST /approvals/:id/action` |
 | Fulfilment | `GET /quotations/:id/fulfillment/suggestion·allocations`, `POST /:id/fulfillment/accept·consolidate`, `POST /stock/:id/receive` |
 | Billing | `GET·POST /quotations/:id/billing[/generate]`, `POST /:id/billing/subscriptions/:lineId/change·cancel·pause·resume`, `POST /invoices/:id/pay` |
-| Portal *(public)* | `GET /portal/:token`, `POST /portal/:token/negotiate·confirm` |
+| Portal *(public)* | `GET /portal/:token`, `POST /portal/:token/negotiate·confirm` (confirm needs `{ signerName, agree: true }`) |
 | Ops | `GET /summary` (tasks, KPIs, charts, setup checklist; scoped per role), `GET /notifications`, `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf]` (manager, finance, admin only) |
 | Dashboard | `GET /dashboard`, `POST /dashboard/quotations/:id/nudge·escalate` |
 | Reports | `GET /reports·/filters·/export?format=pdf\|xls` |

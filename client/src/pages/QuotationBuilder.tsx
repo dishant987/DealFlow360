@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table'
 import { humanize, money } from '@/lib/format'
 import QuoteDetails, { type QuoteDetailFields } from '@/components/QuoteDetails'
+import QuoteVersions from '@/components/QuoteVersions'
 import { Combobox } from '@/components/ui/combobox'
 import { usePlan } from '@/hooks/usePlan'
 
@@ -593,6 +594,7 @@ export default function QuotationBuilder() {
             </TableBody>
           </Table>
           <QuoteDetails quote={quote.data} canEdit={canEdit} />
+          <QuoteVersions quotationId={quote.data.id} />
         </section>
 
         <aside className="space-y-4 h-fit">
