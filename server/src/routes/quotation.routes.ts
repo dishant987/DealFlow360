@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, quotationAccessParam } from '../middlewares/auth.middleware.js'
+import { requireAuth, requireFeature, quotationAccessParam } from '../middlewares/auth.middleware.js'
 import {
   listQuotations,
   getQuotation,
@@ -38,7 +38,7 @@ router.delete('/quotations/:id', deleteQuotation)
 router.post('/quotations/:id/send', sendToCustomer)
 router.get('/quotations/:id/negotiations', listNegotiations)
 router.patch('/quotations/:id/negotiations/:negotiationId', resolveNegotiation)
-router.get('/quotations/:id/upsell', getUpsell)
+router.get('/quotations/:id/upsell', requireFeature('upsell'), getUpsell)
 router.post('/quotations/:id/lines', addLine)
 router.patch('/quotations/:id/lines/:lineId', updateLine)
 router.delete('/quotations/:id/lines/:lineId', deleteLine)

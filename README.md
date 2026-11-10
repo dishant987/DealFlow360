@@ -81,6 +81,7 @@ npm run dev                 # http://localhost:5173
 | `CORS_ORIGINS` | Optional comma-separated allow-list for the API and socket. Defaults to `CLIENT_URL`. |
 | `DB_SSL_ALLOW_SELF_SIGNED` | Set to `true` only if your hosted Postgres uses a self-signed certificate; otherwise the certificate is verified. |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional Google sign-in. Create a "Web application" OAuth client in Google Cloud Console and add `<CLIENT_URL>/api/auth/google/callback` as an authorised redirect URI. Without both, the Google button is hidden. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Optional: lets companies pay for a plan. Use test keys (`sk_test_…`) until launch. In Stripe, add a webhook to `<server>/api/plan/webhook` for `checkout.session.completed`, `customer.subscription.updated` and `customer.subscription.deleted`, and turn on the Customer Portal. Locally: `stripe listen --forward-to localhost:4000/api/plan/webhook` prints the webhook secret. Without the keys, plans show but can't be bought. |
 | `ALLOW_DESTRUCTIVE_SEED` | `db:seed` refuses to run with `NODE_ENV=production` unless this is `true`. |
 
 Client build settings:
@@ -105,6 +106,27 @@ and reorder rules, and roughly 80 quotations spread across every stage, complete
 approvals, negotiations, fulfilments, invoices and payments.
 
 ---
+
+## Plans and billing
+
+Every new company gets a **14-day free trial of every feature** (no card). After that it needs a
+plan, or the workspace turns **read-only**: everyone can still sign in and look, but nothing can be
+created or changed until an admin chooses one (signing in, the profile page and billing keep working).
+Plans are per user per month, in USD, billed by Stripe. Each includes the one before it:
+
+| Plan | Price | Includes |
+| --- | --- | --- |
+| Starter | $15 | Quotations + approval routing, customer portal, customers/contacts/catalogue, one-time invoices + PDF, team roles, 2FA, Google sign-in, audit log |
+| Growth | $39 | + multi-warehouse fulfilment and backorders, subscriptions and recurring billing, bulk import, upsell suggestions |
+| Scale | $69 | + reports and exports, deal health board, discount anomaly alerts |
+| Enterprise | talk to us | + SSO and custom approval chains (planned), onboarding, priority support |
+
+Gated features return **402** from the server (`requireFeature`) and are hidden in the menu. Admins
+manage the plan under **Settings → Plan & billing**: choose a plan (Stripe Checkout; activated on
+return, no need to wait for the webhook), switch plans (prorated), and open Stripe's portal for the
+card, invoices and cancelling. The seat count follows the team. Stripe's webhook keeps the status in
+step afterwards (renewals, failed cards, cancelling). Rules: `server/src/services/plan.ts`
+(unit-tested). The demo company in the seed is a paying Scale customer.
 
 ## Companies (multi-tenancy)
 
@@ -498,6 +520,7 @@ session cookie.
 | Area | Endpoints |
 | --- | --- |
 | Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback`, `POST /auth/verify-email[/resend]`, `GET /auth/sessions`, `POST /auth/sessions/revoke-others`, `DELETE /auth/sessions/:id` |
+| Plan | `GET /plan` (any signed-in user), `POST /plan/checkout·confirm·portal` (admin), `POST /plan/webhook` *(Stripe, signature-checked)* |
 | Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |
 | Quotations | `GET·POST /quotations`, `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |

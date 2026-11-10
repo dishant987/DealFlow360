@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
+import { usePlan, type Plan } from '@/hooks/usePlan'
 import { api } from '@/lib/api'
 import { roleLabel } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
@@ -33,11 +34,12 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/s
 
 export type Crumb = { label: string; to?: string }
 
-type NavEntry = { to: string; label: string; icon: LucideIcon; badgeKey?: 'pendingApprovals' }
+// `feature`: plan-gated (server/src/services/plan.ts); hidden when the plan lacks it, shown while it loads
+type NavEntry = { to: string; label: string; icon: LucideIcon; badgeKey?: 'pendingApprovals'; feature?: string }
 type NavGroup = { label: string; items: NavEntry[] }
 
 // Grouped by job, not by table: what a person came to do decides where it sits.
-function navFor(role: string | undefined): NavGroup[] {
+function navFor(role: string | undefined, features?: string[]): NavGroup[] {
   const staff = !!role && ['manager', 'finance', 'admin'].includes(role)
   const groups: NavGroup[] = [
     {
@@ -57,22 +59,24 @@ function navFor(role: string | undefined): NavGroup[] {
       {
         label: 'Operate',
         items: [
-          { to: '/fulfillment', label: 'Fulfillment', icon: Truck },
-          { to: '/subscriptions', label: 'Subscriptions', icon: RefreshCcw },
+          { to: '/fulfillment', label: 'Fulfillment', icon: Truck, feature: 'fulfilment' },
+          { to: '/subscriptions', label: 'Subscriptions', icon: RefreshCcw, feature: 'subscriptions' },
         ],
       },
       { label: 'Finance', items: [{ to: '/invoices', label: 'Invoices', icon: Receipt }] },
       {
         label: 'Insights',
         items: [
-          { to: '/deal-health', label: 'Deal Health', icon: Activity },
-          { to: '/reports', label: 'Reports', icon: BarChart3 },
+          { to: '/deal-health', label: 'Deal Health', icon: Activity, feature: 'dealHealth' },
+          { to: '/reports', label: 'Reports', icon: BarChart3, feature: 'reports' },
         ],
       },
     )
   if (role === 'admin' || role === 'manager')
     groups.push({ label: 'Settings', items: [{ to: '/admin', label: 'Config', icon: Settings2 }] })
   return groups
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.feature || !features || features.includes(i.feature)) }))
+    .filter((g) => g.items.length > 0)
 }
 
 // sidebar collapse is a per-device preference, like the theme
@@ -182,7 +186,8 @@ export default function AppShell({
   const [menuOpen, setMenuOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
-  const groups = navFor(user?.role)
+  const plan = usePlan(!!user)
+  const groups = navFor(user?.role, plan.data?.features)
 
   // shares its cache with the Workspace dashboard, so this costs nothing extra
   // on most navigations; the badge just surfaces what is already waiting
@@ -329,6 +334,7 @@ export default function AppShell({
         )}
 
         {user && user.emailVerified === false && <VerifyEmailBanner email={user.email} />}
+        {plan.data && <PlanBanner plan={plan.data} isAdmin={user?.role === 'admin'} />}
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
@@ -360,6 +366,33 @@ function VerifyEmailBanner({ email }: { email: string }) {
       <Button size="sm" variant="link" className="h-auto p-0" onClick={resend} disabled={sending}>
         {sending ? 'Sending…' : 'Send it again'}
       </Button>
+    </div>
+  )
+}
+
+/** Trial countdown, or the read-only notice once the trial or subscription has ended. */
+function PlanBanner({ plan, isAdmin }: { plan: Plan; isAdmin: boolean }) {
+  if (!plan.readOnly && plan.plan !== 'trial') return null
+  const action = isAdmin ? (
+    <Link to="/admin?section=billing" className="font-medium text-primary hover:underline">
+      Choose a plan
+    </Link>
+  ) : (
+    <span className="text-muted-foreground">Ask your admin to choose a plan.</span>
+  )
+  return (
+    <div
+      role="status"
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm sm:px-6 ${plan.readOnly ? 'bg-destructive/10' : 'bg-muted/60'}`}
+    >
+      <span>
+        {plan.readOnly
+          ? plan.plan === 'trial'
+            ? 'Your free trial has ended — the workspace is read-only.'
+            : 'Your subscription has ended — the workspace is read-only.'
+          : `Free trial: ${plan.trialDaysLeft} ${plan.trialDaysLeft === 1 ? 'day' : 'days'} left, with every feature.`}
+      </span>
+      {action}
     </div>
   )
 }

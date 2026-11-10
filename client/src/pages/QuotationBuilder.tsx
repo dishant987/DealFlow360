@@ -23,6 +23,7 @@ import {
 import { humanize, money } from '@/lib/format'
 import QuoteDetails, { type QuoteDetailFields } from '@/components/QuoteDetails'
 import { Combobox } from '@/components/ui/combobox'
+import { usePlan } from '@/hooks/usePlan'
 
 type Variant = { id: string; attribute: string; value: string; extraPrice: string }
 type Product = {
@@ -149,9 +150,12 @@ export default function QuotationBuilder() {
     queryKey: ['products'],
     queryFn: async () => (await api.get('/products')).data as Product[],
   })
+  const plan = usePlan()
   const upsell = useQuery({
     queryKey: ['upsell', id],
     queryFn: async () => (await api.get(`/quotations/${id}/upsell`)).data as Upsell[],
+    // upsell suggestions are a Growth feature
+    enabled: !!plan.data?.features.includes('upsell'),
   })
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 

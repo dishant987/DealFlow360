@@ -8,6 +8,7 @@ import { generateResetToken, hashPassword, inviteTtlMs } from '../utils/token.js
 import { sendInvite } from '../utils/mailer.js'
 import { revokeSessions } from '../utils/session.js'
 import { inviteAction, memberStatus, transferProblem } from '../services/team.js'
+import { syncSeats } from './plan.controller.js'
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 const roleEnum = z.enum(['rep', 'manager', 'finance', 'admin'])
@@ -46,6 +47,7 @@ export async function inviteUser(req: Request, res: Response) {
     db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, req.orgId!)),
   ])
   await sendInvite(email, `${CLIENT_URL}/reset-password?token=${token}&invite=1`, me?.name ?? 'Your admin', org?.name ?? 'your company')
+  await syncSeats(req.orgId!)
   res.status(action === 'resend' ? 200 : 201).json({ id: u.id, name: u.name, email: u.email, role: u.role, status: 'invited', resent: action === 'resend' })
 }
 

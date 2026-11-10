@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, requireRole, quotationAccessParam } from '../middlewares/auth.middleware.js'
+import { requireAuth, requireFeature, requireRole, quotationAccessParam } from '../middlewares/auth.middleware.js'
 import {
   getSuggestion,
   acceptSplit,
@@ -8,7 +8,7 @@ import {
 } from '../controllers/fulfillment.controller.js'
 
 const router = Router()
-router.use(requireAuth)
+router.use(requireAuth, requireFeature('fulfilment'))
 // every :id below is a quotation — reps may only touch their own
 router.param('id', quotationAccessParam)
 

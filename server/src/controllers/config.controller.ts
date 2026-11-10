@@ -27,6 +27,7 @@ import {
 } from '../models/schema.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 import { alias } from 'drizzle-orm/pg-core'
+import { syncSeats } from './plan.controller.js'
 
 /* ---- stock: joined list + upsert by (warehouse, product) ---- */
 export async function listStock(_req: Request, res: Response) {
@@ -344,6 +345,7 @@ export async function createUser(req: Request, res: Response) {
       organizationId: req.orgId!,
     })
     .returning({ id: users.id, name: users.name, email: users.email, role: users.role })
+  await syncSeats(req.orgId!)
   res.status(201).json(u)
 }
 export async function updateUser(req: Request<{ id: string }>, res: Response) {
@@ -371,6 +373,7 @@ export async function updateUser(req: Request<{ id: string }>, res: Response) {
   if (!u) return res.status(404).json({ error: 'not found' })
   // blocking, or a password set by an admin, ends every open session and live connection
   if (p.data.blocked || password) await revokeSessions(u.id)
+  if (p.data.blocked !== undefined) await syncSeats(req.orgId!)
   res.json(u)
 }
 export async function deleteUser(req: Request<{ id: string }>, res: Response) {
@@ -381,5 +384,6 @@ export async function deleteUser(req: Request<{ id: string }>, res: Response) {
     .returning()
   if (!u) return res.status(404).json({ error: 'not found' })
   disconnectSockets(u.id) // their sessions went with the row (cascade)
+  await syncSeats(req.orgId!)
   res.json({ ok: true })
 }

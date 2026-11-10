@@ -7,6 +7,7 @@ import { errText } from '@/lib/errors'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import StatusBadge from '@/components/StatusBadge'
+import { usePlan } from '@/hooks/usePlan'
 
 type Kind = 'customers' | 'products'
 type Planned = { row: number; action: 'create' | 'update' | 'skip' | 'error'; key: string; errors: string[] }
@@ -26,7 +27,13 @@ const toBase64 = (f: File) =>
   })
 
 /** Bulk import for a Config tab: template → upload → preview every row → import all or nothing. */
-export default function ImportDialog({ kind, endpoint }: { kind: Kind; endpoint: string }) {
+/** Bulk import is a Growth feature: no button on Starter. */
+export default function ImportDialog(props: { kind: Kind; endpoint: string }) {
+  const plan = usePlan()
+  return plan.data && !plan.data.features.includes('import') ? null : <ImportDialogInner {...props} />
+}
+
+function ImportDialogInner({ kind, endpoint }: { kind: Kind; endpoint: string }) {
   const qc = useQueryClient()
   const [open, setOpen] = useState(false)
   const [file, setFile] = useState<File | null>(null)

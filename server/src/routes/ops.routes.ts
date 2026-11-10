@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
+import { requireAuth, requireFeature, requireRole } from '../middlewares/auth.middleware.js'
 import {
   listInvoices,
   getInvoice,
@@ -30,11 +30,11 @@ const crossPipeline = requireRole('manager', 'finance', 'admin')
 router.get('/invoices', crossPipeline, listInvoices)
 router.get('/invoices/:id', crossPipeline, getInvoice)
 router.get('/invoices/:id/pdf', crossPipeline, invoicePdf)
-router.get('/fulfillment-queue', crossPipeline, listFulfillmentQueue)
-router.get('/subscriptions', crossPipeline, listSubscriptions)
+router.get('/fulfillment-queue', crossPipeline, requireFeature('fulfilment'), listFulfillmentQueue)
+router.get('/subscriptions', crossPipeline, requireFeature('subscriptions'), listSubscriptions)
 
 // A4: booking in a delivery against a warehouse's reorder rule. Same duty as
 // accepting a split, so the same roles.
-router.post('/stock/:stockId/receive', requireRole('finance', 'admin'), receiveStock)
+router.post('/stock/:stockId/receive', requireRole('finance', 'admin'), requireFeature('fulfilment'), receiveStock)
 
 export default router

@@ -4,6 +4,7 @@ import { db, scopeRequest } from '../config/db.js'
 import { quotations } from '../models/schema.js'
 import { cookieName, type JwtUser, type Role } from '../utils/token.js'
 import { loadSession } from '../utils/session.js'
+import { accountState, type Feature } from '../services/plan.js'
 
 // make req.user available across handlers
 declare global {
@@ -13,6 +14,8 @@ declare global {
       user?: JwtUser
       /** company of this request: the signed-in user's, or a portal quote's */
       orgId?: string
+      /** the company's plan state (services/plan.ts) */
+      account?: ReturnType<typeof accountState>
     }
   }
 }
@@ -26,6 +29,10 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   if (!s) return res.status(401).json({ error: 'unauthenticated' })
   req.user = { ...s.claims, role: s.role }
   req.orgId = s.orgId
+  req.account = s.account
+  // trial over / subscription ended: everyone can still read, only billing and their own account can change
+  if (s.account.readOnly && req.method !== 'GET' && !/^\/api\/(auth|plan)\//.test(req.originalUrl))
+    return res.status(402).json({ error: 'Your workspace is read-only until an admin picks a plan in Settings → Plan & billing.' })
   // everything after this point only sees this company's data (RLS)
   scopeRequest(s.orgId, res, next)
 }
@@ -61,4 +68,15 @@ export async function quotationAccessParam(
   if (q.repId !== req.user.id)
     return res.status(403).json({ error: 'this quotation belongs to another rep' })
   next()
+}
+
+const NEEDS: Record<Feature, string> = {
+  fulfilment: 'Growth', subscriptions: 'Growth', import: 'Growth', upsell: 'Growth', reports: 'Scale', dealHealth: 'Scale',
+}
+/** Plan-gated routes (services/plan.ts): 402 when the company's plan doesn't include `feature`. */
+export function requireFeature(feature: Feature, opts: { writesOnly?: boolean } = {}) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    if (req.account?.features.includes(feature) || (opts.writesOnly && req.method === 'GET')) return next()
+    res.status(402).json({ error: `This is part of the ${NEEDS[feature]} plan. An admin can upgrade in Settings → Plan & billing.` })
+  }
 }

@@ -29,6 +29,14 @@ export const organizations = pgTable('organizations', {
   name: text('name').notNull(),
   // ISO 4217 code every amount is shown in; chosen at sign-up, editable in Settings
   currency: text('currency').notNull().default('USD'),
+  // Dealwise's own subscription (step 17): 'trial' until an admin pays for 'starter' or 'growth'.
+  // Rules in services/plan.ts; Stripe is the source of truth for status once subscribed.
+  plan: text('plan').notNull().default('trial'),
+  trialEndsAt: timestamp('trial_ends_at', { withTimezone: true }).notNull().default(sql`now() + interval '14 days'`),
+  stripeCustomerId: text('stripe_customer_id').unique(),
+  stripeSubscriptionId: text('stripe_subscription_id'),
+  subscriptionStatus: text('subscription_status'),
+  currentPeriodEnd: timestamp('current_period_end', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 // Migration 0006 also adds an index on every organization_id and the RLS policies;
