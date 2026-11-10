@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { Check } from 'lucide-react'
 import { toast } from 'sonner'
@@ -12,6 +12,10 @@ import Panel from '@/components/Panel'
 import StatusBadge from '@/components/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+
+type Interval = 'month' | 'year'
+type Payment = { id: string; number: string | null; date: string; amount: number; currency: string; status: string | null; description: string | null; url: string | null; pdf: string | null }
 
 // what each plan unlocks; must match server/src/services/plan.ts and the landing page
 export const OFFER = {
@@ -32,13 +36,19 @@ export const OFFER = {
   },
 } as const
 // Dealwise itself bills in USD, whatever currency the company quotes in
-const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
+const usd = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: n % 1 ? 2 : 0 }).format(n)
 
 /** Settings → Plan & billing (admins). Payment happens on Stripe's own pages. */
 export default function PlanBilling() {
   const plan = usePlan()
   const qc = useQueryClient()
   const [params, setParams] = useSearchParams()
+  const history = useQuery({
+    queryKey: ['plan', 'history'],
+    queryFn: async () => (await api.get('/plan/history')).data as { interval: Interval | null; invoices: Payment[] },
+  })
+  const [picked, setPicked] = useState<Interval | null>(null)
+  const interval: Interval = picked ?? history.data?.interval ?? 'month'
 
   // back from Stripe Checkout: confirm with Stripe straight away (the webhook also lands, for later changes)
   const checkout = params.get('checkout')
@@ -65,7 +75,7 @@ export default function PlanBilling() {
     }
   }
   const choose = useMutation({
-    mutationFn: async (p: 'starter' | 'growth' | 'scale') => (await api.post('/plan/checkout', { plan: p })).data,
+    mutationFn: async (p: 'starter' | 'growth' | 'scale') => (await api.post('/plan/checkout', { plan: p, interval })).data,
     onSuccess: go,
     onError: (e) => toast.error(errText(e, "Couldn't start checkout")),
   })
@@ -116,16 +126,33 @@ export default function PlanBilling() {
         )}
       </Panel>
 
+      <div role="radiogroup" aria-label="Billing period" className="inline-flex rounded-lg border bg-background p-1 text-sm">
+        {(['month', 'year'] as const).map((i) => (
+          <button
+            key={i}
+            type="button"
+            role="radio"
+            aria-checked={interval === i}
+            onClick={() => setPicked(i)}
+            className={`rounded-md px-3 py-1.5 ${interval === i ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            {i === 'month' ? 'Monthly' : `Yearly · ${12 - p.annualMonths} months free`}
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-3">
         {(['starter', 'growth', 'scale'] as const).map((id) => {
-          const isCurrent = p.plan === id && !p.readOnly
+          const isCurrent = p.plan === id && !p.readOnly && (history.data?.interval ?? 'month') === interval
+          const perPeriod = p.prices[id] * (interval === 'year' ? p.annualMonths : 1)
           return (
             <section key={id} className={`rounded-xl border bg-background p-5 ${id === 'growth' ? 'border-primary/40' : ''}`}>
               <h3 className="font-heading text-lg font-semibold">{OFFER[id].name}</h3>
               <p className="text-sm text-muted-foreground">{OFFER[id].blurb}</p>
               <p className="mt-3 text-sm text-muted-foreground">
-                <strong className="text-3xl text-foreground">{usd(p.prices[id])}</strong> per user / month
+                <strong className="text-3xl text-foreground">{usd(interval === 'year' ? perPeriod / 12 : perPeriod)}</strong> per user / month
               </p>
+              {interval === 'year' && <p className="text-xs text-muted-foreground">{usd(perPeriod)} per user, billed yearly</p>}
               <ul className="mt-4 space-y-2 text-sm">
                 {OFFER[id].points.map((pt) => (
                   <li key={pt} className="flex gap-2">
@@ -134,7 +161,7 @@ export default function PlanBilling() {
                 ))}
               </ul>
               <p className="mt-4 text-sm text-muted-foreground">
-                For your team of {p.seats}: <strong className="text-foreground">{usd(p.prices[id] * p.seats)}</strong> a month
+                For your team of {p.seats}: <strong className="text-foreground">{usd(perPeriod * p.seats)}</strong> a {interval}
               </p>
               <Button
                 className="mt-4 w-full"
@@ -157,8 +184,58 @@ export default function PlanBilling() {
           <a href={`mailto:${import.meta.env.VITE_CONTACT_EMAIL || 'privacy@dealwise.example'}?subject=Dealwise%20Enterprise`}>Talk to us</a>
         </Button>
       </section>
+      <Panel title="Payment history" description="Every invoice Stripe has issued for your Dealwise plan.">
+        {history.isLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : !history.data?.invoices.length ? (
+          <p className="text-sm text-muted-foreground">No payments yet. Invoices appear here once you choose a plan.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Invoice</TableHead>
+                  <TableHead className="hidden sm:table-cell">Description</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {history.data.invoices.map((i) => (
+                  <TableRow key={i.id}>
+                    <TableCell className="whitespace-nowrap">{format(new Date(i.date), 'd MMM yyyy')}</TableCell>
+                    <TableCell className="font-mono text-xs">{i.number ?? '—'}</TableCell>
+                    <TableCell className="hidden max-w-64 truncate text-muted-foreground sm:table-cell">{i.description ?? '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {new Intl.NumberFormat('en-US', { style: 'currency', currency: i.currency }).format(i.amount)}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={i.status === 'paid' ? 'approved' : i.status === 'open' ? 'pending_approval' : 'rejected'} label={humanize(i.status ?? 'draft')} />
+                    </TableCell>
+                    <TableCell className="space-x-3 text-right whitespace-nowrap">
+                      {i.url && (
+                        <a href={i.url} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">
+                          View
+                        </a>
+                      )}
+                      {i.pdf && (
+                        <a href={i.pdf} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline">
+                          PDF
+                        </a>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </Panel>
+
       <p className="text-xs text-muted-foreground">
-        Prices in USD, billed monthly by Stripe. Adding or removing people updates the seat count automatically.
+        Prices in USD (whatever currency you quote in), billed {interval === 'year' ? 'yearly' : 'monthly'} by Stripe. Adding or removing people updates the seat count automatically.
       </p>
     </div>
   )

@@ -206,8 +206,8 @@ export default function CustomerDetail() {
                 type="number"
                 min={0}
                 disabled={!canEdit}
-                value={form.paymentTermsDays ?? 30}
-                onChange={(e) => setForm({ ...form, paymentTermsDays: Number(e.target.value) })}
+                value={form.paymentTermsDays ?? ''}
+                onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value === '' ? undefined : Number(e.target.value) })}
               />
             </FormField>
             {canManage && (
@@ -311,6 +311,7 @@ export default function CustomerDetail() {
                 ))}
               </ul>
             )}
+            {theirQuotes.length > 10 && <p className="text-xs text-muted-foreground">Showing the latest 10 of {theirQuotes.length}.</p>}
           </section>
         </div>
       </div>

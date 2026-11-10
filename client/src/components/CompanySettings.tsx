@@ -67,7 +67,8 @@ export default function CompanySettings() {
   })
 
   if (!f) return <Skeleton className="h-96 w-full" />
-  const dirty = JSON.stringify(f) !== JSON.stringify(q.data)
+  const norm = (o: object | null | undefined) => JSON.stringify(Object.entries(o ?? {}).map(([k, v]) => [k, v == null ? '' : String(v)]))
+  const dirty = norm(f) !== norm(q.data)
   const emailBad = !!f.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.contactEmail.trim())
   const nameMissing = !f.name.trim()
 

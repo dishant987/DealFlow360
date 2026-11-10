@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import {
   quotations,
@@ -13,7 +13,7 @@ import {
   payments,
   auditLog,
 } from '../models/schema.js'
-import { computeLine } from '../services/pricing.js'
+import { afterOrderDiscount, computeLine } from '../services/pricing.js'
 import { money as fmt, orgCurrency } from '../utils/format.js'
 import {
   nextBillingDate,
@@ -42,7 +42,11 @@ export async function generateBilling(req: Request<{ id: string }>, res: Respons
   // Regenerating deletes the invoices, and payments cascade with them — so once
   // money has been recorded the billing run is locked.
   const existing = await db.select().from(invoices).where(eq(invoices.quotationId, req.params.id))
-  if (existing.some((i) => i.status === 'paid'))
+  const paidSoFar = existing.length
+    ? await db.select({ id: payments.id }).from(payments).where(inArray(payments.invoiceId, existing.map((i) => i.id))).limit(1)
+    : []
+  // any payment at all — a partial one too — would be deleted with its invoice
+  if (paidSoFar.length > 0)
     return res.status(400).json({
       error:
         'Billing cannot be regenerated — a payment has already been recorded against this quotation.',
@@ -71,9 +75,11 @@ export async function generateBilling(req: Request<{ id: string }>, res: Respons
     await tx.delete(billingSchedules).where(eq(billingSchedules.quotationId, req.params.id))
 
     const now = new Date()
-    const oneTimeTotal = lines
-      .filter((l) => l.lineType === 'onetime')
-      .reduce((sum, l) => sum + computeLine(l).net, 0)
+    // the quote's order discount applies to what's billed, exactly as it does to the quote total
+    const oneTimeTotal = afterOrderDiscount(
+      lines.filter((l) => l.lineType === 'onetime').reduce((sum, l) => sum + computeLine(l).net, 0),
+      q.orderDiscountPct,
+    )
 
     if (oneTimeTotal > 0) {
       const due = new Date(now)
@@ -93,7 +99,7 @@ export async function generateBilling(req: Request<{ id: string }>, res: Respons
         quoteLineId: l.id,
         subscriptionPlanId: l.subscriptionPlanId!,
         nextBillingDate: nextBillingDate(now, (l.interval ?? 'monthly') as Interval),
-        amount: String(computeLine(l).net),
+        amount: String(afterOrderDiscount(computeLine(l).net, q.orderDiscountPct)),
         status: 'scheduled',
       })
     }
@@ -133,7 +139,10 @@ async function billingView(quotationId: string) {
     .innerJoin(subscriptionPlans, eq(billingSchedules.subscriptionPlanId, subscriptionPlans.id))
     .where(eq(billingSchedules.quotationId, quotationId))
   const credits = await db.select().from(creditNotes).where(eq(creditNotes.quotationId, quotationId))
-  return { invoices: invs, schedules, creditNotes: credits }
+  // what's been paid on each invoice: any payment locks regeneration, and the UI shows the balance
+  const pays = invs.length ? await db.select().from(payments).where(inArray(payments.invoiceId, invs.map((i) => i.id))) : []
+  const paidOn = (id: string) => round2(pays.filter((p) => p.invoiceId === id).reduce((t, p) => t + Number(p.amount), 0))
+  return { invoices: invs.map((i) => ({ ...i, paid: paidOn(i.id), balance: round2(Number(i.amount) - paidOn(i.id)) })), schedules, creditNotes: credits }
 }
 
 export async function getBilling(req: Request<{ id: string }>, res: Response) {
@@ -162,6 +171,7 @@ export async function changeSubscription(
   const [sched] = await db
     .select({
       id: billingSchedules.id,
+      status: billingSchedules.status,
       nextBillingDate: billingSchedules.nextBillingDate,
       interval: subscriptionPlans.interval,
       prorationEnabled: subscriptionPlans.prorationEnabled,
@@ -175,8 +185,11 @@ export async function changeSubscription(
       ),
     )
   if (!sched) return res.status(400).json({ error: 'no active subscription schedule for this line' })
+  if (sched.status === 'cancelled') return res.status(400).json({ error: 'This subscription is cancelled — it can no longer be changed.' })
+  if (sched.status === 'paused') return res.status(400).json({ error: 'This subscription is paused — resume it before changing the quantity.' })
 
-  const perUnit = Number(line.unitPrice) * (1 - Number(line.discountPct) / 100)
+  const [quote] = await db.select({ orderDiscountPct: quotations.orderDiscountPct }).from(quotations).where(eq(quotations.id, req.params.id))
+  const perUnit = afterOrderDiscount(Number(line.unitPrice) * (1 - Number(line.discountPct) / 100), quote?.orderDiscountPct ?? 0)
   const newPeriod = round2(perUnit * parsed.data.quantity)
   const oldPeriod = round2(perUnit * line.quantity)
   const delta = newPeriod - oldPeriod
@@ -281,6 +294,7 @@ export async function cancelSubscription(
   const [sched] = await db
     .select({
       id: billingSchedules.id,
+      status: billingSchedules.status,
       amount: billingSchedules.amount,
       nextBillingDate: billingSchedules.nextBillingDate,
       interval: subscriptionPlans.interval,
@@ -295,6 +309,8 @@ export async function cancelSubscription(
       ),
     )
   if (!sched) return res.status(404).json({ error: 'schedule not found' })
+  // a second cancel would issue a second refund
+  if (sched.status === 'cancelled') return res.status(400).json({ error: 'This subscription is already cancelled.' })
 
   const daysRemaining = daysBetween(new Date(), new Date(sched.nextBillingDate))
   const refund = refundAmount(

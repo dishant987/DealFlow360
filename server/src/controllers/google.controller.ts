@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import crypto from 'crypto'
-import { eq } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { users } from '../models/schema.js'
 import { cookieOpts, hashPassword } from '../utils/token.js'
@@ -78,7 +78,7 @@ export async function googleCallback(req: Request, res: Response) {
   const email = validateGoogleClaims(claims, clientId()!)
   if (!email) return fail('google')
 
-  let [u] = await db.select().from(users).where(eq(users.email, email))
+  let [u] = await db.select().from(users).where(sql`lower(${users.email}) = ${email.toLowerCase()}`)
   if (!u) {
     // same policy as self-signup: a new company with this person as its admin.
     // Random password; "Forgot password" sets a real one if they ever want it.

@@ -29,6 +29,8 @@ export async function listProducts(_req: Request, res: Response) {
     })
     .from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
+    // the quote builder only offers products that are still sold
+    .where(eq(products.active, true))
 
   // attach variants so the builder can offer "Size: Large (+$50)"
   const variants = await db.select().from(productVariants)

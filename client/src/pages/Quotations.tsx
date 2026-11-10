@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { humanize, money } from '@/lib/format'
 import { Combobox } from '@/components/ui/combobox'
+import { useDebounced } from '@/hooks/useDebounced'
 
 type Customer = { id: string; name: string; tier: string }
 
@@ -62,10 +63,12 @@ export default function Quotations() {
     placeholderData: keepPreviousData,
     enabled: view === 'table',
   })
+  const [boardSearch, setBoardSearch] = useState('')
+  const boardQ = useDebounced(boardSearch.trim())
   const board = useQuery({
-    queryKey: ['quotations', 'board', filterParams],
+    queryKey: ['quotations', 'board', filterParams, boardQ],
     queryFn: async () =>
-      (await api.get('/quotations/board', { params: { customerId: filterParams.customerId, flagged: filterParams.flagged } })).data as {
+      (await api.get('/quotations/board', { params: { customerId: filterParams.customerId, flagged: filterParams.flagged, q: boardQ || undefined } })).data as {
         columns: { status: string; total: number; rows: Quote[] }[]
       },
     enabled: view === 'kanban',
@@ -352,6 +355,14 @@ export default function Quotations() {
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="search"
+              aria-label="Search quotations"
+              placeholder="Search quote # or customer…"
+              className="w-56"
+              value={boardSearch}
+              onChange={(e) => setBoardSearch(e.target.value)}
+            />
             {newQuote}
             {filters}
             <div className="ml-auto">{viewToggle}</div>

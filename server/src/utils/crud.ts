@@ -5,7 +5,23 @@ import { db } from '../config/db.js'
 import { friendlyDbError } from './dbError.js'
 
 // numeric/money fields: accept number or string from the client, store as string
-export const num = z.union([z.number(), z.string()]).transform((v) => String(v))
+export const num = z.union([z.number(), z.string()]).transform((v, ctx) => {
+  const n = Number(v)
+  if (v === '' || !Number.isFinite(n) || n < 0) {
+    ctx.addIssue({ code: 'custom', message: 'Enter a number of zero or more' })
+    return z.NEVER
+  }
+  return String(v)
+})
+/** A percentage 0–100 as a number or numeric string; an empty field means 0. Discounts, counters, ceilings. */
+export const pct = z.union([z.number(), z.string()]).transform((v, ctx) => {
+  const n = v === '' ? 0 : Number(v)
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    ctx.addIssue({ code: 'custom', message: 'Enter a percentage between 0 and 100' })
+    return z.NEVER
+  }
+  return String(n)
+})
 export const tier = z.enum(['bronze', 'silver', 'gold'])
 
 // A constraint violation here is normal use, not an exception: adding a second
@@ -59,3 +75,6 @@ export function crud(table: any, insertSchema: ZodTypeAny) {
   })
   return r
 }
+
+/** Emails are case-insensitive: trim + lowercase at the boundary, so "Ann@X.com" and "ann@x.com" are one account. */
+export const emailField = z.string().trim().toLowerCase().email('Enter a valid email')

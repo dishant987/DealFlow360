@@ -44,7 +44,7 @@ export default function VerifyEmail() {
       <div className="space-y-4">
         <div className="flex items-start gap-3 rounded-lg bg-destructive/10 p-3">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive" />
-          <p className="text-sm text-muted-foreground">{state.error} Sign in and use “Send it again” at the top of the page.</p>
+          <p className="text-sm text-muted-foreground">{state.error}</p>
         </div>
         <Button className="w-full" asChild>
           <Link to="/login">Sign in</Link>

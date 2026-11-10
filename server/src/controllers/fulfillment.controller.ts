@@ -262,7 +262,12 @@ export async function acceptSplit(req: Request<{ id: string }>, res: Response) {
 
       await tx
         .update(quotations)
-        .set({ status: 'fulfilled', updatedAt: new Date(), lastActivityAt: new Date() })
+        // fulfilling after billing must not move an invoiced deal backwards
+        .set({
+          status: sql`case when ${quotations.status} = 'invoiced' then 'invoiced'::quote_status else 'fulfilled'::quote_status end`,
+          updatedAt: new Date(),
+          lastActivityAt: new Date(),
+        })
         .where(eq(quotations.id, req.params.id))
       await tx.insert(auditLog).values({
         quotationId: req.params.id,

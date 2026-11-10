@@ -21,3 +21,12 @@ export async function orgCurrency(orgId: string | undefined) {
   const [o] = await db.select({ c: organizations.currency }).from(organizations).where(eq(organizations.id, orgId))
   return o?.c ?? 'USD'
 }
+
+/**
+ * Text for a spreadsheet cell: a leading = + - @ (or tab / CR) would make Excel run it as a
+ * formula ("CSV injection"), so such values get a leading apostrophe and show as plain text.
+ */
+export const safeCell = (v: string) => (/^[=+\-@\t\r]/.test(v) ? `'${v}` : v)
+
+/** "pending_approval" → "Pending approval" */
+export const humanize = (v: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1).replace(/_/g, ' ') : v)

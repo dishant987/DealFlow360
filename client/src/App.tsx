@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Link, Routes, Route } from 'react-router-dom'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useLiveUpdates } from '@/hooks/useLiveUpdates'
 import PageSkeleton from '@/components/PageSkeleton'
@@ -112,6 +112,20 @@ export default function App() {
       <Route element={<ProtectedRoute roles={['admin']} />}>
         <Route path="/admin/users/:id" element={<UserDetail />} />
       </Route>
+      <Route
+        path="*"
+        element={
+          <main className="grid min-h-svh place-items-center bg-background p-6 text-center">
+            <div className="space-y-3">
+              <p className="font-heading text-4xl font-semibold">404</p>
+              <p className="text-muted-foreground">There's no page at this address.</p>
+              <Link to="/" className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+                Back to Dealwise
+              </Link>
+            </div>
+          </main>
+        }
+      />
     </Routes>
     </Suspense>
   )

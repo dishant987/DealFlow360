@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeLine, computeQuoteTotals } from './pricing.js'
+import { acceptedDiscount, afterOrderDiscount, computeLine, computeQuoteTotals } from './pricing.js'
 
 describe('pricing', () => {
   it('computes a single line net, cost and margin', () => {
@@ -38,5 +38,25 @@ describe('pricing', () => {
   it('guards divide-by-zero on an empty/free quote', () => {
     expect(computeQuoteTotals([]).marginPct).toBe(0)
     expect(computeLine({ quantity: 1, unitPrice: 0, unitCost: 0, discountPct: 0 }).marginPct).toBe(0)
+  })
+
+  it('a fully discounted line with cost is a -100% margin, not 0%', () => {
+    expect(computeLine({ quantity: 2, unitPrice: 950, unitCost: 700, discountPct: 100 })).toMatchObject({ net: 0, marginAmount: -1400, marginPct: -100 })
+  })
+
+  it('billing applies the order discount the same way the quote total does', () => {
+    expect(afterOrderDiscount(950, 10)).toBe(855)
+    expect(afterOrderDiscount(50, '10')).toBe(45)
+    const lines = [
+      { quantity: 1, unitPrice: 950, unitCost: 700, discountPct: 0 },
+      { quantity: 1, unitPrice: 50, unitCost: 10, discountPct: 0 },
+    ]
+    expect(afterOrderDiscount(950, 10) + afterOrderDiscount(50, 10)).toBe(computeQuoteTotals(lines, 10).total)
+  })
+
+  it('a counter-offer only ever raises the order discount', () => {
+    expect(acceptedDiscount('15', ['5'])).toEqual({ pct: 15, changed: false })
+    expect(acceptedDiscount(10, [12, '20'])).toEqual({ pct: 20, changed: true })
+    expect(acceptedDiscount(0, [])).toEqual({ pct: 0, changed: false })
   })
 })

@@ -1,14 +1,15 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { hashPassword } from '../utils/token.js'
 import { revokeSessions } from '../utils/session.js'
 import { disconnectSockets } from '../config/socket.js'
 import { memberStatus } from '../services/team.js'
-import { num } from '../utils/crud.js'
+import { emailField, num } from '../utils/crud.js'
 import { currencySchema } from '../utils/format.js'
 import {
+  priceListItems,
   stock,
   warehouses,
   products,
@@ -72,10 +73,29 @@ export async function upsertStock(req: Request, res: Response) {
     .returning()
   res.status(201).json(row)
 }
+/** Edit a stock row's levels; which warehouse and product it is stays fixed. */
+export async function updateStock(req: Request<{ id: string }>, res: Response) {
+  const p = stockSchema.pick({ quantity: true, reorderLevel: true, targetLevel: true }).partial().safeParse(req.body)
+  if (!p.success) return res.status(400).json({ error: p.error.issues[0]?.message ?? 'Check the quantities.' })
+  const [row] = await db.update(stock).set(p.data).where(eq(stock.id, req.params.id)).returning()
+  if (!row) return res.status(404).json({ error: 'not found' })
+  res.json(row)
+}
 export async function deleteStock(req: Request<{ id: string }>, res: Response) {
   const [row] = await db.delete(stock).where(eq(stock.id, req.params.id)).returning()
   if (!row) return res.status(404).json({ error: 'not found' })
   res.json({ ok: true })
+}
+
+/* ---- tier price lists, with product names for the Settings table ---- */
+export async function listPriceList(_req: Request, res: Response) {
+  res.json(
+    await db
+      .select({ id: priceListItems.id, productId: priceListItems.productId, product: products.name, tier: priceListItems.tier, unitPrice: priceListItems.unitPrice })
+      .from(priceListItems)
+      .innerJoin(products, eq(priceListItems.productId, products.id))
+      .orderBy(products.name, priceListItems.tier),
+  )
 }
 
 /* ---- upsell pairings: joined list so the UI shows product names, not uuids ---- */
@@ -289,10 +309,12 @@ export async function getSettings(req: Request, res: Response) {
   const [org] = await db.select({ currency: organizations.currency }).from(organizations).where(eq(organizations.id, req.orgId!))
   res.json(row ? { ...row, currency: org?.currency ?? 'USD' } : null)
 }
+// a risk score: any number, never negative
+const score = num.refine((v) => v !== '' && Number(v) >= 0, 'Thresholds must be zero or more')
 const settingsSchema = z
   .object({
-    managerThreshold: num,
-    financeThreshold: num,
+    managerThreshold: score,
+    financeThreshold: score,
     minUpsellMarginPct: num,
     stalledDays: z.number().int().positive(),
     currency: currencySchema,
@@ -302,6 +324,12 @@ export async function updateSettings(req: Request, res: Response) {
   const p = settingsSchema.safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
   const { currency, ...rest } = p.data
+  // finance is the higher bar: a manager threshold above it would skip manager-only approvals
+  const [cur] = await db.select().from(appSettings).limit(1)
+  const manager = Number(rest.managerThreshold ?? cur?.managerThreshold ?? 0)
+  const finance = Number(rest.financeThreshold ?? cur?.financeThreshold ?? 0)
+  if (manager > finance)
+    return res.status(400).json({ error: 'The manager threshold must be at or below the finance threshold.' })
   // organizations isn't under RLS, so scope to this company explicitly
   if (currency) await db.update(organizations).set({ currency }).where(eq(organizations.id, req.orgId!))
   const [row] = Object.keys(rest).length
@@ -327,13 +355,13 @@ export async function createUser(req: Request, res: Response) {
   const p = z
     .object({
       name: z.string().min(1),
-      email: z.string().email(),
+      email: emailField,
       password: z.string().min(6),
       role: roleEnum,
     })
     .safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
-  const existing = await db.select().from(users).where(eq(users.email, p.data.email))
+  const existing = await db.select().from(users).where(sql`lower(${users.email}) = ${p.data.email}`)
   if (existing.length) return res.status(409).json({ error: 'email already registered' })
   const [u] = await db
     .insert(users)
@@ -353,7 +381,7 @@ export async function updateUser(req: Request<{ id: string }>, res: Response) {
     .object({
       role: roleEnum,
       name: z.string().min(1),
-      email: z.string().email(),
+      email: emailField,
       password: z.string().min(6), // optional admin password reset
       blocked: z.boolean(),
     })

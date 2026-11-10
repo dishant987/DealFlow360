@@ -18,6 +18,8 @@ import { scoreQuotation } from './quotation.controller.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 import { orgCurrency } from '../utils/format.js'
 import { customerView, saveVersion, versionInfo } from './versions.controller.js'
+import { pct } from '../utils/crud.js'
+import { acceptedDiscount } from '../services/pricing.js'
 
 // the customer may only act while the quote is genuinely open to them
 const OPEN_TO_CUSTOMER = ['sent', 'under_negotiation']
@@ -77,7 +79,7 @@ export async function getPortalQuote(req: Request<{ token: string }>, res: Respo
 const negSchema = z.object({
   type: z.enum(['comment', 'change_request', 'counter_discount']),
   message: z.string().optional(),
-  counterDiscountPct: z.union([z.number(), z.string()]).optional(),
+  counterDiscountPct: pct.optional(),
   quoteLineId: z.string().uuid().optional(),
   // "can we have this by the 20th?" — a date-only value from the portal's date input
   requestedDeliveryDate: z
@@ -91,8 +93,10 @@ export async function submitNegotiation(req: Request<{ token: string }>, res: Re
   if (!q) return res.status(404).json({ error: 'invalid link' })
   if (!OPEN_TO_CUSTOMER.includes(q.status))
     return res.status(400).json({ error: closedMsg(q.status) })
+  if (quoteExpired(q.validUntil))
+    return res.status(400).json({ error: `This quotation expired on ${q.validUntil!.toDateString()}. Please ask for an updated quote.` })
   const parsed = negSchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Check your request.' })
 
   await db.insert(negotiationRequests).values({
     quotationId: q.id,
@@ -159,14 +163,12 @@ export async function confirmPortal(req: Request<{ token: string }>, res: Respon
   const counters = openCounters.filter(
     (n) => n.type === 'counter_discount' && n.counterDiscountPct != null && n.status === 'open',
   )
-  // did the customer actually move the terms?
-  const termsChanged =
-    counters.length > 0 &&
-    Math.max(...counters.map((c) => Number(c.counterDiscountPct))) !== Number(q.orderDiscountPct)
+  // a counter only ever raises the discount (services/pricing.ts); did the customer move the terms?
+  const accepted = acceptedDiscount(q.orderDiscountPct, counters.map((c) => c.counterDiscountPct!))
+  const termsChanged = accepted.changed
 
   if (counters.length) {
-    const maxCounter = Math.max(...counters.map((c) => Number(c.counterDiscountPct)))
-    await db.update(quotations).set({ orderDiscountPct: String(maxCounter) }).where(eq(quotations.id, q.id))
+    await db.update(quotations).set({ orderDiscountPct: String(accepted.pct) }).where(eq(quotations.id, q.id))
     await db
       .update(negotiationRequests)
       .set({ status: 'addressed' })

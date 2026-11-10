@@ -29,7 +29,12 @@ export function useLiveUpdates() {
   // made React Query log "invoke queryFn when set to skipToken" whenever the session was refreshed.
   const [userId, setUserId] = useState(() => (qc.getQueryData(['me']) as User | null | undefined)?.id)
   useEffect(
-    () => qc.getQueryCache().subscribe(() => setUserId((qc.getQueryData(['me']) as User | null | undefined)?.id)),
+    () =>
+      qc.getQueryCache().subscribe((e) => {
+        if (e.query.queryKey[0] !== 'me') return
+        // the cache can notify while another component renders; update after that render
+        queueMicrotask(() => setUserId((qc.getQueryData(['me']) as User | null | undefined)?.id))
+      }),
     [qc],
   )
 

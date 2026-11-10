@@ -209,7 +209,7 @@ export default function FulfillmentQueue() {
           <TabsList className="h-auto flex-wrap">
             <TabsTrigger value="orders">Orders to fulfil · {visibleOrders.length}</TabsTrigger>
             <TabsTrigger value="stock">Stock levels · {stock.length}</TabsTrigger>
-            {proposals.length > 0 && <TabsTrigger value="replenish">Replenishment · {proposals.length}</TabsTrigger>}
+            <TabsTrigger value="replenish">Replenishment · {proposals.length}</TabsTrigger>
           </TabsList>
           <TabsContent value="orders">
         <Panel title="Orders awaiting fulfillment">
@@ -349,12 +349,12 @@ export default function FulfillmentQueue() {
           />
         </Panel>
           </TabsContent>
-          {proposals.length > 0 && (
             <TabsContent value="replenish">
           <Panel
             title="Replenishment needed"
             description="Locations at or below their reorder point, with the quantity that would bring each back up to its target."
           >
+            {proposals.length === 0 && <p className="text-sm text-muted-foreground">Every location is above its reorder point.</p>}
             <ul className="divide-y">
               {proposals.map((p) => (
                 <li key={p.stockId} className="flex flex-wrap items-center gap-3 py-2.5 first:pt-0">
@@ -368,7 +368,7 @@ export default function FulfillmentQueue() {
                     </div>
                   </div>
                   {p.urgent && (
-                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700">
+                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-500/15 dark:text-red-300">
                       out of stock
                     </span>
                   )}
@@ -392,7 +392,6 @@ export default function FulfillmentQueue() {
             </ul>
           </Panel>
             </TabsContent>
-          )}
         </Tabs>
       </div>
     </AppShell>

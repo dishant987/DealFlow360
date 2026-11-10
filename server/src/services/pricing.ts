@@ -30,7 +30,8 @@ export function computeLine(line: LineInput): LineTotals {
     net: round2(net),
     cost: round2(cost),
     marginAmount: round2(marginAmount),
-    marginPct: net > 0 ? round2((marginAmount / net) * 100) : 0,
+    // nothing charged but something given away is a full loss, not 0%
+    marginPct: net > 0 ? round2((marginAmount / net) * 100) : cost > 0 ? -100 : 0,
   }
 }
 
@@ -63,6 +64,21 @@ export function computeQuoteTotals(
     total: round2(total),
     cost: round2(cost),
     marginAmount: round2(marginAmount),
-    marginPct: total > 0 ? round2((marginAmount / total) * 100) : 0,
+    marginPct: total > 0 ? round2((marginAmount / total) * 100) : cost > 0 ? -100 : 0,
   }
+}
+
+/** An amount after the quote's order-level discount — what billing charges for a line or a total. */
+export function afterOrderDiscount(amount: number, orderDiscountPct: number | string = 0): number {
+  return round2(amount * (1 - n(orderDiscountPct) / 100))
+}
+
+/**
+ * The order discount once the customer signs with open counter-offers: the best of what they
+ * already have and what they asked for — a counter never lowers a discount already given.
+ */
+export function acceptedDiscount(currentPct: number | string, counterPcts: (number | string)[]) {
+  const current = n(currentPct)
+  const pct = Math.max(current, ...counterPcts.map(n))
+  return { pct, changed: pct !== current }
 }

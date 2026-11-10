@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accountState, fromStripeSubscription } from './plan.js'
+import { accountState, fromStripeSubscription, seatPriceCents } from './plan.js'
 
 const now = new Date('2026-11-10T12:00:00Z')
 const days = (n: number) => new Date(now.getTime() + n * 86_400_000)
@@ -43,5 +43,13 @@ describe('plan rules', () => {
       subscriptionStatus: 'canceled',
       currentPeriodEnd: new Date(end * 1000),
     })
+  })
+})
+
+describe('seat prices', () => {
+  it('yearly is ten months of the monthly price', () => {
+    expect(seatPriceCents('growth', 'month')).toBe(3900)
+    expect(seatPriceCents('growth', 'year')).toBe(39000)
+    expect(seatPriceCents('starter', 'year')).toBe(15000)
   })
 })

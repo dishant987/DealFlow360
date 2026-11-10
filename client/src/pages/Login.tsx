@@ -54,6 +54,7 @@ export default function Login() {
     if (err === 'blocked') toast.error('This account is blocked. Contact your administrator.')
     else if (err === 'google') toast.error('Google sign-in did not complete. Please try again.')
     else if (err === 'google_off') toast.error('Google sign-in is not set up on this server.')
+    if (params.get('reason') === 'idle') toast.info('You were signed out after 3 minutes without activity.', { id: 'idle' })
   }, [params])
 
   // seed the cache from the response so the protected route sees the user

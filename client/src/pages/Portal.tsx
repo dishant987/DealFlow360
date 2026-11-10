@@ -183,9 +183,14 @@ export default function Portal() {
               {q.contactName ? ` · Attn: ${q.contactName}` : ''}
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-primary-foreground/70">
-            <Lock className="size-3.5" />
-            Private link · no sign-in needed
+          <div className="flex items-center gap-3 text-xs text-primary-foreground/70">
+            <span className="flex items-center gap-2">
+              <Lock className="size-3.5" />
+              Private link · no sign-in needed
+            </span>
+            <Button size="sm" variant="secondary" className="print:hidden" onClick={() => window.print()}>
+              Print
+            </Button>
           </div>
         </div>
       </header>
@@ -224,17 +229,17 @@ export default function Portal() {
           )}
         </dl>
         {confirmed && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:bg-emerald-500/10 dark:border-emerald-500/30">
             <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" />
             <div>
-              <p className="font-medium text-emerald-900">You've confirmed this quotation</p>
+              <p className="font-medium text-emerald-900 dark:text-emerald-200">You've confirmed this quotation</p>
               {q.signature && (
-                <p className="text-sm text-emerald-900">
+                <p className="text-sm text-emerald-900 dark:text-emerald-200">
                   Signed by <span className="font-[cursive] text-base">{q.signature.name}</span> on{' '}
                   {new Date(q.signature.at).toLocaleString()} · version {q.signature.version}
                 </p>
               )}
-              <p className="text-sm text-emerald-800/80">
+              <p className="text-sm text-emerald-800/80 dark:text-emerald-300/80">
                 Our team has been notified and will be in touch about next steps. No further action
                 is needed from you.
               </p>
@@ -243,15 +248,15 @@ export default function Portal() {
         )}
 
         {!open && !confirmed && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:bg-amber-500/10 dark:border-amber-500/30">
             <Clock className="mt-0.5 size-5 shrink-0 text-amber-600" />
             <div>
-              <p className="font-medium text-amber-900">
+              <p className="font-medium text-amber-900 dark:text-amber-200">
                 {q.status === 'pending_approval'
                   ? "Thanks — we're reviewing the discount you asked for"
                   : 'This quotation is no longer open for changes'}
               </p>
-              <p className="text-sm text-amber-800/80">
+              <p className="text-sm text-amber-800/80 dark:text-amber-300/80">
                 {q.status === 'pending_approval'
                   ? 'Your request went beyond what your account manager can sign off alone, so it is with our team for review. We will come back to you shortly — nothing more is needed from you right now.'
                   : 'Please contact your account manager for an up-to-date quotation.'}
@@ -260,8 +265,8 @@ export default function Portal() {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_19rem] lg:items-start">
-          <section className="space-y-6">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_19rem] lg:items-start">
+          <section className="min-w-0 space-y-6">
             <div className="rounded-xl border bg-background">
               <div className="flex items-center justify-between border-b px-4 py-3">
                 <h2 className="font-heading font-medium">What's included</h2>
@@ -275,6 +280,7 @@ export default function Portal() {
                       <TableHead className="w-16 text-right">Qty</TableHead>
                       <TableHead className="w-24 text-right">Unit</TableHead>
                       <TableHead className="w-20 text-right">Disc</TableHead>
+                      <TableHead className="w-28 text-right">Line total</TableHead>
                       {open && <TableHead className="w-24" />}
                     </TableRow>
                   </TableHeader>
@@ -308,6 +314,9 @@ export default function Portal() {
                               <span className="text-muted-foreground">—</span>
                             )}
                           </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {money(Number(l.unitPrice) * l.quantity * (1 - Number(l.discountPct) / 100))}
+                          </TableCell>
                           {open && (
                             <TableCell className="text-right">
                               <Button
@@ -326,7 +335,7 @@ export default function Portal() {
                         </TableRow>
                         {openLine === l.id && (
                           <TableRow>
-                            <TableCell colSpan={5} className="bg-muted/40">
+                            <TableCell colSpan={6} className="bg-muted/40">
                               <div className="flex gap-2">
                                 <Input
                                   autoFocus
@@ -388,6 +397,7 @@ export default function Portal() {
                       id="delivery"
                       type="date"
                       className="w-44"
+                      min={new Date().toLocaleDateString('en-CA')} // en-CA is YYYY-MM-DD, in local time
                       value={deliveryDate}
                       onChange={(e) => setDeliveryDate(e.target.value)}
                     />
@@ -432,8 +442,8 @@ export default function Portal() {
                         <span
                           className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] ${
                             n.status === 'addressed'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-amber-100 text-amber-700'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                              : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'
                           }`}
                         >
                           {n.status}

@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express'
 import { z } from 'zod'
-import { and, desc, eq, gt, isNull } from 'drizzle-orm'
+import { and, desc, eq, gt, isNull, sql } from 'drizzle-orm'
 import { db, runInTenant } from '../config/db.js'
 import { appSettings, discountTiers, organizations, sessions, users } from '../models/schema.js'
 import { revokeSession, revokeSessions } from '../utils/session.js'
@@ -19,6 +19,7 @@ import {
 import { sendPasswordReset, sendVerifyEmail } from '../utils/mailer.js'
 import { currencySchema } from '../utils/format.js'
 import { completeSignIn } from './mfa.controller.js'
+import { emailField } from '../utils/crud.js'
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 
@@ -26,9 +27,10 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 // added by that admin (Config → Users) and join the same company.
 const signupSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
+  email: emailField,
   password: z.string().min(6),
-  company: z.string().trim().min(1).max(120).optional(),
+  // optional: blank means "use '<name>'s company'"
+  company: z.string().trim().max(120).optional().transform((v) => v || undefined),
   currency: currencySchema.optional(),
 })
 
@@ -45,8 +47,8 @@ export async function createCompany(name: string, currency = 'USD') {
   })
   return org
 }
-const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) })
-const forgotSchema = z.object({ email: z.string().email() })
+const loginSchema = z.object({ email: emailField, password: z.string().min(1) })
+const forgotSchema = z.object({ email: emailField })
 const resetSchema = z.object({ token: z.string().min(1), password: z.string().min(6) })
 
 export async function signup(req: Request, res: Response) {
@@ -54,7 +56,8 @@ export async function signup(req: Request, res: Response) {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
   const { name, email, password } = parsed.data
 
-  const existing = await db.select().from(users).where(eq(users.email, email))
+  // lower() also matches accounts created before emails were lowercased
+  const existing = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`)
   if (existing.length) return res.status(409).json({ error: 'email already registered' })
 
   const org = await createCompany(parsed.data.company || `${name}'s company`, parsed.data.currency)
@@ -96,7 +99,7 @@ export async function login(req: Request, res: Response) {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
   const { email, password } = parsed.data
 
-  const [u] = await db.select().from(users).where(eq(users.email, email))
+  const [u] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`)
   if (!u || !(await verifyPassword(password, u.passwordHash)))
     return res.status(401).json({ error: 'invalid credentials' })
   // checked after the password, so a wrong guess never reveals the account is blocked
@@ -144,7 +147,7 @@ export async function forgotPassword(req: Request, res: Response) {
   const parsed = forgotSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues })
 
-  const [u] = await db.select().from(users).where(eq(users.email, parsed.data.email))
+  const [u] = await db.select().from(users).where(sql`lower(${users.email}) = ${parsed.data.email}`)
   // act only if the user exists, but always return the same response (no user enumeration)
   if (u) {
     const { token, hash, expiresAt } = generateResetToken()
@@ -220,12 +223,10 @@ export async function updateMe(req: Request, res: Response) {
   if (Object.keys(patch).length === 0)
     return res.status(400).json({ error: 'Nothing to update' })
 
-  const [updated] = await db
-    .update(users)
-    .set(patch)
-    .where(eq(users.id, u.id))
-    .returning({ id: users.id, name: users.name, email: users.email, role: users.role })
-  res.json(updated)
+  await db.update(users).set(patch).where(eq(users.id, u.id))
+  // the same shape as GET /auth/me: the client replaces its session cache with it, so a partial
+  // object used to wipe mfaEnabled / emailVerified / currency until a reload
+  return me(req, res)
 }
 
 export async function me(req: Request, res: Response) {

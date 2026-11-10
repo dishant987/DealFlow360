@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
@@ -31,6 +31,8 @@ import ThemeToggle from '@/components/ThemeToggle'
 import NotificationBell from '@/components/NotificationBell'
 import CommandPalette, { type Command } from '@/components/CommandPalette'
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { useIdleLogout } from '@/hooks/useIdleLogout'
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 
 export type Crumb = { label: string; to?: string }
 
@@ -182,11 +184,11 @@ export default function AppShell({
 }) {
   const { user } = useAuth()
   const qc = useQueryClient()
-  const nav = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const plan = usePlan(!!user)
+  const idle = useIdleLogout(!!user)
   const groups = navFor(user?.role, plan.data?.features)
 
   // a tiny count, not the whole dashboard: every page shows this badge
@@ -203,12 +205,6 @@ export default function AppShell({
   const reloadData = async () => {
     await qc.invalidateQueries()
     toast.success('Data reloaded from backend')
-  }
-
-  // end the current working session view (clears cached workspace data)
-  const closeWorkspace = () => {
-    qc.clear()
-    nav('/')
   }
 
   const toggleCollapsed = () => {
@@ -322,7 +318,7 @@ export default function AppShell({
             <ThemeToggle />
             <NotificationBell />
             <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
-            <UserMenu onReloadData={reloadData} onCloseWorkspace={closeWorkspace} />
+            <UserMenu onReloadData={reloadData} />
           </div>
         </header>
 
@@ -336,6 +332,21 @@ export default function AppShell({
         {plan.data && <PlanBanner plan={plan.data} isAdmin={user?.role === 'admin'} />}
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
+
+        {/* idle sign-out warning (useIdleLogout) */}
+        <AlertDialog open={idle.secondsLeft !== null}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Still there?</AlertDialogTitle>
+              <AlertDialogDescription>
+                For security you'll be signed out in {idle.secondsLeft} {idle.secondsLeft === 1 ? 'second' : 'seconds'} because there's been no activity.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={idle.stay}>Stay signed in</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       <CommandPalette commands={commands} open={paletteOpen} onOpenChange={setPaletteOpen} />

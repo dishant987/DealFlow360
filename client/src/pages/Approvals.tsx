@@ -39,16 +39,16 @@ type Payload = {
 }
 
 const riskStyle: Record<Row['riskLabel'], string> = {
-  HIGH: 'bg-red-100 text-red-700',
-  MEDIUM: 'bg-amber-100 text-amber-700',
-  LOW: 'bg-emerald-100 text-emerald-700',
+  HIGH: 'bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300',
+  MEDIUM: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+  LOW: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300',
 }
 
 const chipStyle: Record<Outcome, string> = {
-  pending: 'bg-amber-100 text-amber-700 hover:bg-amber-200',
-  returned: 'bg-blue-100 text-blue-700 hover:bg-blue-200',
-  approved: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200',
-  rejected: 'bg-red-100 text-red-700 hover:bg-red-200',
+  pending: 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:hover:bg-amber-500/25',
+  returned: 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25',
+  approved: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:hover:bg-emerald-500/25',
+  rejected: 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-500/15 dark:text-red-300 dark:hover:bg-red-500/25',
 }
 
 export default function Approvals() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currencySchema, money } from './format.js'
+import { currencySchema, humanize, money, safeCell } from './format.js'
 
 describe('money', () => {
   it('formats in the company currency with grouping', () => {
@@ -16,5 +16,15 @@ describe('currencySchema', () => {
     expect(currencySchema.parse('inr')).toBe('INR')
     expect(currencySchema.safeParse('XYZ1').success).toBe(false)
     expect(currencySchema.safeParse('DOLLARS').success).toBe(false)
+  })
+})
+
+describe('spreadsheet cells', () => {
+  it('neutralises formula-like text and leaves normal text alone', () => {
+    expect(safeCell('=1+1 Formula Customer')).toBe("'=1+1 Formula Customer")
+    expect(safeCell('+44 20 7946')).toBe("'+44 20 7946")
+    expect(safeCell('@SUM(A1)')).toBe("'@SUM(A1)")
+    expect(safeCell('Acme Corp')).toBe('Acme Corp')
+    expect(humanize('pending_approval')).toBe('Pending approval')
   })
 })

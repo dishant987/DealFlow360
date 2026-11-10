@@ -230,7 +230,7 @@ export default function KanbanBoard({ quotes, loading, counts }: { quotes: Quote
                     <div className="flex items-center justify-between mt-1">
                       <StatusBadge status={q.status} className="text-[10px] px-1.5 py-0" />
                       {Number(q.riskScore) > 0 && (
-                        <span className="text-[10px] rounded bg-amber-100 text-amber-800 px-1.5 py-0.5">
+                        <span className="text-[10px] rounded bg-amber-100 text-amber-800 px-1.5 py-0.5 dark:bg-amber-500/15 dark:text-amber-300">
                           risk {Number(q.riskScore).toFixed(1)}
                         </span>
                       )}

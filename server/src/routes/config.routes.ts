@@ -3,7 +3,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../config/db.js'
 import { requireAuth, requireFeature, requireRole } from '../middlewares/auth.middleware.js'
-import { crud, num, tier } from '../utils/crud.js'
+import { crud, num, pct, tier } from '../utils/crud.js'
 import { importRows, importTemplate } from '../controllers/import.controller.js'
 import { customerAccess } from '../controllers/customer.controller.js'
 import {
@@ -23,6 +23,8 @@ import {
   listStock,
   upsertStock,
   deleteStock,
+  updateStock,
+  listPriceList,
   listPairings,
   listVariants,
   listCeilings,
@@ -103,6 +105,7 @@ router.use(
   ),
 )
 
+router.get('/price-list', catalogue, listPriceList) // joined with product names
 router.use('/price-list', catalogue, crud(priceListItems, z.object({ productId: z.string().uuid(), tier, unitPrice: num })))
 
 router.use('/warehouses', catalogue, crud(warehouses, z.object({ name: z.string().min(1), shippingCostWeight: num.optional() })))
@@ -157,6 +160,7 @@ router.use(
 
 router.get('/stock', catalogue, listStock)
 router.post('/stock', catalogue, upsertStock)
+router.patch('/stock/:id', catalogue, updateStock)
 router.delete('/stock/:id', catalogue, deleteStock)
 
 router.use('/users', adminOnly, (() => {
@@ -173,13 +177,13 @@ router.use('/users', adminOnly, (() => {
 })())
 
 /* ---- discount governance & approval chain: Sales Manager (and admin) ---- */
-router.use('/discount-tiers', managerConfig, crud(discountTiers, z.object({ tier, maxDiscountPct: num })))
+router.use('/discount-tiers', managerConfig, crud(discountTiers, z.object({ tier, maxDiscountPct: pct })))
 
 router.get('/category-ceilings', managerConfig, listCeilings)
 router.use(
   '/category-ceilings',
   managerConfig,
-  crud(categoryDiscountCeilings, z.object({ categoryId: z.string().uuid(), maxDiscountPct: num })),
+  crud(categoryDiscountCeilings, z.object({ categoryId: z.string().uuid(), maxDiscountPct: pct })),
 )
 
 // categories list is needed to pick a category when setting a ceiling → allow manager to read

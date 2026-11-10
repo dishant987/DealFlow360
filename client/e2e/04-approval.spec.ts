@@ -41,11 +41,12 @@ test.describe.serial('B4 — discount approval chain', () => {
     await page.goto(`/approvals/${id}`)
     await expect(page.getByText('Blended risk score')).toBeVisible()
     await expect(page.getByText('Approval steps')).toBeVisible()
+    // wait for the manager's approval to land before switching user, or the navigation aborts it
+    const approved = page.waitForResponse((r) => r.request().method() === 'POST' && /\/approv/.test(r.url()) && r.ok())
     await page.getByRole('button', { name: 'Approve' }).click()
-    await expect(async () => {
-      const detail = await (await rep.get(`/api/quotations/${id}`)).json()
-      expect(detail.status).toBe('pending_approval') // finance still outstanding
-    }).toPass({ timeout: 10_000 })
+    await approved
+    const detail = await (await rep.get(`/api/quotations/${id}`)).json()
+    expect(detail.status).toBe('pending_approval') // finance still outstanding
 
     await login(page, 'finance')
     await page.goto(`/approvals/${id}`)
