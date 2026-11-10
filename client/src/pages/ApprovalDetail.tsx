@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import StatusBadge from '@/components/StatusBadge'
 import { errText } from '@/lib/errors'
 import AppShell from '@/components/AppShell'
+import { humanize } from '@/lib/format'
 import PageSkeleton from '@/components/PageSkeleton'
 import { Button } from '@/components/ui/button'
 
@@ -32,11 +33,11 @@ type Detail = {
 
 const badge = (action: string | null) =>
   action === 'approve'
-    ? 'bg-emerald-100 text-emerald-800'
+    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
     : action === 'reject'
-      ? 'bg-red-100 text-red-800'
+      ? 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'
       : action === 'return'
-        ? 'bg-amber-100 text-amber-800'
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
         : 'bg-muted text-foreground'
 
 export default function ApprovalDetail() {
@@ -131,7 +132,7 @@ export default function ApprovalDetail() {
               {d.audit.map((a) => (
                 <li key={a.id} className="flex justify-between gap-4">
                   <span>
-                    <span className="font-medium">{a.action}</span>
+                    <span className="font-medium">{humanize(a.action)}</span>
                     {a.reason && <span className="text-muted-foreground"> — {a.reason}</span>}
                     {a.user && <span className="text-muted-foreground"> · {a.user}</span>}
                   </span>

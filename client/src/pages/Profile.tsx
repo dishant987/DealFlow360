@@ -102,7 +102,7 @@ export default function Profile() {
 
   return (
     <AppShell crumbs={[{ label: 'Workspace', to: '/' }, { label: 'Your profile' }]}>
-      <div className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[1fr_21rem] lg:items-start">
+      <div className="mx-auto grid max-w-5xl grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
         <div className="space-y-6">
           {/* identity */}
           <section className="rounded-xl border bg-background p-5">

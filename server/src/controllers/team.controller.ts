@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import crypto from 'crypto'
 import { z } from 'zod'
-import { and, count, desc, eq, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { customers, organizations, quotations, sessions, users } from '../models/schema.js'
 import { generateResetToken, hashPassword, inviteTtlMs } from '../utils/token.js'
@@ -20,7 +20,7 @@ export async function inviteUser(req: Request, res: Response) {
   const p = z.object({ name: z.string().trim().min(1), email: z.string().email(), role: roleEnum }).safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
   const email = p.data.email.toLowerCase()
-  const [existing] = await db.select().from(users).where(eq(users.email, email))
+  const [existing] = await db.select().from(users).where(sql`lower(${users.email}) = ${email}`)
   const action = inviteAction(existing, req.orgId!)
   if (action === 'taken') return res.status(409).json({ error: 'That email already has a Dealwise account.' })
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { LucideIcon as Icon } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
@@ -407,8 +407,7 @@ const BENTO: { icon: Icon; title: string; body: string; soon?: boolean; wide?: b
   {
     icon: FileSpreadsheet,
     title: 'Bulk import',
-    body: 'Bring customers, products and price lists in from CSV or Excel in one go.',
-    soon: true,
+    body: 'Bring customers and products in from CSV or Excel in one go, with every row checked before anything is saved.',
   },
 ]
 
@@ -427,34 +426,31 @@ const SECURITY: [Icon, string, string][] = [
   [ShieldCheck, 'Least privilege', 'Role-based access; customers never see cost or margin.'],
 ]
 
-// must match server/src/services/plan.ts (prices, and what each plan adds)
-const PLANS = [
+// must match server/src/services/plan.ts (USD per user / month, ANNUAL_MONTHS, and what each plan adds)
+const ANNUAL_MONTHS = 10
+const PLANS: { name: string; price: number | null; blurb: string; points: string[]; featured?: boolean }[] = [
   {
     name: 'Starter',
-    price: '$15',
-    note: 'per user / month',
+    price: 15,
     blurb: 'Quote, approve and invoice.',
     points: ['Quotations with approval routing', 'Customer portal — no account needed', 'Customers, contacts and catalogue', 'One-time invoices with PDF', 'Team roles, two-factor and Google sign-in', 'Audit log'],
   },
   {
     name: 'Growth',
-    price: '$39',
-    note: 'per user / month',
+    price: 39,
     blurb: 'Stock, subscriptions and scale.',
     points: ['Everything in Starter', 'Multi-warehouse fulfilment and backorders', 'Subscriptions and recurring billing', 'Bulk import from CSV or Excel', 'Live upsell suggestions'],
     featured: true,
   },
   {
     name: 'Scale',
-    price: '$69',
-    note: 'per user / month',
+    price: 69,
     blurb: 'Run the pipeline by the numbers.',
     points: ['Everything in Growth', 'Reports with PDF and Excel export', 'Deal health board — nudge and escalate', 'Discount anomaly alerts'],
   },
   {
     name: 'Enterprise',
-    price: 'Custom',
-    note: 'talk to us',
+    price: null,
     blurb: 'For larger organisations with custom needs.',
     points: ['Everything in Scale', 'Single sign-on (planned)', 'Custom approval chains (planned)', 'Dedicated onboarding and priority support'],
   },
@@ -475,7 +471,7 @@ const FAQ = [
   },
   {
     q: 'Can I bring my existing customers and products?',
-    a: 'Admins can add them in the configuration screens today. Bulk CSV and Excel import is coming soon.',
+    a: 'Yes. On Growth and Scale, upload a CSV or Excel file of customers or products; every row is checked and you see what will be added before anything is saved.',
   },
   {
     q: 'Is there a dark mode?',
@@ -492,6 +488,7 @@ const FOOTER: [string, [string, string][]][] = [
 // ---------------------------------------------------------------------- page
 
 export default function Landing() {
+  const [yearly, setYearly] = useState(false)
   return (
     <div className="min-h-svh bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-transparent bg-background/80 backdrop-blur supports-[backdrop-filter]:border-border">
@@ -708,7 +705,21 @@ export default function Landing() {
         <section id="pricing" className="scroll-mt-16 border-y bg-muted/30">
           <div className="mx-auto max-w-6xl px-4 py-20 md:py-24">
             <SectionHead eyebrow="Pricing" title="Simple per-user pricing" body="Every new workspace starts with a 14-day free trial of every feature — no card needed. Change plans any time." />
-            <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div role="radiogroup" aria-label="Billing period" className="mx-auto mt-10 flex w-fit rounded-full border bg-card p-1 text-sm">
+              {[false, true].map((y) => (
+                <button
+                  key={String(y)}
+                  type="button"
+                  role="radio"
+                  aria-checked={yearly === y}
+                  onClick={() => setYearly(y)}
+                  className={`rounded-full px-4 py-1.5 ${yearly === y ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {y ? `Yearly · ${12 - ANNUAL_MONTHS} months free` : 'Monthly'}
+                </button>
+              ))}
+            </div>
+            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {PLANS.map((p) => (
                 <div
                   key={p.name}
@@ -724,9 +735,16 @@ export default function Landing() {
                   <h3 className="font-heading text-lg font-semibold">{p.name}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">{p.blurb}</p>
                   <div className="mt-5 flex items-baseline gap-1.5">
-                    <span className="font-heading text-4xl font-semibold">{p.price}</span>
-                    <span className="text-sm text-muted-foreground">{p.note}</span>
+                    <span className="font-heading text-4xl font-semibold">
+                      {p.price === null ? 'Custom' : `$${yearly ? ((p.price * ANNUAL_MONTHS) / 12).toFixed(2).replace(/\.00$/, '') : p.price}`}
+                    </span>
+                    <span className="text-sm text-muted-foreground">{p.price === null ? 'talk to us' : 'per user / month'}</span>
                   </div>
+                  {p.price !== null && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {yearly ? `$${p.price * ANNUAL_MONTHS} per user, billed yearly` : `$${p.price * 12} per user a year, billed monthly`}
+                    </p>
+                  )}
                   <ul className="mt-6 flex-1 space-y-2.5 text-sm">
                     {p.points.map((pt) => (
                       <li key={pt} className="flex gap-2">

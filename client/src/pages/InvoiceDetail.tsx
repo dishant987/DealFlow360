@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import RecordPaymentDialog from '@/components/RecordPaymentDialog'
 
 type Detail = {
   id: string
@@ -74,15 +75,6 @@ export default function InvoiceDetail() {
     }
   }
 
-  const pay = useMutation({
-    mutationFn: () => api.post(`/invoices/${id}/pay`),
-    onSuccess: () => {
-      toast.success('Payment recorded')
-      qc.invalidateQueries({ queryKey: ['invoice', id] })
-      qc.invalidateQueries({ queryKey: ['invoices'] })
-    },
-    onError: (e) => toast.error(errText(e, 'Could not record payment')),
-  })
   const send = useMutation({
     mutationFn: async () => (await api.post(`/invoices/${id}/email`, { to: to.trim(), message: note.trim() || undefined })).data,
     onSuccess: () => {
@@ -141,10 +133,11 @@ export default function InvoiceDetail() {
             <Button variant="outline" onClick={() => downloadPdf(d.id, d.invoiceNumber)}>
               <Download className="size-4" /> Download PDF
             </Button>
-            {d.status !== 'paid' && canAct && (
-              <Button onClick={() => pay.mutate()} disabled={pay.isPending}>
-                Record payment
-              </Button>
+            {d.status !== 'paid' && d.balance > 0 && canAct && (
+              <RecordPaymentDialog invoiceId={d.id} balance={d.balance} onDone={() => {
+                qc.invalidateQueries({ queryKey: ['invoice', id] })
+                qc.invalidateQueries({ queryKey: ['invoices'] })
+              }} />
             )}
           </div>
         </div>
@@ -265,6 +258,12 @@ export default function InvoiceDetail() {
           {previewing && (
             <iframe title={`Invoice ${d.invoiceNumber} preview`} src={`/api/invoices/${d.id}/pdf?inline=1`} className="min-h-0 w-full flex-1 rounded-md border bg-white" />
           )}
+          {/* the PDF viewer keeps Esc for itself once focused, so give a visible way out */}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewing(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

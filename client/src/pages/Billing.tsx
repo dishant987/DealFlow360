@@ -17,9 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { money } from '@/lib/format'
+import { humanize, money } from '@/lib/format'
+import RecordPaymentDialog from '@/components/RecordPaymentDialog'
+import StatusBadge from '@/components/StatusBadge'
 
-type Invoice = { id: string; type: string; status: string; amount: string; dueAt: string | null }
+type Invoice = { id: string; type: string; status: string; amount: string; dueAt: string | null; paid: number; balance: number }
 type Schedule = {
   id: string
   quoteLineId: string
@@ -60,7 +62,7 @@ export default function Billing() {
   const b = billing.data
   const isEmpty = b && (b.invoices?.length ?? 0) === 0 && (b.schedules?.length ?? 0) === 0
   // regenerating deletes invoices (payments cascade) — lock it once money is in
-  const hasPayment = (b?.invoices ?? []).some((i) => i.status === 'paid')
+  const hasPayment = (b?.invoices ?? []).some((i) => i.paid > 0) // a partial payment counts too
 
   return (
     <AppShell
@@ -105,27 +107,15 @@ export default function Billing() {
             <TableBody>
               {(b?.invoices ?? []).map((inv) => (
                 <TableRow key={inv.id}>
-                  <TableCell>{inv.type}</TableCell>
+                  <TableCell>{inv.type === 'onetime' ? 'One-time' : humanize(inv.type)}</TableCell>
                   <TableCell>
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs ${
-                        inv.status === 'paid'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {inv.status}
-                    </span>
+                    <StatusBadge status={inv.status} />
+                    {inv.paid > 0 && inv.balance > 0 && <span className="ml-2 text-xs text-muted-foreground">{money(inv.paid)} paid</span>}
                   </TableCell>
                   <TableCell className="text-right">{money(Number(inv.amount))}</TableCell>
                   <TableCell>
-                    {inv.status !== 'paid' && canAct && (
-                      <Button
-                        size="sm"
-                        onClick={() => run(() => api.post(`/invoices/${inv.id}/pay`), 'Payment recorded')}
-                      >
-                        Record payment
-                      </Button>
+                    {inv.status !== 'paid' && inv.balance > 0 && canAct && (
+                      <RecordPaymentDialog size="sm" invoiceId={inv.id} balance={inv.balance} onDone={() => billing.refetch()} />
                     )}
                   </TableCell>
                 </TableRow>
@@ -160,7 +150,7 @@ export default function Billing() {
                   <TableCell>
                     {s.product} <span className="text-muted-foreground">· {s.plan} ({s.interval})</span>
                     {s.status === 'cancelled' && (
-                      <span className="ml-2 rounded bg-red-100 text-red-800 px-2 py-0.5 text-xs">
+                      <span className="ml-2 rounded bg-red-100 text-red-800 px-2 py-0.5 text-xs dark:bg-red-500/15 dark:text-red-300">
                         cancelled
                       </span>
                     )}

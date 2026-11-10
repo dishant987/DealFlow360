@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { humanize } from '@/lib/format'
+import { humanize, money } from '@/lib/format'
 import PlanBilling from '@/components/PlanBilling'
 import CompanySettings from '@/components/CompanySettings'
 
@@ -104,7 +104,7 @@ const productFields: Field[] = [
   { name: 'unitPrice', label: 'Price', type: 'number' },
   { name: 'unitCost', label: 'Cost', type: 'number' },
   { name: 'unit', label: 'Unit' },
-  { name: 'taxRate', label: 'Tax %', type: 'number' },
+  { name: 'taxRate', label: 'Tax % (not applied to quotes yet)', type: 'number' },
   { name: 'description', label: 'Description' },
   {
     name: 'subscriptionPlanId',
@@ -126,7 +126,7 @@ function TabGroupLabel({ children }: { children: ReactNode }) {
 const SECTIONS: { label: string; items: [string, string][] }[] = [
   { label: 'Company', items: [['company', 'Company profile'], ['billing', 'Plan & billing']] },
   { label: 'Catalogue', items: [['products', 'Products'], ['categories', 'Categories'], ['variants', 'Variants'], ['pairings', 'Upsell Pairings'], ['plans', 'Subscription Plans']] },
-  { label: 'Pricing & governance', items: [['tiers', 'Discount Tiers'], ['ceilings', 'Category Ceilings'], ['settings', 'Thresholds']] },
+  { label: 'Pricing & governance', items: [['tiers', 'Discount Tiers'], ['prices', 'Tier Price Lists'], ['ceilings', 'Category Ceilings'], ['settings', 'Thresholds']] },
   { label: 'Operations', items: [['warehouses', 'Warehouses'], ['stock', 'Stock']] },
   { label: 'Team', items: [['users', 'Users']] },
   { label: 'Records', items: [['audit', 'Audit Log']] },
@@ -142,7 +142,7 @@ function sectionFromUrl(section: string | null, isAdmin: boolean) {
 export default function Admin() {
   const { user } = useAuth()
   // Stripe and the trial banner link straight to a section
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const isAdmin = user?.role === 'admin'
   const [stockFor, setStockFor] = useState<string | null>(null)
   return (
@@ -163,7 +163,7 @@ export default function Admin() {
           </p>
         </div>
 
-        <Tabs defaultValue={sectionFromUrl(params.get('section'), isAdmin)} orientation="vertical" className="flex-col gap-6 md:flex-row md:items-start">
+        <Tabs value={sectionFromUrl(params.get('section'), isAdmin)} onValueChange={(v) => setParams({ section: String(v) }, { replace: true })} orientation="vertical" className="flex-col gap-6 md:flex-row md:items-start">
           {/* grouped menu on the left; two columns on a phone so it stays short */}
           <nav aria-label="Settings sections" className="grid grid-cols-2 gap-4 rounded-lg border bg-background p-3 md:sticky md:top-4 md:block md:w-52 md:shrink-0 md:space-y-4">
             {SECTIONS.filter((g) => isAdmin || !ADMIN_ONLY.includes(g.label)).map((g) => (
@@ -192,8 +192,8 @@ export default function Admin() {
                   { key: 'sku', label: 'SKU' },
                   { key: 'category', label: 'Category' },
                   { key: 'type', label: 'Type', render: (r) => humanize(r.type) },
-                  { key: 'unitPrice', label: 'Price' },
-                  { key: 'unitCost', label: 'Cost' },
+                  { key: 'unitPrice', label: 'Price', render: (r) => money(r.unitPrice) },
+                  { key: 'unitCost', label: 'Cost', render: (r) => money(r.unitCost) },
                   { key: 'stock', label: 'Stock' },
                   { key: 'stockByWarehouse', label: 'By warehouse' },
                 ]}
@@ -231,6 +231,25 @@ export default function Admin() {
                 fields={[
                   { name: 'tier', label: 'Tier', type: 'select', options: tierOpts },
                   { name: 'maxDiscountPct', label: 'Max Discount %', type: 'number' },
+                ]}
+              />
+            </TabsContent>
+
+            <TabsContent value="prices">
+              <ResourceManager
+                title="Price"
+                plural="Tier price lists"
+                description="A fixed price for one product on one tier. It replaces the product's base price for customers on that tier."
+                endpoint="/config/price-list"
+                columns={[
+                  { key: 'product', label: 'Product' },
+                  { key: 'tier', label: 'Tier', render: (r) => humanize(r.tier) },
+                  { key: 'unitPrice', label: 'Price', render: (r) => money(r.unitPrice) },
+                ]}
+                fields={[
+                  { name: 'productId', label: 'Product', type: 'select', optionsFrom: '/config/products' },
+                  { name: 'tier', label: 'Tier', type: 'select', options: tierOpts },
+                  { name: 'unitPrice', label: 'Price', type: 'number' },
                 ]}
               />
             </TabsContent>
@@ -315,7 +334,7 @@ export default function Admin() {
                     { key: 'product', label: 'Product' },
                     { key: 'attribute', label: 'Attribute' },
                     { key: 'value', label: 'Value' },
-                    { key: 'extraPrice', label: 'Extra Price' },
+                    { key: 'extraPrice', label: 'Extra Price', render: (r) => money(r.extraPrice) },
                     { key: 'sku', label: 'SKU' },
                   ]}
                   fields={[

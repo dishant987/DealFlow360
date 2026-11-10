@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { errText } from '@/lib/errors'
 import { useAuth } from '@/hooks/useAuth'
 import AppShell from '@/components/AppShell'
+import { money } from '@/lib/format'
 import PageSkeleton from '@/components/PageSkeleton'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -137,8 +138,8 @@ export default function Fulfillment() {
     >
       {/* B6: stock has arrived since we backordered → prompt automatically */}
       {(s?.consolidatable ?? 0) > 0 && (
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-          <p className="text-sm text-amber-900">
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:bg-amber-500/10 dark:border-amber-500/30">
+          <p className="text-sm text-amber-900 dark:text-amber-200">
             Stock has arrived — <b>{s!.consolidatable}</b> backordered unit(s) can now be fulfilled.
           </p>
           {canAct && (
@@ -208,12 +209,12 @@ export default function Fulfillment() {
           </div>
           <div className="flex justify-between text-sm">
             <span>Est. shipping</span>
-            <span>{s?.estimatedShippingCost.toFixed(2)}</span>
+            <span>{money(s?.estimatedShippingCost ?? 0)}</span>
           </div>
           {canAct ? (
             <>
               {alreadyAccepted && (
-                <p className="text-xs rounded bg-emerald-50 border border-emerald-200 text-emerald-900 px-2 py-1.5">
+                <p className="text-xs rounded bg-emerald-50 border border-emerald-200 text-emerald-900 px-2 py-1.5 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/30">
                   Split accepted — stock is allocated. Adjust the quantities above and update to
                   re-allocate.
                 </p>

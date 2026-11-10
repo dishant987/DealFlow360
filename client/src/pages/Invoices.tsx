@@ -67,7 +67,7 @@ export default function Invoices() {
   const columns: Column<Invoice>[] = [
     {
       key: 'invoiceNumber',
-      sortKey: 'issued',
+      sortKey: 'number',
       label: 'Invoice #',
       render: (r) => <span className="font-mono text-xs font-medium">{r.invoiceNumber}</span>,
     },

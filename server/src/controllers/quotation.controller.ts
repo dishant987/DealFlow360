@@ -28,6 +28,8 @@ import { quoteNumber } from '../services/quoteNumber.js'
 import { saveVersion } from './versions.controller.js'
 import { companyDefaults } from './company.controller.js'
 import { likeTerm, parsePaging, seqFromSearch } from '../services/paging.js'
+import { pct } from '../utils/crud.js'
+import { quoteExpired } from './portal.controller.js'
 
 // A quote is only editable while it belongs to the rep. Once submitted, an
 // approver is reviewing a specific set of numbers — changing them underneath
@@ -321,6 +323,9 @@ export async function getQuotation(req: Request<{ id: string }>, res: Response) 
 export async function submitQuotation(req: Request<{ id: string }>, res: Response) {
   const risk = await scoreQuotation(req.params.id)
   if (!risk) return res.status(404).json({ error: 'not found' })
+  // an empty quote would sail through as "approved" with a zero risk score
+  const [{ n: lineCount }] = await db.select({ n: count() }).from(quoteLines).where(eq(quoteLines.quotationId, req.params.id))
+  if (lineCount === 0) return res.status(400).json({ error: 'Add at least one line before submitting this quotation.' })
 
   const status = risk.level === 'none' ? 'approved' : 'pending_approval'
   const [q] = await db
@@ -403,7 +408,7 @@ export async function addLine(req: Request<{ id: string }>, res: Response) {
       productId: z.string().uuid(),
       variantId: z.string().uuid().optional(),
       quantity: z.number().int().positive().optional(),
-      discountPct: z.union([z.number(), z.string()]).optional(),
+      discountPct: pct.optional(),
       reason: z.string().optional(),
       // set by the upsell panel so reporting can tell a suggested add from a
       // line the rep picked out of the catalogue themselves
@@ -481,7 +486,7 @@ export async function updateLine(req: Request<{ id: string; lineId: string }>, r
   const p = z
     .object({
       quantity: z.number().int().positive(),
-      discountPct: z.union([z.number(), z.string()]).transform(String),
+      discountPct: pct,
       reason: z.string(),
     })
     .partial()
@@ -598,6 +603,8 @@ export async function sendToCustomer(req: Request<{ id: string }>, res: Response
   const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
   const [before] = await db.select().from(quotations).where(eq(quotations.id, req.params.id))
   if (!before) return res.status(404).json({ error: 'not found' })
+  if (quoteExpired(before.validUntil))
+    return res.status(400).json({ error: 'This quotation has expired — move its "Valid until" date forward before sending it.' })
   if (!SENDABLE.includes(before.status))
     return res.status(400).json({
       error: `This quotation is ${before.status.replace(/_/g, ' ')} — it must be approved before it can be sent to the customer.`,
@@ -724,7 +731,7 @@ export async function resolveNegotiation(
 export async function updateQuotation(req: Request<{ id: string }>, res: Response) {
   const p = z
     .object({
-      orderDiscountPct: z.union([z.number(), z.string()]).transform(String),
+      orderDiscountPct: pct,
       reason: z.string(),
       validUntil: z.coerce.date().nullable(),
       contactId: z.string().uuid().nullable(),

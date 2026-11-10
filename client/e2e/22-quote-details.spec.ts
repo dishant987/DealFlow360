@@ -63,16 +63,11 @@ test.describe('Quote details', () => {
     expect((await rep.patch(`/api/quotations/${q.id}`, { data: { internalNotes: 'follow up Friday' } })).status()).toBe(200)
   })
 
-  test('an expired quote cannot be confirmed', async ({ page }) => {
+  test('an expired quote cannot be sent to the customer', async () => {
     const rep = await apiAs('rep')
     const { q } = await setup(rep, { pastValid: true })
     await rep.post(`/api/quotations/${q.id}/submit`)
-    const sent = await (await rep.post(`/api/quotations/${q.id}/send`)).json()
-    await page.goto(`/portal/${sent.portalToken}`)
-    await expect(page.getByRole('alert')).toContainText('This quotation has expired')
-    await expect(page.getByRole('button', { name: 'Confirm quotation' })).toHaveCount(0)
-    const portal = await request.newContext({ baseURL: API })
-    const res = await portal.post(`/api/portal/${sent.portalToken}/confirm`)
+    const res = await rep.post(`/api/quotations/${q.id}/send`)
     expect(res.status()).toBe(400)
     expect((await res.json()).error).toMatch(/expired/)
   })

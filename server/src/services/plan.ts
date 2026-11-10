@@ -19,6 +19,12 @@ export const PLANS = {
 export type PaidPlan = keyof typeof PLANS
 export const isPaidPlan = (p: string): p is PaidPlan => p in PLANS
 
+export type Interval = 'month' | 'year'
+/** Paying yearly costs 10 months: two months free. */
+export const ANNUAL_MONTHS = 10
+/** Per seat, per billing period, in USD cents. */
+export const seatPriceCents = (plan: PaidPlan, interval: Interval) => PLANS[plan].perSeatCents * (interval === 'year' ? ANNUAL_MONTHS : 1)
+
 // Stripe statuses that keep the workspace usable; past_due is Stripe's grace period while it retries the card
 const LIVE = ['active', 'trialing', 'past_due']
 

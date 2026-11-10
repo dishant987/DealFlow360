@@ -166,9 +166,16 @@ Plans are per user per month, in USD, billed by Stripe. Each includes the one be
 Gated features return **402** from the server (`requireFeature`) and are hidden in the menu. Admins
 manage the plan under **Settings → Plan & billing**: choose a plan (Stripe Checkout; activated on
 return, no need to wait for the webhook), switch plans (prorated), and open Stripe's portal for the
-card, invoices and cancelling. The seat count follows the team. Stripe's webhook keeps the status in
+card, invoices and cancelling. Every plan can be paid monthly or yearly; yearly costs 10 months
+(two months free, `ANNUAL_MONTHS` in plan.ts), and the landing page and Plan & billing both show
+the per-month price and the yearly total. Plan & billing also lists the company's payment history
+(Stripe invoices with status and a link to each receipt/PDF). The seat count follows the team. Stripe's webhook keeps the status in
 step afterwards (renewals, failed cards, cancelling). Rules: `server/src/services/plan.ts`
 (unit-tested). The demo company in the seed is a paying Scale customer.
+
+**Signing out when idle.** After 3 minutes without mouse, keyboard, touch or scroll activity the app
+warns for 30 seconds, then signs out (`client/src/hooks/useIdleLogout.ts`). Activity in any open
+tab keeps every tab signed in.
 
 ## Companies (multi-tenancy)
 
@@ -563,7 +570,7 @@ session cookie.
 | Area | Endpoints |
 | --- | --- |
 | Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback`, `POST /auth/verify-email[/resend]`, `GET /auth/sessions`, `POST /auth/sessions/revoke-others`, `DELETE /auth/sessions/:id` |
-| Plan | `GET /plan` (any signed-in user), `POST /plan/checkout·confirm·portal` (admin), `POST /plan/webhook` *(Stripe, signature-checked)* |
+| Plan | `GET /plan` (any signed-in user), `GET /plan/history`, `POST /plan/checkout` (`{ plan, interval: 'month' \| 'year' }`)`·confirm·portal` (admin), `POST /plan/webhook` *(Stripe, signature-checked)* |
 | Company | `GET /config/company` (signed-in), `PATCH /config/company` (admin) |
 | Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |

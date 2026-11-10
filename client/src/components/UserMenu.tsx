@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { LogOut, PanelsTopLeft, RefreshCw, UserRound } from 'lucide-react'
+import { LogOut, RefreshCw, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import { api } from '@/lib/api'
 import { roleLabel } from '@/lib/roles'
 import Avatar from '@/components/Avatar'
+import { signOut } from '@/hooks/useIdleLogout'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,10 +27,8 @@ import {
 
 export default function UserMenu({
   onReloadData,
-  onCloseWorkspace,
 }: {
   onReloadData: () => void
-  onCloseWorkspace: () => void
 }) {
   const { user } = useAuth()
   const qc = useQueryClient()
@@ -38,8 +36,7 @@ export default function UserMenu({
   const [confirmLogout, setConfirmLogout] = useState(false)
 
   const logout = async () => {
-    await api.post('/auth/logout')
-    qc.setQueryData(['me'], null)
+    await signOut(qc)
     nav('/login', { replace: true })
     toast.success('Signed out')
   }
@@ -81,9 +78,6 @@ export default function UserMenu({
           {/* workspace actions live here, so the top bar stays uncluttered */}
           <DropdownMenuItem onSelect={onReloadData}>
             <RefreshCw /> Reload data
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onCloseWorkspace}>
-            <PanelsTopLeft /> Close workspace
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />

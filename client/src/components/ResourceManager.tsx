@@ -117,7 +117,8 @@ function FieldInput({
       placeholder={field.label}
       value={value ?? ''}
       onChange={(e) =>
-        onChange(field.type === 'number' ? Number(e.target.value) : e.target.value)
+        // keep '' so a number can be cleared (Number('') would snap to 0)
+        onChange(field.type === 'number' && e.target.value !== '' ? Number(e.target.value) : e.target.value)
       }
     />
   )

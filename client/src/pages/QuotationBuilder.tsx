@@ -404,7 +404,7 @@ export default function QuotationBuilder() {
                   </p>
                 </div>
                 {openRequests.length > 0 && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
                     {openRequests.length} open
                   </span>
                 )}
@@ -506,6 +506,7 @@ export default function QuotationBuilder() {
             <TableHeader>
               <TableRow>
                 <TableHead>Product</TableHead>
+                <TableHead className="text-right">Unit price</TableHead>
                 <TableHead className="w-28">Qty</TableHead>
                 <TableHead className="w-24">Disc %</TableHead>
                 <TableHead className="w-16 text-right">Limit</TableHead>
@@ -533,6 +534,8 @@ export default function QuotationBuilder() {
                         </span>
                       )}
                     </TableCell>
+                    {/* the resolved price: tier price list + variant extra */}
+                    <TableCell className="text-right tabular-nums">{money(Number(l.unitPrice))}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Button size="sm" variant="outline" disabled={!canEdit} onClick={() => changeQty(l, -1)}>
@@ -561,11 +564,11 @@ export default function QuotationBuilder() {
                       {l.ceiling == null ? (
                         <span className="text-xs text-muted-foreground">—</span>
                       ) : lineOverBy(l, orderDiscount) > 0 ? (
-                        <span className="rounded bg-red-100 text-red-700 px-1.5 py-0.5 text-xs font-medium">
+                        <span className="rounded bg-red-100 text-red-700 px-1.5 py-0.5 text-xs font-medium dark:bg-red-500/15 dark:text-red-300">
                           OVER (+{lineOverBy(l, orderDiscount)}pt)
                         </span>
                       ) : (
-                        <span className="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-xs font-medium">
+                        <span className="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-xs font-medium dark:bg-emerald-500/15 dark:text-emerald-300">
                           OK
                         </span>
                       )}
@@ -592,7 +595,7 @@ export default function QuotationBuilder() {
               })}
               {lines.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-muted-foreground text-sm">
+                  <TableCell colSpan={9} className="text-muted-foreground text-sm">
                     No lines yet — add a product above.
                   </TableCell>
                 </TableRow>
@@ -749,7 +752,8 @@ export default function QuotationBuilder() {
                 {STATUS_NOTE[status] ?? 'This quotation is no longer editable.'}
               </p>
             )}
-            {(status === 'approved' || status === 'confirmed' || status === 'fulfilled') && (
+            {/* fulfilment is a Growth feature: no dead-end link on Starter */}
+            {(status === 'approved' || status === 'confirmed' || status === 'fulfilled') && plan.data?.features.includes('fulfilment') && (
               <Button className="w-full" variant="secondary" asChild>
                 <Link to={`/quotations/${id}/fulfillment`}>Go to Fulfillment</Link>
               </Button>

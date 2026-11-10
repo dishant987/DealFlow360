@@ -124,7 +124,7 @@ export default function StockPanel({
                           </TableCell>
                           <TableCell>
                             {w.belowReorder && (
-                              <span className="rounded bg-red-100 text-red-800 px-2 py-0.5 text-xs whitespace-nowrap">
+                              <span className="rounded bg-red-100 text-red-800 px-2 py-0.5 text-xs whitespace-nowrap dark:bg-red-500/15 dark:text-red-300">
                                 restock
                               </span>
                             )}
@@ -185,8 +185,8 @@ export default function StockPanel({
                             <span
                               className={`rounded px-2 py-0.5 text-xs whitespace-nowrap ${
                                 h.backordered
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-emerald-100 text-emerald-800'
+                                  ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+                                  : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
                               }`}
                             >
                               {h.backordered ? 'backordered' : h.warehouse}

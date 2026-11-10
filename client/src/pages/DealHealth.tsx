@@ -174,7 +174,7 @@ export default function DealHealth() {
                       {x.customer}
                     </span>
                     <Button size="sm" variant="outline" onClick={() => nav(`/quotations/${x.id}/fulfillment`)}>
-                      Open fulfilment
+                      Open fulfillment
                     </Button>
                   </li>
                 ))}

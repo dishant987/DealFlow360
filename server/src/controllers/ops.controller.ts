@@ -24,7 +24,6 @@ import {
 } from '../models/schema.js'
 import { findDiscountAnomalies } from '../services/anomaly.js'
 import { replenishmentPlan, type StockRule } from '../services/replenishment.js'
-import { createRequire } from 'module'
 import { quoteNumber, invoiceNumber } from '../services/quoteNumber.js'
 import { computeLine, computeQuoteTotals } from '../services/pricing.js'
 import { buildOverview } from '../services/overview.js'
@@ -32,6 +31,7 @@ import { money as fmt, orgCurrency } from '../utils/format.js'
 import { z } from 'zod'
 import { sendInvoice } from '../utils/mailer.js'
 import { likeTerm, parsePaging, seqFromSearch } from '../services/paging.js'
+import { PDF_FONT, pdfPrinter } from '../utils/pdf.js'
 
 const ACTIVE_STATUSES = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
 
@@ -194,8 +194,9 @@ export async function getWorkspaceSummary(req: Request, res: Response) {
 
 /* ---- #12 Invoices list (cross-quotation) ---- */
 /* ---- step 18: paged invoices; the summary cards are SQL aggregates over all of them ---- */
-const INVOICE_SORTS = ['issued', 'due', 'amount', 'customer', 'status'] as const
+const INVOICE_SORTS = ['number', 'issued', 'due', 'amount', 'customer', 'status'] as const
 const INVOICE_SORT_COL = {
+  number: invoices.seqNo,
   issued: invoices.issuedAt,
   due: invoices.dueAt,
   amount: invoices.amount,
@@ -311,7 +312,6 @@ export async function listInvoices(req: Request, res: Response) {
 }
 
 const round2 = (x: number) => Math.round(x * 100) / 100
-const require = createRequire(import.meta.url)
 const BRAND = '#4652C8'
 const LIGHT = '#F3EEF2'
 
@@ -695,10 +695,7 @@ async function invoiceDoc(id: string, orgId: string | undefined) {
   const overdue = balance > 0 && !!inv.dueAt && new Date(inv.dueAt) < new Date()
   const stamp = balance <= 0 ? { text: 'PAID', color: '#0F8A5F' } : overdue ? { text: 'OVERDUE', color: '#C0392B' } : null
 
-  const PdfPrinter = require('pdfmake')
-  const printer = new PdfPrinter({
-    Helvetica: { normal: 'Helvetica', bold: 'Helvetica-Bold', italics: 'Helvetica-Oblique', bolditalics: 'Helvetica-BoldOblique' },
-  })
+  const printer = pdfPrinter()
   const INK = '#1F2430'
   const MUTED = '#6B7280'
   const RULE = '#E5E7EB'
@@ -782,7 +779,7 @@ async function invoiceDoc(id: string, orgId: string | undefined) {
     pageSize: 'A4',
     pageMargins: [40, 44, 40, 56],
     info: { title: `Invoice ${invNo}`, author: seller, subject: `Invoice for ${inv.customer}` },
-    defaultStyle: { font: 'Helvetica', fontSize: 10, color: INK, lineHeight: 1.2 },
+    defaultStyle: { font: PDF_FONT, fontSize: 10, color: INK, lineHeight: 1.2 },
     footer: (current: number, count: number) => ({
       margin: [40, 16, 40, 0],
       stack: [

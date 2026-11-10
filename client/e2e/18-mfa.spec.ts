@@ -48,7 +48,7 @@ test.describe.serial('Two-factor authentication', () => {
     const ctx = await request.newContext({ baseURL: API })
     const res = await ctx.post('/api/auth/login', { data: { email, password: PASSWORD } })
     expect(await res.json()).toEqual({ mfaRequired: true })
-    expect((await ctx.get('/api/auth/me')).status(), 'pending step is not a session').toBe(401)
+    expect(await (await ctx.get('/api/auth/me')).json(), 'pending step is not a session').toBeNull()
   })
 
   test('sign-in asks for the code; a wrong one is refused, the right one works', async ({ page }) => {

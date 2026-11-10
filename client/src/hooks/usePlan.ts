@@ -13,6 +13,7 @@ export type Plan = {
   hasSubscription: boolean
   seats: number
   prices: { starter: number; growth: number; scale: number }
+  annualMonths: number
   billingReady: boolean
 }
 

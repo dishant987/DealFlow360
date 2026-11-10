@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express'
-import { createRequire } from 'module'
 import ExcelJS from 'exceljs'
 import { and, eq, gte, lte, inArray, type SQL } from 'drizzle-orm'
 import { db } from '../config/db.js'
@@ -15,8 +14,9 @@ import {
 import { computeQuoteTotals } from '../services/pricing.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 import { money as fmt, orgCurrency } from '../utils/format.js'
+import { PDF_FONT, pdfPrinter } from '../utils/pdf.js'
+import { humanize, safeCell } from '../utils/format.js'
 
-const require = createRequire(import.meta.url)
 
 interface ReportRow {
   id: string
@@ -35,6 +35,13 @@ interface ReportRow {
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 const dayStart = (v: string) => new Date(DATE_ONLY.test(v) ? `${v}T00:00:00` : v)
 const dayEnd = (v: string) => new Date(DATE_ONLY.test(v) ? `${v}T23:59:59.999` : v)
+
+/** "from"/"to" that aren't dates would crash the query; say so instead. */
+function badDates(query: Request['query']) {
+  for (const [k, f] of [['from', dayStart], ['to', dayEnd]] as const)
+    if (query[k] && Number.isNaN(f(String(query[k])).getTime())) return `"${k}" must be a date like 2026-11-10.`
+  return null
+}
 
 async function buildReport(query: Request['query']): Promise<{ rows: ReportRow[]; summary: any }> {
   const conds: SQL[] = []
@@ -157,6 +164,8 @@ const emptySummary = () => ({
 })
 
 export async function getReport(req: Request, res: Response) {
+  const bad = badDates(req.query)
+  if (bad) return res.status(400).json({ error: bad })
   res.json(await buildReport(req.query))
 }
 
@@ -226,20 +235,14 @@ function activeFilters(q: Request['query']): string {
 }
 
 export async function exportReport(req: Request, res: Response) {
+  const bad = badDates(req.query)
+  if (bad) return res.status(400).json({ error: bad })
   const cur = await orgCurrency(req.orgId)
   const { rows, summary } = await buildReport(req.query)
   const format = String(req.query.format ?? 'xls')
 
   if (format === 'pdf') {
-    const PdfPrinter = require('pdfmake')
-    const printer = new PdfPrinter({
-      Helvetica: {
-        normal: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italics: 'Helvetica-Oblique',
-        bolditalics: 'Helvetica-BoldOblique',
-      },
-    })
+    const printer = pdfPrinter()
 
     const kpi = (label: string, value: string) => ({
       table: { widths: ['*'], body: [[{ text: label, fontSize: 8, color: '#777' }], [{ text: value, fontSize: 15, bold: true, color: BRAND }]] },
@@ -284,7 +287,7 @@ export async function exportReport(req: Request, res: Response) {
 
     const doc = printer.createPdfKitDocument({
       pageMargins: [40, 55, 40, 45],
-      defaultStyle: { font: 'Helvetica', fontSize: 9 },
+      defaultStyle: { font: PDF_FONT, fontSize: 9 },
       styles: {
         th: { bold: true, color: 'white', fillColor: BRAND },
         h2: { fontSize: 12, bold: true, color: BRAND, margin: [0, 14, 0, 6] },
@@ -358,7 +361,11 @@ export async function exportReport(req: Request, res: Response) {
     { header: 'Created', key: 'createdAt', width: 22 },
   ]
   ws.getRow(1).font = { bold: true }
-  rows.forEach((r) => ws.addRow(r))
+  // text through safeCell (no formula injection), statuses readable, amounts as numbers
+  rows.forEach((r) =>
+    ws.addRow({ ...r, customer: safeCell(r.customer), rep: safeCell(r.rep), status: humanize(r.status) }),
+  )
+  ws.getColumn('amount').numFmt = '#,##0.00'
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   res.setHeader('Content-Disposition', 'attachment; filename="report.xlsx"')
   await wb.xlsx.write(res)

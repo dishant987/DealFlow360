@@ -17,15 +17,15 @@ type Entry = {
 // colour the governance-critical actions so they stand out in a long list
 const tone = (action: string) =>
   action.startsWith('approve')
-    ? 'bg-emerald-100 text-emerald-800'
+    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300'
     : action.startsWith('reject') || action === 'cancelled'
-      ? 'bg-red-100 text-red-800'
+      ? 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-300'
       : action.startsWith('return')
-        ? 'bg-amber-100 text-amber-800'
+        ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
         : action.startsWith('customer_')
-          ? 'bg-violet-100 text-violet-800'
+          ? 'bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-300'
           : action.includes('payment') || action.includes('billing')
-            ? 'bg-sky-100 text-sky-800'
+            ? 'bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300'
             : 'bg-muted text-foreground'
 
 const columns: Column<Entry>[] = [
