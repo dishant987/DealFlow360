@@ -1,7 +1,8 @@
 import type { Request } from 'express'
 import { and, eq, isNull, ne } from 'drizzle-orm'
 import { db } from '../config/db.js'
-import { sessions, users } from '../models/schema.js'
+import { organizations, sessions, users } from '../models/schema.js'
+import { accountState } from '../services/plan.js'
 import { verifyToken, type JwtUser } from './token.js'
 import { disconnectSockets } from '../config/socket.js'
 
@@ -26,8 +27,16 @@ export async function loadSession(token: string) {
     return null
   }
   const [u] = await db
-    .select({ role: users.role, blocked: users.blocked, orgId: users.organizationId })
+    .select({
+      role: users.role,
+      blocked: users.blocked,
+      orgId: users.organizationId,
+      plan: organizations.plan,
+      trialEndsAt: organizations.trialEndsAt,
+      subscriptionStatus: organizations.subscriptionStatus,
+    })
     .from(users)
+    .innerJoin(organizations, eq(organizations.id, users.organizationId))
     .where(eq(users.id, claims.id))
   if (!u || u.blocked) return null
   // shortcut: tokens issued before sessions existed have no sid and stay valid until they expire (7 days)
@@ -40,7 +49,7 @@ export async function loadSession(token: string) {
     if (Date.now() - s.lastSeenAt.getTime() > SEEN_EVERY_MS)
       await db.update(sessions).set({ lastSeenAt: new Date() }).where(eq(sessions.id, claims.sid))
   }
-  return { claims, ...u }
+  return { claims, role: u.role, orgId: u.orgId, account: accountState(u) }
 }
 
 /** Sign a user out of every device (or every device but `keep`), live sockets included. */

@@ -89,7 +89,7 @@ async function seed() {
   /* Reference data                                                      */
   /* ------------------------------------------------------------------ */
 
-  await db.insert(s.organizations).values({ id: DEMO_ORG, name: 'Dealwise Demo Co' })
+  await db.insert(s.organizations).values({ id: DEMO_ORG, name: 'Dealwise Demo Co', plan: 'scale', subscriptionStatus: 'active' }) // a paying company: demos never hit the trial lock
   await db.insert(s.appSettings).values({})
 
   // every account shares the password "password123"

@@ -11,7 +11,7 @@ import ResourceManager, { type Field } from '@/components/ResourceManager'
 import StatusBadge from '@/components/StatusBadge'
 import ImportDialog from '@/components/ImportDialog'
 import InviteDialog from '@/components/InviteDialog'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { formatDistanceToNow } from 'date-fns'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CURRENCIES, humanize } from '@/lib/format'
 import { Select } from '@/components/ui/select'
+import PlanBilling from '@/components/PlanBilling'
 
 const tierOpts = [
   { label: 'Bronze', value: 'bronze' },
@@ -142,12 +143,14 @@ const SECTIONS: { label: string; items: [string, string][] }[] = [
   { label: 'Catalogue', items: [['products', 'Products'], ['categories', 'Categories'], ['variants', 'Variants'], ['pairings', 'Upsell Pairings'], ['plans', 'Subscription Plans']] },
   { label: 'Pricing & governance', items: [['tiers', 'Discount Tiers'], ['ceilings', 'Category Ceilings'], ['settings', 'Thresholds']] },
   { label: 'Operations', items: [['warehouses', 'Warehouses'], ['stock', 'Stock']] },
-  { label: 'Team', items: [['users', 'Users']] },
+  { label: 'Team', items: [['users', 'Users'], ['billing', 'Plan & billing']] },
   { label: 'Records', items: [['audit', 'Audit Log']] },
 ]
 
 export default function Admin() {
   const { user } = useAuth()
+  // Stripe and the trial banner link straight to a section
+  const [params] = useSearchParams()
   const isAdmin = user?.role === 'admin'
   const [stockFor, setStockFor] = useState<string | null>(null)
   return (
@@ -168,7 +171,7 @@ export default function Admin() {
           </p>
         </div>
 
-        <Tabs defaultValue="products" orientation="vertical" className="flex-col gap-6 md:flex-row md:items-start">
+        <Tabs defaultValue={isAdmin && params.get('section') === 'billing' ? 'billing' : 'products'} orientation="vertical" className="flex-col gap-6 md:flex-row md:items-start">
           {/* grouped menu on the left; two columns on a phone so it stays short */}
           <nav aria-label="Settings sections" className="grid grid-cols-2 gap-4 rounded-lg border bg-background p-3 md:sticky md:top-4 md:block md:w-52 md:shrink-0 md:space-y-4">
             {SECTIONS.filter((g) => isAdmin || g.label !== 'Team').map((g) => (
@@ -443,6 +446,12 @@ export default function Admin() {
                 ]}
               />
             </TabsContent>}
+
+            {isAdmin && (
+              <TabsContent value="billing">
+                <PlanBilling />
+              </TabsContent>
+            )}
 
             <TabsContent value="audit">
               <AuditLog />

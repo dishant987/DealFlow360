@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth, requireRole, quotationAccessParam } from '../middlewares/auth.middleware.js'
+import { requireAuth, requireFeature, requireRole, quotationAccessParam } from '../middlewares/auth.middleware.js'
 import {
   generateBilling,
   getBilling,
@@ -19,10 +19,10 @@ const ops = requireRole('finance', 'admin')
 
 router.get('/quotations/:id/billing', getBilling)
 router.post('/quotations/:id/billing/generate', ops, generateBilling)
-router.post('/quotations/:id/billing/subscriptions/:lineId/change', ops, changeSubscription)
-router.post('/quotations/:id/billing/subscriptions/:lineId/cancel', ops, cancelSubscription)
-router.post('/quotations/:id/billing/subscriptions/:lineId/pause', ops, setSubscriptionPause(true))
-router.post('/quotations/:id/billing/subscriptions/:lineId/resume', ops, setSubscriptionPause(false))
+router.post('/quotations/:id/billing/subscriptions/:lineId/change', ops, requireFeature('subscriptions'), changeSubscription)
+router.post('/quotations/:id/billing/subscriptions/:lineId/cancel', ops, requireFeature('subscriptions'), cancelSubscription)
+router.post('/quotations/:id/billing/subscriptions/:lineId/pause', ops, requireFeature('subscriptions'), setSubscriptionPause(true))
+router.post('/quotations/:id/billing/subscriptions/:lineId/resume', ops, requireFeature('subscriptions'), setSubscriptionPause(false))
 router.post('/invoices/:invoiceId/pay', ops, payInvoice)
 
 export default router

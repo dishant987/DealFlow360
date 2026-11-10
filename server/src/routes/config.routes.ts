@@ -2,7 +2,7 @@ import { getUser, inviteUser, signOutUser, transferUserWork } from '../controlle
 import { Router } from 'express'
 import { z } from 'zod'
 import { db } from '../config/db.js'
-import { requireAuth, requireRole } from '../middlewares/auth.middleware.js'
+import { requireAuth, requireFeature, requireRole } from '../middlewares/auth.middleware.js'
 import { crud, num, tier } from '../utils/crud.js'
 import { importRows, importTemplate } from '../controllers/import.controller.js'
 import { customerAccess } from '../controllers/customer.controller.js'
@@ -47,8 +47,8 @@ const managerConfig = requireRole('manager', 'admin')
 const catalogue = managerConfig
 
 // bulk import: an onboarding job for managers and admins (reps add customers one at a time)
-router.get('/import/:kind/template', managerConfig, importTemplate)
-router.post('/import/:kind', managerConfig, importRows)
+router.get('/import/:kind/template', managerConfig, requireFeature('import'), importTemplate)
+router.post('/import/:kind', managerConfig, requireFeature('import'), importRows)
 
 router.use('/categories', catalogue, crud(categories, z.object({ name: z.string().min(1) })))
 
@@ -109,6 +109,8 @@ router.use('/warehouses', catalogue, crud(warehouses, z.object({ name: z.string(
 router.use(
   '/subscription-plans',
   catalogue,
+  // product forms still read the list; only creating or changing plans needs Growth
+  requireFeature('subscriptions', { writesOnly: true }),
   crud(
     subscriptionPlans,
     z.object({

@@ -18,6 +18,8 @@ import portalRouter from './routes/portal.routes.js'
 import dashboardRouter from './routes/dashboard.routes.js'
 import reportRouter from './routes/report.routes.js'
 import opsRouter from './routes/ops.routes.js'
+import planRouter from './routes/plan.routes.js'
+import { stripeWebhook } from './controllers/plan.controller.js'
 
 export const app = express()
 // behind a load balancer / reverse proxy: needed for secure cookies and per-IP rate limits
@@ -26,6 +28,8 @@ app.use(helmet())
 app.use(cors({ origin: corsOrigins(), credentials: true }))
 // imports carry a base64 spreadsheet; every other route keeps the 100 kB default.
 // Registered first: body-parser marks the body parsed, so the general parser skips it.
+// Stripe signs the exact bytes it sends, so its webhook gets the raw body (before express.json)
+app.post('/api/plan/webhook', express.raw({ type: 'application/json' }), stripeWebhook)
 app.use('/api/config/import', express.json({ limit: '8mb' }))
 app.use(express.json())
 app.use(cookieParser())
@@ -58,6 +62,7 @@ app.get('/api/health', async (_req, res) => {
 })
 
 app.use('/api/auth', authRouter)
+app.use('/api/plan', planRouter)
 app.use('/api/config', configRouter)
 // public portal FIRST — routers mounted at '/api' apply requireAuth to every path
 // beneath it, which would 401 the customer before they ever reach the portal.

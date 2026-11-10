@@ -427,28 +427,36 @@ const SECURITY: [Icon, string, string][] = [
   [ShieldCheck, 'Least privilege', 'Role-based access; customers never see cost or margin.'],
 ]
 
+// must match server/src/services/plan.ts (prices, and what each plan adds)
 const PLANS = [
   {
     name: 'Starter',
-    price: 'Free',
-    note: 'during beta',
-    blurb: 'For small teams getting quotes under control.',
-    points: ['Unlimited quotations', 'Customer portal', 'Automatic approval routing', 'Audit log'],
+    price: '$15',
+    note: 'per user / month',
+    blurb: 'Quote, approve and invoice.',
+    points: ['Quotations with approval routing', 'Customer portal — no account needed', 'Customers, contacts and catalogue', 'One-time invoices with PDF', 'Team roles, two-factor and Google sign-in', 'Audit log'],
   },
   {
     name: 'Growth',
-    price: 'Free',
-    note: 'during beta',
-    blurb: 'For teams selling stock and subscriptions.',
-    points: ['Everything in Starter', 'Multi-warehouse fulfilment', 'Hybrid billing and invoices', 'Reports and exports', 'Deal health board'],
+    price: '$39',
+    note: 'per user / month',
+    blurb: 'Stock, subscriptions and scale.',
+    points: ['Everything in Starter', 'Multi-warehouse fulfilment and backorders', 'Subscriptions and recurring billing', 'Bulk import from CSV or Excel', 'Live upsell suggestions'],
     featured: true,
+  },
+  {
+    name: 'Scale',
+    price: '$69',
+    note: 'per user / month',
+    blurb: 'Run the pipeline by the numbers.',
+    points: ['Everything in Growth', 'Reports with PDF and Excel export', 'Deal health board — nudge and escalate', 'Discount anomaly alerts'],
   },
   {
     name: 'Enterprise',
     price: 'Custom',
     note: 'talk to us',
     blurb: 'For larger organisations with custom needs.',
-    points: ['Everything in Growth', 'Single sign-on (planned)', 'Custom approval chains (planned)', 'Dedicated onboarding'],
+    points: ['Everything in Scale', 'Single sign-on (planned)', 'Custom approval chains (planned)', 'Dedicated onboarding and priority support'],
   },
 ]
 
@@ -548,14 +556,14 @@ export default function Landing() {
             <div className="mt-8 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg" className="h-11 px-6">
                 <Link to="/signup">
-                  Start free <ArrowRight className="size-4" aria-hidden />
+                  Start free trial <ArrowRight className="size-4" aria-hidden />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="h-11 px-6">
                 <a href="#workflow">Take the tour</a>
               </Button>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">No credit card · Free while in beta · Set up in minutes</p>
+            <p className="mt-3 text-xs text-muted-foreground">14-day free trial · No credit card · Set up in minutes</p>
           </div>
 
           <div className="relative mx-auto max-w-5xl px-4 pb-20">
@@ -699,8 +707,8 @@ export default function Landing() {
         {/* ----------------------------------------------------------- pricing */}
         <section id="pricing" className="scroll-mt-16 border-y bg-muted/30">
           <div className="mx-auto max-w-6xl px-4 py-20 md:py-24">
-            <SectionHead eyebrow="Pricing" title="Free while we're in beta" body="Pick the plan that fits today — you can change it any time." />
-            <div className="mt-12 grid gap-4 md:grid-cols-3">
+            <SectionHead eyebrow="Pricing" title="Simple per-user pricing" body="Every new workspace starts with a 14-day free trial of every feature — no card needed. Change plans any time." />
+            <div className="mt-12 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {PLANS.map((p) => (
                 <div
                   key={p.name}
@@ -728,7 +736,11 @@ export default function Landing() {
                     ))}
                   </ul>
                   <Button asChild className="mt-7" variant={p.featured ? 'default' : 'outline'}>
-                    <Link to="/signup">{p.name === 'Enterprise' ? 'Get started' : `Start with ${p.name}`}</Link>
+                    {p.name === 'Enterprise' ? (
+                      <a href={`mailto:${import.meta.env.VITE_CONTACT_EMAIL || 'privacy@dealwise.example'}?subject=Dealwise%20Enterprise`}>Talk to us</a>
+                    ) : (
+                      <Link to="/signup">Start with {p.name}</Link>
+                    )}
                   </Button>
                 </div>
               ))}
