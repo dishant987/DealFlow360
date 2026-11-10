@@ -17,9 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CURRENCIES, humanize } from '@/lib/format'
-import { Select } from '@/components/ui/select'
+import { humanize } from '@/lib/format'
 import PlanBilling from '@/components/PlanBilling'
+import CompanySettings from '@/components/CompanySettings'
 
 const tierOpts = [
   { label: 'Bronze', value: 'bronze' },
@@ -79,23 +79,7 @@ function SettingsForm() {
       {field('financeThreshold', 'Finance threshold (risk score)')}
       {field('minUpsellMarginPct', 'Min upsell margin %')}
       {field('stalledDays', 'Stalled deal after (days)')}
-      <div className="space-y-1">
-        <Label className="text-xs" htmlFor="settings-currency">
-          Currency (all amounts are shown in this)
-        </Label>
-        <Select
-          id="settings-currency"
-          className="w-48"
-          value={form.currency ?? 'USD'}
-          onChange={(e) => setForm((s) => ({ ...s, currency: e.target.value }))}
-        >
-          {CURRENCIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </Select>
-      </div>
+      <p className="text-xs text-muted-foreground">Currency now lives in Settings → Company.</p>
       <Button onClick={() => save.mutate()} disabled={save.isPending}>
         Save settings
       </Button>
@@ -140,12 +124,20 @@ function TabGroupLabel({ children }: { children: ReactNode }) {
 }
 
 const SECTIONS: { label: string; items: [string, string][] }[] = [
+  { label: 'Company', items: [['company', 'Company profile'], ['billing', 'Plan & billing']] },
   { label: 'Catalogue', items: [['products', 'Products'], ['categories', 'Categories'], ['variants', 'Variants'], ['pairings', 'Upsell Pairings'], ['plans', 'Subscription Plans']] },
   { label: 'Pricing & governance', items: [['tiers', 'Discount Tiers'], ['ceilings', 'Category Ceilings'], ['settings', 'Thresholds']] },
   { label: 'Operations', items: [['warehouses', 'Warehouses'], ['stock', 'Stock']] },
-  { label: 'Team', items: [['users', 'Users'], ['billing', 'Plan & billing']] },
+  { label: 'Team', items: [['users', 'Users']] },
   { label: 'Records', items: [['audit', 'Audit Log']] },
 ]
+
+const ADMIN_ONLY = ['Company', 'Team']
+// Stripe returns, the trial banner and the setup stepper link straight to a section
+function sectionFromUrl(section: string | null, isAdmin: boolean) {
+  const visible = SECTIONS.filter((g) => isAdmin || !ADMIN_ONLY.includes(g.label)).flatMap((g) => g.items.map(([k]) => k))
+  return section && visible.includes(section) ? section : 'products'
+}
 
 export default function Admin() {
   const { user } = useAuth()
@@ -171,10 +163,10 @@ export default function Admin() {
           </p>
         </div>
 
-        <Tabs defaultValue={isAdmin && params.get('section') === 'billing' ? 'billing' : 'products'} orientation="vertical" className="flex-col gap-6 md:flex-row md:items-start">
+        <Tabs defaultValue={sectionFromUrl(params.get('section'), isAdmin)} orientation="vertical" className="flex-col gap-6 md:flex-row md:items-start">
           {/* grouped menu on the left; two columns on a phone so it stays short */}
           <nav aria-label="Settings sections" className="grid grid-cols-2 gap-4 rounded-lg border bg-background p-3 md:sticky md:top-4 md:block md:w-52 md:shrink-0 md:space-y-4">
-            {SECTIONS.filter((g) => isAdmin || g.label !== 'Team').map((g) => (
+            {SECTIONS.filter((g) => isAdmin || !ADMIN_ONLY.includes(g.label)).map((g) => (
               <div key={g.label} className="space-y-1">
                 <TabGroupLabel>{g.label}</TabGroupLabel>
                 <TabsList variant="line" className="w-full items-stretch">
@@ -446,6 +438,12 @@ export default function Admin() {
                 ]}
               />
             </TabsContent>}
+
+            {isAdmin && (
+              <TabsContent value="company">
+                <CompanySettings />
+              </TabsContent>
+            )}
 
             {isAdmin && (
               <TabsContent value="billing">

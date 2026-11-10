@@ -29,6 +29,18 @@ export const organizations = pgTable('organizations', {
   name: text('name').notNull(),
   // ISO 4217 code every amount is shown in; chosen at sign-up, editable in Settings
   currency: text('currency').notNull().default('USD'),
+  // company profile (Settings → Company): printed as the seller on invoices
+  industry: text('industry'),
+  website: text('website'),
+  phone: text('phone'),
+  contactEmail: text('contact_email'),
+  address: text('address'),
+  taxId: text('tax_id'),
+  // defaults for new work
+  defaultPaymentTermsDays: integer('default_payment_terms_days').notNull().default(30), // new customers
+  quoteValidityDays: integer('quote_validity_days').notNull().default(30), // new quotes' valid-until
+  defaultQuoteTerms: text('default_quote_terms'), // pre-filled terms on new quotes
+  paymentInstructions: text('payment_instructions'), // e.g. bank details, printed on invoices
   // Dealwise's own subscription (step 17): 'trial' until an admin pays for 'starter' or 'growth'.
   // Rules in services/plan.ts; Stripe is the source of truth for status once subscribed.
   plan: text('plan').notNull().default('trial'),

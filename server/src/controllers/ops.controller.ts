@@ -580,7 +580,20 @@ async function invoiceDoc(id: string, orgId: string | undefined) {
   const balance = round2(Number(inv.amount) - paid)
   const invNo = invoiceNumber(inv.seqNo, inv.issuedAt)
   // organizations isn't under row-level security; the id comes from the signed-in request
-  const [org] = orgId ? await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, orgId)) : []
+  const [org] = orgId
+    ? await db
+        .select({
+          name: organizations.name,
+          address: organizations.address,
+          taxId: organizations.taxId,
+          contactEmail: organizations.contactEmail,
+          phone: organizations.phone,
+          website: organizations.website,
+          paymentInstructions: organizations.paymentInstructions,
+        })
+        .from(organizations)
+        .where(eq(organizations.id, orgId))
+    : []
   const seller = org?.name ?? 'Dealwise'
   const [contact] = inv.contactId
     ? await db.select({ name: contacts.name, email: contacts.email }).from(contacts).where(eq(contacts.id, inv.contactId))
@@ -679,8 +692,9 @@ async function invoiceDoc(id: string, orgId: string | undefined) {
           ? `Paid in full — thank you.`
           : `Please pay ${m(balance)} by ${day(inv.dueAt)} and quote ${invNo} as the payment reference.`,
       fontSize: 9,
-      margin: [0, 0, 0, 10],
+      margin: [0, 0, 0, org?.paymentInstructions && balance > 0 ? 4 : 10],
     },
+    ...(org?.paymentInstructions && balance > 0 ? [{ text: org.paymentInstructions, fontSize: 9, margin: [0, 0, 0, 10] }] : []),
     ...(inv.type !== 'onetime' ? [{ text: 'Recurring charge: later periods are billed automatically on the same schedule.', fontSize: 8.5, color: MUTED, margin: [0, 0, 0, 10] }] : []),
     ...(inv.terms ? [label('Terms'), { text: inv.terms, fontSize: 8.5, color: MUTED }] : []),
   ]
@@ -706,7 +720,17 @@ async function invoiceDoc(id: string, orgId: string | undefined) {
     content: [
       {
         columns: [
-          { stack: [{ text: seller, fontSize: 16, bold: true, color: BRAND }, { text: 'Invoice issued via Dealwise', fontSize: 8, color: MUTED, margin: [0, 2, 0, 0] }] },
+          {
+            // the seller, from Settings → Company
+            stack: [
+              { text: seller, fontSize: 16, bold: true, color: BRAND },
+              ...(org?.address ? [{ text: org.address, fontSize: 8.5, color: MUTED, margin: [0, 3, 0, 0] }] : []),
+              ...(org?.taxId ? [{ text: `Tax ID: ${org.taxId}`, fontSize: 8.5, color: MUTED }] : []),
+              ...([org?.contactEmail, org?.phone, org?.website].some(Boolean)
+                ? [{ text: [org?.contactEmail, org?.phone, org?.website].filter(Boolean).join('  ·  '), fontSize: 8.5, color: MUTED }]
+                : []),
+            ],
+          },
           {
             stack: [
               { text: 'INVOICE', fontSize: 24, bold: true, characterSpacing: 2, alignment: 'right' },

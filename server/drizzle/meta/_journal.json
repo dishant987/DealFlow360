@@ -99,6 +99,13 @@
       "when": 1794287492917,
       "tag": "0013_normal_silverclaw",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794289192442,
+      "tag": "0014_ambitious_lord_hawal",
+      "breakpoints": true
     }
   ]
 }

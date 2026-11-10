@@ -119,6 +119,14 @@ becomes a new version, so the signed terms are always the ones that were agreed.
 **Versions** lists every version, shows the signature, and compares any two (header fields, lines
 added/removed/changed). Rules: `server/src/services/quoteVersion.ts` (unit-tested).
 
+## Company settings
+
+**Settings → Company profile** (admins; everyone can read it): company name, industry, contact email,
+phone, website, address and tax ID — printed as the seller on every invoice — plus the **currency**
+(moved here from Thresholds) and **defaults for new work**: payment terms for new customers (Net N),
+how long new quotes stay valid, default terms & conditions pre-filled on new quotes, and payment
+instructions (e.g. bank details) printed on invoices. Each customer or quote can still override them.
+
 ## Invoices
 
 Each invoice has a page with a progress stepper (order confirmed → shipped → invoiced → paid; steps a
@@ -544,6 +552,7 @@ session cookie.
 | --- | --- |
 | Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback`, `POST /auth/verify-email[/resend]`, `GET /auth/sessions`, `POST /auth/sessions/revoke-others`, `DELETE /auth/sessions/:id` |
 | Plan | `GET /plan` (any signed-in user), `POST /plan/checkout·confirm·portal` (admin), `POST /plan/webhook` *(Stripe, signature-checked)* |
+| Company | `GET /config/company` (signed-in), `PATCH /config/company` (admin) |
 | Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |
 | Quotations | `GET·POST /quotations`, `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |

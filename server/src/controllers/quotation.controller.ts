@@ -26,13 +26,13 @@ import { computeQuoteTotals } from '../services/pricing.js'
 import { computeBlendedRisk } from '../services/risk.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 import { saveVersion } from './versions.controller.js'
+import { companyDefaults } from './company.controller.js'
 
 // A quote is only editable while it belongs to the rep. Once submitted, an
 // approver is reviewing a specific set of numbers — changing them underneath
 // would invalidate the risk score they were routed on. 'Return for revision'
 // puts it back to draft, which is the supported way to reopen it.
 const EDITABLE = ['draft', 'rejected']
-export const QUOTE_VALID_DAYS = 30
 const notEditable = (status: string) =>
   `This quotation is ${status.replace(/_/g, ' ')} — it can no longer be edited. Ask an approver to return it for revision.`
 
@@ -259,17 +259,19 @@ export async function submitQuotation(req: Request<{ id: string }>, res: Respons
 export async function createQuotation(req: Request, res: Response) {
   const p = z.object({ customerId: z.string().uuid() }).safeParse(req.body)
   if (!p.success) return res.status(400).json({ error: p.error.issues })
-  // defaults: valid for 30 days, the customer's payment terms, addressed to their primary contact
+  // defaults: the company's validity period and terms (Settings → Company), the customer's payment terms, addressed to their primary contact
   const [cust] = await db.select().from(customers).where(eq(customers.id, p.data.customerId))
   if (!cust) return res.status(400).json({ error: 'Customer not found' })
   const primary = await quoteRecipient(cust.id)
+  const company = await companyDefaults(req.orgId!)
   const [q] = await db
     .insert(quotations)
     .values({
       customerId: cust.id,
       repId: req.user!.id,
-      validUntil: new Date(Date.now() + QUOTE_VALID_DAYS * 86_400_000),
+      validUntil: new Date(Date.now() + company.quoteValidityDays * 86_400_000),
       paymentTermsDays: cust.paymentTermsDays,
+      terms: company.defaultQuoteTerms,
       contactId: primary?.id ?? null,
     })
     .returning()

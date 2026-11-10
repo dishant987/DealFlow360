@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { and, eq, ne } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import { contacts, customers, users } from '../models/schema.js'
+import { companyDefaults } from './company.controller.js'
 
 /*
  * Customer ownership. Reps own the customers they create and may edit only
@@ -50,6 +51,9 @@ export async function customerAccess(req: Request, res: Response, next: NextFunc
   if (r.body.ownerId != null && !(await inCompany(r.body.ownerId, req.orgId)))
     return res.status(400).json({ error: 'The owner must be a user in your company.' })
   req.body = r.body
+  // a new customer without its own terms gets the company's default (Settings → Company)
+  if (req.method === 'POST' && req.body.paymentTermsDays == null)
+    req.body.paymentTermsDays = (await companyDefaults(req.orgId!)).defaultPaymentTermsDays
   next()
 }
 

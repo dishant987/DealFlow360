@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Combobox } from '@/components/ui/combobox'
+import { useCompany } from '@/components/CompanySettings'
 
 export type CustomerRow = {
   id: string
@@ -48,7 +49,7 @@ const BLANK: Draft = {
   phone: '',
   website: '',
   taxId: '',
-  paymentTermsDays: '30',
+  paymentTermsDays: '', // blank = the company default (Settings → Company)
   ownerId: '',
   billingAddress: '',
   shippingAddress: '',
@@ -74,6 +75,7 @@ export default function Customers() {
     queryKey: ['customers'],
     queryFn: async () => (await api.get('/customers')).data as CustomerRow[],
   })
+  const company = useCompany()
   const owners = useQuery({
     queryKey: ['report-filters'],
     queryFn: async () => (await api.get('/reports/filters')).data as { reps: { id: string; name: string }[] },
@@ -86,7 +88,7 @@ export default function Customers() {
 
   const create = useMutation({
     mutationFn: async () => {
-      const body: Record<string, unknown> = { ...draft, paymentTermsDays: Number(draft.paymentTermsDays || 30) }
+      const body: Record<string, unknown> = { ...draft, paymentTermsDays: draft.paymentTermsDays === '' ? '' : Number(draft.paymentTermsDays) }
       if (sameAddress) body.shippingAddress = draft.billingAddress
       // blanks are simply not sent; reps can't pick the owner (the server enforces it too)
       for (const k of Object.keys(body)) if (body[k] === '') delete body[k]
@@ -173,7 +175,15 @@ export default function Customers() {
                 <Input id="nc-tax" value={draft.taxId} onChange={set('taxId')} />
               </FormField>
               <FormField id="nc-terms" label="Payment terms (days)">
-                <Input id="nc-terms" type="number" min={0} max={365} value={draft.paymentTermsDays} onChange={set('paymentTermsDays')} />
+                <Input
+                  id="nc-terms"
+                  type="number"
+                  min={0}
+                  max={365}
+                  value={draft.paymentTermsDays}
+                  onChange={set('paymentTermsDays')}
+                  placeholder={company.data ? `Company default: ${company.data.defaultPaymentTermsDays}` : undefined}
+                />
               </FormField>
               {canManage && (
                 <>
