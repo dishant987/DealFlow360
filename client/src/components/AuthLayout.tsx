@@ -127,8 +127,12 @@ export default function AuthLayout({
           </div>
         </div>
 
-        <p className="px-6 pb-6 text-center text-xs text-muted-foreground">
-          Customers review and confirm quotes through their own link — no account needed.
+        <p className="flex flex-wrap justify-center gap-x-4 gap-y-1 px-6 pb-6 text-center text-xs text-muted-foreground">
+          <span>Customers review and confirm quotes through their own link — no account needed.</span>
+          <span>
+            <Link to="/privacy" className="hover:text-foreground">Privacy</Link> ·{' '}
+            <Link to="/terms" className="hover:text-foreground">Terms</Link>
+          </span>
         </p>
       </main>
     </div>

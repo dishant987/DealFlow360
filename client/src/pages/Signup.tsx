@@ -114,6 +114,11 @@ export default function Signup() {
               {isSubmitting ? 'Creating account…' : 'Create account'}
             </Button>
           </div>
+          <p className="text-center text-xs text-muted-foreground">
+            By creating an account you agree to the{' '}
+            <Link to="/terms" className="underline underline-offset-2 hover:text-foreground">Terms</Link> and{' '}
+            <Link to="/privacy" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</Link>.
+          </p>
         </div>
 
         <p className="text-center text-sm text-muted-foreground">

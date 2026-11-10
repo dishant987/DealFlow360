@@ -41,6 +41,7 @@ const Signup = page(() => import('@/pages/Signup'))
 const ForgotPassword = page(() => import('@/pages/ForgotPassword'))
 const ResetPassword = page(() => import('@/pages/ResetPassword'))
 const VerifyEmail = page(() => import('@/pages/VerifyEmail'))
+const Legal = page(() => import('@/pages/Legal'))
 const UserDetail = page(() => import('@/pages/UserDetail'))
 const Dashboard = page(() => import('@/pages/Dashboard'))
 const Admin = page(() => import('@/pages/Admin'))
@@ -79,6 +80,8 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/privacy" element={<Legal />} />
+      <Route path="/terms" element={<Legal />} />
       {/* public, token-gated customer portal — separate from the internal app */}
       <Route path="/portal/:token" element={<Portal />} />
       <Route path="/" element={<Home />} />

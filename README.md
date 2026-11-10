@@ -88,6 +88,7 @@ Client build settings:
 | Variable | Purpose |
 | --- | --- |
 | `VITE_SHOW_DEMO_LOGINS` | The demo-account buttons show in `npm run dev` only. Set to `true` for an internal staging build that should show them. |
+| `VITE_CONTACT_EMAIL` | Address shown on `/privacy` and `/terms` for data and legal requests. **Set before launch** — it defaults to a placeholder `privacy@dealwise.example`. The two pages describe what the app actually stores and the cookies it sets; have them reviewed before going live and update them when that changes. |
 | `VITE_API_TARGET` | Dev-server proxy target for `/api` and `/socket.io` (default `http://localhost:4000`). |
 
 In production, serve the client and API from one origin (a reverse proxy routing `/api` and `/socket.io` to the server); the client calls both with relative URLs.

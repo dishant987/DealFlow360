@@ -478,6 +478,7 @@ const FAQ = [
 const FOOTER: [string, [string, string][]][] = [
   ['Product', [['Features', '#features'], ['How it works', '#workflow'], ['Pricing', '#pricing'], ['FAQ', '#faq']]],
   ['Get started', [['Create a workspace', '/signup'], ['Sign in', '/login'], ['Reset password', '/forgot-password']]],
+  ['Legal', [['Privacy Policy', '/privacy'], ['Terms of Service', '/terms']]],
 ]
 
 // ---------------------------------------------------------------------- page
@@ -803,7 +804,7 @@ export default function Landing() {
       </main>
 
       <footer className="border-t">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:grid-cols-[2fr_1fr_1fr]">
+        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:grid-cols-[2fr_1fr_1fr_1fr]">
           <div>
             <Wordmark />
             <p className="mt-3 max-w-xs text-sm text-muted-foreground">
