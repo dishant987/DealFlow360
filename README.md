@@ -119,6 +119,18 @@ becomes a new version, so the signed terms are always the ones that were agreed.
 **Versions** lists every version, shows the signature, and compares any two (header fields, lines
 added/removed/changed). Rules: `server/src/services/quoteVersion.ts` (unit-tested).
 
+## Big lists (server-side paging)
+
+The **Quotations** and **Invoices** lists page, search, filter and sort **on the server**: the browser
+gets one page (about 3 KB instead of ~1 MB for the quotations list), and the summary cards are SQL
+totals over everything. Send `?page=` (1-based) with optional `pageSize` (≤ 100), `q` (customer name or
+quote/invoice number), filters and `sort`/`dir`; without `?page` the endpoints return the full list as
+before, so other screens keep working. The Kanban view uses `/quotations/board` (newest cards per
+status with true counts). In the client, `DataTable` has a `server` mode (`total` + `onChange`) and only
+columns with a `sortKey` sort. Quote **amount** is computed from the lines, so it can't be sorted on
+the server. Rules: `server/src/services/paging.ts` (unit-tested). Still client-side for now: approvals,
+fulfilment queue, subscriptions, customers.
+
 ## Company settings
 
 **Settings → Company profile** (admins; everyone can read it): company name, industry, contact email,
@@ -555,7 +567,7 @@ session cookie.
 | Company | `GET /config/company` (signed-in), `PATCH /config/company` (admin) |
 | Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |
-| Quotations | `GET·POST /quotations`, `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |
+| Quotations | `GET·POST /quotations` (with `?page` it returns `{ rows, total }` — paged, searchable `q`, `status`, `customerId`, `flagged`, `sort`, `dir`), `GET /quotations/board` (Kanban: newest 25 per status + true counts), `GET·PATCH·DELETE /quotations/:id`, `POST /:id/submit·cancel·send`, `POST·PATCH·DELETE /:id/lines`, `GET /:id/upsell`, `GET·PATCH /:id/negotiations` |
 | Versions | `GET /quotations/:id/versions`, `GET /quotations/:id/versions/:version`, `GET /quotations/:id/versions/compare?from=&to=` |
 | Approvals | `GET /approvals`, `GET /approvals/:id`, `POST /approvals/:id/action` |
 | Fulfilment | `GET /quotations/:id/fulfillment/suggestion·allocations`, `POST /:id/fulfillment/accept·consolidate`, `POST /stock/:id/receive` |

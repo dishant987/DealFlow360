@@ -1,5 +1,5 @@
 import { useDebounced } from '@/hooks/useDebounced'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { SearchX } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,11 @@ export type Column<T> = {
   value?: (row: T) => string | number
   /** custom cell rendering (defaults to the raw value) */
   render?: (row: T) => ReactNode
+  /** server mode: the sort name the API understands; columns without one can't be sorted */
+  sortKey?: string
 }
+
+export type TableQuery = { page: number; search: string; sort: { key: string; dir: 'asc' | 'desc' } | null }
 
 
 export default function DataTable<T extends Record<string, any>>({
@@ -35,6 +39,8 @@ export default function DataTable<T extends Record<string, any>>({
   onRowClick,
   emptyMessage = 'No records found.',
   toolbar,
+  server,
+  resetPageOn,
 }: {
   rows: T[]
   columns: Column<T>[]
@@ -45,6 +51,13 @@ export default function DataTable<T extends Record<string, any>>({
   onRowClick?: (row: T) => void
   emptyMessage?: string
   toolbar?: ReactNode
+  /**
+   * Server-side paging (step 18): `rows` is just the current page and `total` the full count.
+   * The table keeps page / debounced search / sort and reports every change through onChange.
+   */
+  server?: { total: number; onChange: (q: TableQuery) => void }
+  /** back to page 1 whenever this changes (e.g. filters outside the table) */
+  resetPageOn?: unknown
 }) {
   const [rawSearch, setRawSearch] = useState('')
   const search = useDebounced(rawSearch)
@@ -53,14 +66,15 @@ export default function DataTable<T extends Record<string, any>>({
 
   const raw = (row: T, c: Column<T>) => (c.value ? c.value(row) : (row[c.key] ?? ''))
 
+  const isServer = !!server
   const filtered = useMemo(() => {
-    if (!search.trim()) return rows
+    if (isServer || !search.trim()) return rows
     const q = search.toLowerCase()
     return rows.filter((r) => columns.some((c) => String(raw(r, c)).toLowerCase().includes(q)))
-  }, [rows, columns, search])
+  }, [rows, columns, search, isServer])
 
   const sorted = useMemo(() => {
-    if (!sort) return filtered
+    if (isServer || !sort) return filtered
     const col = columns.find((c) => c.key === sort.key)
     if (!col) return filtered
     return [...filtered].sort((a, b) => {
@@ -72,25 +86,33 @@ export default function DataTable<T extends Record<string, any>>({
           : String(av).localeCompare(String(bv), undefined, { numeric: true })
       return sort.dir === 'asc' ? cmp : -cmp
     })
-  }, [filtered, sort, columns])
+  }, [filtered, sort, columns, isServer])
 
+  const total = server ? server.total : sorted.length
   // keep the page in range when filtering/sorting shrinks the set
-  const pageCount = Math.max(1, Math.ceil(sorted.length / pageSize))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
   useEffect(() => {
     if (page > pageCount) setPage(1)
   }, [page, pageCount])
   useEffect(() => {
     setPage(1)
-  }, [search])
+  }, [search, resetPageOn])
+
+  // server mode: tell the page what to fetch whenever page, search or sort change
+  const onChange = useRef(server?.onChange)
+  onChange.current = server?.onChange
+  useEffect(() => {
+    onChange.current?.({ page, search: search.trim(), sort })
+  }, [page, search, sort])
 
   const start = (page - 1) * pageSize
-  const pageRows = sorted.slice(start, start + pageSize)
+  const pageRows = isServer ? rows : sorted.slice(start, start + pageSize)
 
+  const sortKeyOf = (c: Column<T>) => (isServer ? c.sortKey : c.sortable === false ? undefined : c.key)
   const toggleSort = (c: Column<T>) => {
-    if (c.sortable === false) return
-    setSort((s) =>
-      s?.key === c.key ? { key: c.key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key: c.key, dir: 'asc' },
-    )
+    const key = sortKeyOf(c)
+    if (!key) return
+    setSort((s) => (s?.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' }))
   }
 
   return (
@@ -117,11 +139,12 @@ export default function DataTable<T extends Record<string, any>>({
                 key={c.key}
                 onClick={() => toggleSort(c)}
                 className={`${c.align === 'right' ? 'text-right' : ''} ${
-                  c.sortable === false ? '' : 'cursor-pointer select-none hover:text-foreground'
+                  sortKeyOf(c) ? 'cursor-pointer select-none hover:text-foreground' : ''
                 }`}
+                aria-sort={sort && sortKeyOf(c) && sort.key === sortKeyOf(c) ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
               >
                 {c.label}
-                {sort?.key === c.key && <span className="ml-1">{sort.dir === 'asc' ? '▲' : '▼'}</span>}
+                {sort && sortKeyOf(c) && sort.key === sortKeyOf(c) && <span className="ml-1">{sort.dir === 'asc' ? '▲' : '▼'}</span>}
               </TableHead>
             ))}
           </TableRow>
@@ -153,7 +176,7 @@ export default function DataTable<T extends Record<string, any>>({
               </TableRow>
             ))}
 
-          {!loading && sorted.length === 0 && (
+          {!loading && total === 0 && (
             <TableRow className="hover:bg-transparent">
               <TableCell colSpan={columns.length}>
                 <div className="flex flex-col items-center gap-1 py-10 text-center">
@@ -174,11 +197,13 @@ export default function DataTable<T extends Record<string, any>>({
         </TableBody>
       </Table>
 
-      {!loading && sorted.length > pageSize && (
+      {/* the count always shows; the pager only when there's more than one page */}
+      {!loading && total > 0 && (
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">
-            {start + 1}–{Math.min(start + pageSize, sorted.length)} of {sorted.length}
+            {start + 1}–{Math.min(start + pageSize, total)} of {total}
           </span>
+          {pageCount > 1 && (
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
               Prev
@@ -195,6 +220,7 @@ export default function DataTable<T extends Record<string, any>>({
               Next
             </Button>
           </div>
+          )}
         </div>
       )}
     </div>

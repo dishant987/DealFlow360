@@ -189,11 +189,10 @@ export default function AppShell({
   const plan = usePlan(!!user)
   const groups = navFor(user?.role, plan.data?.features)
 
-  // shares its cache with the Workspace dashboard, so this costs nothing extra
-  // on most navigations; the badge just surfaces what is already waiting
+  // a tiny count, not the whole dashboard: every page shows this badge
   const summary = useQuery({
-    queryKey: ['summary'],
-    queryFn: async () => (await api.get('/summary')).data as { pendingApprovals: number },
+    queryKey: ['badges'],
+    queryFn: async () => (await api.get('/badges')).data as { pendingApprovals: number },
     staleTime: 30_000,
     enabled: !!user,
   })

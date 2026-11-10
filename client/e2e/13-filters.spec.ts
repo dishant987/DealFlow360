@@ -88,7 +88,7 @@ test.describe('Quotations — filters and create dialog', () => {
 
 test.describe('Approvals — filters', () => {
   test('the count chips filter by outcome and toggle off again', async ({ page }) => {
-    // admin opens on the whole pipeline; manager/finance open on their own queue
+    // admin opens on what's still pending; manager/finance open on their own queue
     await login(page, 'admin')
     await page.goto('/approvals')
     await expect(page.getByRole('columnheader', { name: 'Blended Risk' })).toBeVisible()
@@ -104,7 +104,8 @@ test.describe('Approvals — filters', () => {
     await rejected.click()
     await expect(rejected).toHaveAttribute('aria-pressed', 'false')
     const back = Number((await page.getByText(/of \d+/).first().textContent())!.match(/of (\d+)/)![1])
-    expect(back).toBe(total)
+    // toggling the chip off shows every outcome, which includes the pending ones it opened on
+    expect(back).toBeGreaterThanOrEqual(total)
   })
 
   test('risk, stage and customer filters combine, and Clear resets all', async ({ page }) => {
@@ -177,6 +178,7 @@ test.describe('Fulfillment queue — filters', () => {
   test('stock table filters by warehouse, product and below-reorder', async ({ page }) => {
     await login(page, 'finance')
     await page.goto('/fulfillment')
+    await page.getByRole('tab', { name: /Stock levels/ }).click() // stock sits in its own tab
     await expect(page.getByText('Stock by warehouse')).toBeVisible()
 
     await pick(page, 'Filter stock by warehouse', 'East Depot')

@@ -170,8 +170,8 @@ test.describe('Sales Manager / Approver', () => {
   test('monitors the deal health dashboard and can act on an alert', async ({ page }) => {
     await login(page, 'manager')
     await page.goto('/deal-health')
-    await expect(page.getByText(/Stalled deals/)).toBeVisible()
-    await expect(page.getByText('Discount anomalies')).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Stalled/ })).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Discount anomalies/ })).toBeVisible()
     const nudge = page.getByRole('button', { name: 'Nudge' }).first()
     if (await nudge.isVisible().catch(() => false)) {
       await nudge.click()
@@ -223,6 +223,7 @@ test.describe('Finance / Operations User', () => {
     // and the cross-order queue with the backorder view
     await page.goto('/fulfillment')
     await expect(page.getByText('With backorder')).toBeVisible()
+    await page.getByRole('tab', { name: /Replenishment/ }).click()
     await expect(page.getByText('Replenishment needed')).toBeVisible()
   })
 
@@ -336,7 +337,7 @@ test.describe('Admin', () => {
     ).toBeGreaterThan(mine.length)
 
     await page.goto('/deal-health')
-    await expect(page.getByText(/Stalled deals/)).toBeVisible()
+    await expect(page.getByRole('tab', { name: /Stalled/ })).toBeVisible()
     const summary = await (await admin.get('/api/summary')).json()
     expect(summary.scope).toBe('all')
   })

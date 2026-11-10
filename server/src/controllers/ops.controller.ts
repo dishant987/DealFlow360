@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express'
-import { and, count, desc, eq, inArray, type SQL } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
 import { db } from '../config/db.js'
 import {
   quotations,
@@ -31,10 +31,18 @@ import { buildOverview } from '../services/overview.js'
 import { money as fmt, orgCurrency } from '../utils/format.js'
 import { z } from 'zod'
 import { sendInvoice } from '../utils/mailer.js'
+import { likeTerm, parsePaging, seqFromSearch } from '../services/paging.js'
 
 const ACTIVE_STATUSES = ['draft', 'pending_approval', 'sent', 'under_negotiation'] as const
 
 /* ---- Workspace summary: the KPI tiles + activity feed on the home screen ---- */
+/** The sidebar's Approvals badge: one cheap count, so other pages don't load the whole dashboard for it. */
+export async function getBadges(req: Request, res: Response) {
+  const mine = req.user!.role === 'rep' ? eq(quotations.repId, req.user!.id) : undefined
+  const [{ n }] = await db.select({ n: count() }).from(quotations).where(and(eq(quotations.status, 'pending_approval'), mine))
+  res.json({ pendingApprovals: n })
+}
+
 export async function getWorkspaceSummary(req: Request, res: Response) {
   // a rep's home screen counts their own deals; everyone else sees the pipeline
   const mine = req.user!.role === 'rep' ? eq(quotations.repId, req.user!.id) : undefined
@@ -185,7 +193,78 @@ export async function getWorkspaceSummary(req: Request, res: Response) {
 }
 
 /* ---- #12 Invoices list (cross-quotation) ---- */
+/* ---- step 18: paged invoices; the summary cards are SQL aggregates over all of them ---- */
+const INVOICE_SORTS = ['issued', 'due', 'amount', 'customer', 'status'] as const
+const INVOICE_SORT_COL = {
+  issued: invoices.issuedAt,
+  due: invoices.dueAt,
+  amount: invoices.amount,
+  customer: customers.name,
+  status: invoices.status,
+}
+async function listInvoicesPage(req: Request, res: Response) {
+  const p = parsePaging(req.query, INVOICE_SORTS, { sort: 'issued', dir: 'desc' })
+  const isOverdue = sql`${invoices.status} <> 'paid' and ${invoices.dueAt} < now()`
+  const where: SQL[] = []
+  const status = typeof req.query.status === 'string' ? req.query.status : ''
+  if (status === 'overdue') where.push(isOverdue)
+  else if (status) where.push(eq(invoices.status, status as never))
+  if (typeof req.query.type === 'string' && req.query.type) where.push(eq(invoices.type, req.query.type as never))
+  if (p.q) {
+    const seq = seqFromSearch(p.q)
+    where.push(or(ilike(customers.name, likeTerm(p.q)), ...(seq != null ? [eq(invoices.seqNo, seq), eq(quotations.seqNo, seq)] : []))!)
+  }
+  const w = where.length ? and(...where) : undefined
+  const order = p.dir === 'asc' ? asc(INVOICE_SORT_COL[p.sort]) : desc(INVOICE_SORT_COL[p.sort])
+  const [[{ n }], rows, [sum]] = await Promise.all([
+    db.select({ n: count() }).from(invoices).innerJoin(quotations, eq(invoices.quotationId, quotations.id)).innerJoin(customers, eq(quotations.customerId, customers.id)).where(w),
+    db
+      .select({
+        id: invoices.id,
+        seqNo: invoices.seqNo,
+        type: invoices.type,
+        status: invoices.status,
+        amount: invoices.amount,
+        issuedAt: invoices.issuedAt,
+        dueAt: invoices.dueAt,
+        paidAt: invoices.paidAt,
+        quotationId: invoices.quotationId,
+        quoteSeqNo: quotations.seqNo,
+        quoteCreatedAt: quotations.createdAt,
+        customer: customers.name,
+      })
+      .from(invoices)
+      .innerJoin(quotations, eq(invoices.quotationId, quotations.id))
+      .innerJoin(customers, eq(quotations.customerId, customers.id))
+      .where(w)
+      .orderBy(order, desc(invoices.seqNo))
+      .limit(p.pageSize)
+      .offset(p.offset),
+    db
+      .select({
+        count: count(),
+        outstanding: sql<string>`coalesce(sum(${invoices.amount}) filter (where ${invoices.status} <> 'paid'), 0)`,
+        paid: sql<string>`coalesce(sum(${invoices.amount}) filter (where ${invoices.status} = 'paid'), 0)`,
+        overdue: sql<number>`count(*) filter (where ${isOverdue})`,
+      })
+      .from(invoices),
+  ])
+  res.json({
+    invoices: rows.map((r) => ({
+      ...r,
+      invoiceNumber: invoiceNumber(r.seqNo, r.issuedAt),
+      quoteNumber: quoteNumber(r.quoteSeqNo, r.quoteCreatedAt),
+      overdue: r.status !== 'paid' && !!r.dueAt && new Date(r.dueAt) < new Date(),
+    })),
+    total: n,
+    page: p.page,
+    pageSize: p.pageSize,
+    summary: { count: sum.count, outstanding: round2(Number(sum.outstanding)), paid: round2(Number(sum.paid)), overdue: Number(sum.overdue) },
+  })
+}
+
 export async function listInvoices(req: Request, res: Response) {
+  if (req.query.page) return listInvoicesPage(req, res)
   const conds: SQL[] = []
   if (req.query.status) conds.push(eq(invoices.status, String(req.query.status) as any))
   if (req.query.type) conds.push(eq(invoices.type, String(req.query.type) as any))

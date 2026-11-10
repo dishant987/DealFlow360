@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import crypto from 'crypto'
 import { z } from 'zod'
-import { and, eq, inArray } from 'drizzle-orm'
+import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from 'drizzle-orm'
 import { db, runInTenant } from '../config/db.js'
 import { quoteRecipient } from './customer.controller.js'
 import {
@@ -27,6 +27,7 @@ import { computeBlendedRisk } from '../services/risk.js'
 import { quoteNumber } from '../services/quoteNumber.js'
 import { saveVersion } from './versions.controller.js'
 import { companyDefaults } from './company.controller.js'
+import { likeTerm, parsePaging, seqFromSearch } from '../services/paging.js'
 
 // A quote is only editable while it belongs to the rep. Once submitted, an
 // approver is reviewing a specific set of numbers — changing them underneath
@@ -105,7 +106,105 @@ export async function scoreQuotation(quotationId: string) {
 }
 
 /* ---- list: quote + customer name + computed total ---- */
+/* ---- step 18: server-side paging, search, filters and sort ---- */
+const QUOTE_SORTS = ['updated', 'created', 'customer', 'status', 'risk'] as const
+const QUOTE_SORT_COL = {
+  updated: quotations.updatedAt,
+  created: quotations.createdAt,
+  customer: customers.name,
+  status: quotations.status,
+  risk: quotations.riskScore,
+}
+const QUOTE_ROW = {
+  id: quotations.id,
+  seqNo: quotations.seqNo,
+  createdAt: quotations.createdAt,
+  status: quotations.status,
+  customerId: quotations.customerId,
+  customer: customers.name,
+  orderDiscountPct: quotations.orderDiscountPct,
+  riskScore: quotations.riskScore,
+  updatedAt: quotations.updatedAt,
+}
+
+/** WHERE for the list and the board: the rep's own deals, plus ?q, ?status, ?customerId, ?flagged. */
+function quoteFilters(req: Request, q: string, withStatus = true) {
+  const where: SQL[] = []
+  // same rule as quotationAccessParam: a rep's pipeline is their own deals
+  if (req.user!.role === 'rep') where.push(eq(quotations.repId, req.user!.id))
+  if (withStatus && typeof req.query.status === 'string' && req.query.status) where.push(eq(quotations.status, req.query.status as never))
+  if (typeof req.query.customerId === 'string' && /^[0-9a-f-]{36}$/.test(req.query.customerId))
+    where.push(eq(quotations.customerId, req.query.customerId))
+  if (req.query.flagged === '1') where.push(sql`${quotations.riskScore} > 0`)
+  if (q) {
+    const seq = seqFromSearch(q)
+    where.push(or(ilike(customers.name, likeTerm(q)), ...(seq != null ? [eq(quotations.seqNo, seq)] : []))!)
+  }
+  return where.length ? and(...where) : undefined
+}
+
+/** Amount for each quote on the page (lines are fetched for these ids only). */
+async function withAmounts(quotes: { id: string; seqNo: number; createdAt: Date; orderDiscountPct: string }[]) {
+  const ids = quotes.map((q) => q.id)
+  const lines = ids.length ? await db.select().from(quoteLines).where(inArray(quoteLines.quotationId, ids)) : []
+  const byQuote = new Map<string, typeof lines>()
+  for (const l of lines) byQuote.set(l.quotationId, [...(byQuote.get(l.quotationId) ?? []), l])
+  return quotes.map((q) => ({
+    ...q,
+    quoteNumber: quoteNumber(q.seqNo, q.createdAt),
+    amount: computeQuoteTotals(byQuote.get(q.id) ?? [], q.orderDiscountPct).total,
+  }))
+}
+
+async function listQuotationsPage(req: Request, res: Response) {
+  // shortcut: Amount is computed from the lines, so it can't be sorted in SQL; every other column can
+  const p = parsePaging(req.query, QUOTE_SORTS, { sort: 'updated', dir: 'desc' })
+  const where = quoteFilters(req, p.q)
+  const order = p.dir === 'asc' ? asc(QUOTE_SORT_COL[p.sort]) : desc(QUOTE_SORT_COL[p.sort])
+  const [[{ n }], rows] = await Promise.all([
+    db.select({ n: count() }).from(quotations).innerJoin(customers, eq(quotations.customerId, customers.id)).where(where),
+    db
+      .select(QUOTE_ROW)
+      .from(quotations)
+      .innerJoin(customers, eq(quotations.customerId, customers.id))
+      .where(where)
+      .orderBy(order, desc(quotations.seqNo))
+      .limit(p.pageSize)
+      .offset(p.offset),
+  ])
+  res.json({ rows: await withAmounts(rows), total: n, page: p.page, pageSize: p.pageSize })
+}
+
+const BOARD_STATUSES = ['draft', 'pending_approval', 'approved', 'sent', 'under_negotiation', 'confirmed', 'fulfilled', 'invoiced', 'rejected', 'cancelled'] as const
+const BOARD_CARDS = 25
+
+/** Kanban: the newest cards in each status, with the true count per column. */
+export async function quotationBoard(req: Request, res: Response) {
+  const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 100) : ''
+  const where = quoteFilters(req, q, false)
+  const counts = await db
+    .select({ status: quotations.status, n: count() })
+    .from(quotations)
+    .innerJoin(customers, eq(quotations.customerId, customers.id))
+    .where(where)
+    .groupBy(quotations.status)
+  const cols = await Promise.all(
+    BOARD_STATUSES.map(async (status) => {
+      const rows = await db
+        .select(QUOTE_ROW)
+        .from(quotations)
+        .innerJoin(customers, eq(quotations.customerId, customers.id))
+        .where(and(where, eq(quotations.status, status)))
+        .orderBy(desc(quotations.updatedAt))
+        .limit(BOARD_CARDS)
+      return { status, total: counts.find((c) => c.status === status)?.n ?? 0, rows: await withAmounts(rows) }
+    }),
+  )
+  res.json({ columns: cols })
+}
+
 export async function listQuotations(req: Request, res: Response) {
+  if (req.query.page) return listQuotationsPage(req, res)
   // same rule as quotationAccessParam: a rep's pipeline is their own deals
   const scope = req.user!.role === 'rep' ? eq(quotations.repId, req.user!.id) : undefined
   const quotes = await db

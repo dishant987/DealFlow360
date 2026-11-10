@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { io } from 'socket.io-client'
-import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import type { User } from '@/hooks/useAuth'
 
 // The server broadcasts one coarse event per successful mutation, to every
@@ -13,6 +13,11 @@ import type { User } from '@/hooks/useAuth'
 // a hidden tab only marks its queries stale so it catches up when the person
 // comes back rather than polling in the background.
 const BURST_MS = 400
+// ...and throttle: a busy company (or a test run) changes data every second, which made open
+// dashboards jump constantly. A screen refreshes from live events at most this often.
+const MIN_GAP_MS = 10_000
+// settings-type data that other people's edits never change
+const NOT_LIVE = new Set(['me', 'plan', 'company', 'auth-providers', 'my-sessions'])
 
 export function useLiveUpdates() {
   const qc = useQueryClient()
@@ -20,7 +25,13 @@ export function useLiveUpdates() {
   // reconnect when the session changes (login, logout, switch user)
   // Observe the session cache without fetching it: calling /auth/me from here
   // would 401 on every public page (login, portal).
-  const userId = useQuery<User | null>({ queryKey: ['me'], queryFn: skipToken }).data?.id
+  // Read the cache directly instead of observing ['me'] with a placeholder queryFn: such an observer
+  // made React Query log "invoke queryFn when set to skipToken" whenever the session was refreshed.
+  const [userId, setUserId] = useState(() => (qc.getQueryData(['me']) as User | null | undefined)?.id)
+  useEffect(
+    () => qc.getQueryCache().subscribe(() => setUserId((qc.getQueryData(['me']) as User | null | undefined)?.id)),
+    [qc],
+  )
 
   useEffect(() => {
     if (!userId) return
@@ -31,17 +42,25 @@ export function useLiveUpdates() {
     const refresh = () => {
       qc.invalidateQueries({
         type: 'active',
-        // never refetch the session on a data change — that hammered /auth/me
-        predicate: (query) => query.queryKey[0] !== 'me',
+        // never the session or settings-type data — only what other people's edits can change
+        predicate: (query) => !NOT_LIVE.has(String(query.queryKey[0])),
         // a backgrounded tab goes stale rather than refetching; react-query
         // picks it up on focus
         refetchType: document.hidden ? 'none' : 'active',
       })
     }
 
+    let last = 0
     socket.on('data:changed', () => {
       clearTimeout(timer)
-      timer = setTimeout(refresh, BURST_MS)
+      // trailing: a burst collapses into one refresh, never sooner than MIN_GAP after the previous one
+      timer = setTimeout(
+        () => {
+          last = Date.now()
+          refresh()
+        },
+        Math.max(BURST_MS, last + MIN_GAP_MS - Date.now()),
+      )
     })
 
     return () => {

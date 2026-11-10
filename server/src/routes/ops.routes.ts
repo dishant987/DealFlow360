@@ -8,6 +8,7 @@ import {
   invoicePdf,
   emailInvoice,
   getWorkspaceSummary,
+  getBadges,
 } from '../controllers/ops.controller.js'
 import { receiveStock } from '../controllers/fulfillment.controller.js'
 import { listNotifications } from '../controllers/notification.controller.js'
@@ -19,6 +20,7 @@ router.use(requireAuth)
 // The workspace summary is already scoped per role inside the handler — a rep
 // gets their own deals counted, everyone else gets the pipeline.
 router.get('/summary', getWorkspaceSummary)
+router.get('/badges', getBadges)
 // scoped per role inside the handler, like the summary above
 router.get('/notifications', listNotifications)
 

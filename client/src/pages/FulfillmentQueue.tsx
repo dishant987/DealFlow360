@@ -12,6 +12,7 @@ import AppShell from '@/components/AppShell'
 import DataTable, { type Column } from '@/components/DataTable'
 import StatCard from '@/components/StatCard'
 import Panel from '@/components/Panel'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select } from '@/components/ui/select'
 import { humanize } from '@/lib/format'
 import { Combobox } from '@/components/ui/combobox'
@@ -203,115 +204,14 @@ export default function FulfillmentQueue() {
           />
         </div>
 
-        {proposals.length > 0 && (
-          <Panel
-            title="Replenishment needed"
-            description="Locations at or below their reorder point, with the quantity that would bring each back up to its target."
-          >
-            <ul className="divide-y">
-              {proposals.map((p) => (
-                <li key={p.stockId} className="flex flex-wrap items-center gap-3 py-2.5 first:pt-0">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium">
-                      {p.product}{' '}
-                      <span className="font-normal text-muted-foreground">· {p.warehouse}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {p.available} available, reorders at {p.reorderLevel}, target {p.targetLevel}
-                    </div>
-                  </div>
-                  {p.urgent && (
-                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700">
-                      out of stock
-                    </span>
-                  )}
-                  <div className="ml-auto flex items-center gap-3">
-                    <span className="text-sm tabular-nums">
-                      order <strong>{p.suggested}</strong>
-                    </span>
-                    {canAct && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={receive.isPending}
-                        onClick={() => receive.mutate(p.stockId)}
-                      >
-                        <PackagePlus className="size-4" /> Receive
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        )}
-
-        <Panel
-          title="Stock by warehouse"
-          description="Available is what the split logic can draw on right now; reserved is already committed to a fulfilled deal. ⚠ marks a line at or below its reorder level."
-        >
-          <DataTable
-            rows={visibleStock}
-            columns={stockColumns}
-            loading={q.isLoading}
-            searchPlaceholder="Search warehouse or product…"
-            emptyMessage={
-              stockFilters
-                ? 'No stock line matches these filters.'
-                : 'No stock records yet — add them in Config → Stock.'
-            }
-            toolbar={
-              <>
-                <Button
-                  size="sm"
-                  variant={lowOnly ? 'default' : 'outline'}
-                  aria-pressed={lowOnly}
-                  onClick={() => setLowOnly((v) => !v)}
-                >
-                  Below reorder only ({stock.filter((r) => r.belowReorder).length})
-                </Button>
-                <Combobox
-                  aria-label="Filter stock by warehouse"
-                  className="h-8 w-44 text-xs"
-                  value={warehouse}
-                  onChange={setWarehouse}
-                  clearLabel="All warehouses"
-                  placeholder="All warehouses"
-                  searchPlaceholder="Search warehouses…"
-                  options={warehouses.map((v) => ({ value: v, label: v }))}
-                />
-                <Select
-                  aria-label="Filter stock by product"
-                  className="h-8 w-48 text-xs"
-                  value={product}
-                  onChange={(e) => setProduct(e.target.value)}
-                >
-                  <option value="">All products</option>
-                  {products.map((v) => (
-                    <option key={v} value={v}>
-                      {v}
-                    </option>
-                  ))}
-                </Select>
-                {stockFilters > 0 && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setWarehouse('')
-                      setProduct('')
-                      setLowOnly(false)
-                    }}
-                  >
-                    <X className="size-3.5" />
-                    Clear {stockFilters}
-                  </Button>
-                )}
-              </>
-            }
-          />
-        </Panel>
-
+        {/* one list at a time: orders first, stock and replenishment a click away */}
+        <Tabs defaultValue="orders">
+          <TabsList className="h-auto flex-wrap">
+            <TabsTrigger value="orders">Orders to fulfil · {visibleOrders.length}</TabsTrigger>
+            <TabsTrigger value="stock">Stock levels · {stock.length}</TabsTrigger>
+            {proposals.length > 0 && <TabsTrigger value="replenish">Replenishment · {proposals.length}</TabsTrigger>}
+          </TabsList>
+          <TabsContent value="orders">
         <Panel title="Orders awaiting fulfillment">
           <DataTable
             rows={visibleOrders}
@@ -381,6 +281,119 @@ export default function FulfillmentQueue() {
             }
           />
         </Panel>
+          </TabsContent>
+          <TabsContent value="stock">
+        <Panel
+          title="Stock by warehouse"
+          description="Available is what the split logic can draw on right now; reserved is already committed to a fulfilled deal. ⚠ marks a line at or below its reorder level."
+        >
+          <DataTable
+            rows={visibleStock}
+            columns={stockColumns}
+            loading={q.isLoading}
+            searchPlaceholder="Search warehouse or product…"
+            emptyMessage={
+              stockFilters
+                ? 'No stock line matches these filters.'
+                : 'No stock records yet — add them in Config → Stock.'
+            }
+            toolbar={
+              <>
+                <Button
+                  size="sm"
+                  variant={lowOnly ? 'default' : 'outline'}
+                  aria-pressed={lowOnly}
+                  onClick={() => setLowOnly((v) => !v)}
+                >
+                  Below reorder only ({stock.filter((r) => r.belowReorder).length})
+                </Button>
+                <Combobox
+                  aria-label="Filter stock by warehouse"
+                  className="h-8 w-44 text-xs"
+                  value={warehouse}
+                  onChange={setWarehouse}
+                  clearLabel="All warehouses"
+                  placeholder="All warehouses"
+                  searchPlaceholder="Search warehouses…"
+                  options={warehouses.map((v) => ({ value: v, label: v }))}
+                />
+                <Select
+                  aria-label="Filter stock by product"
+                  className="h-8 w-48 text-xs"
+                  value={product}
+                  onChange={(e) => setProduct(e.target.value)}
+                >
+                  <option value="">All products</option>
+                  {products.map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </Select>
+                {stockFilters > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setWarehouse('')
+                      setProduct('')
+                      setLowOnly(false)
+                    }}
+                  >
+                    <X className="size-3.5" />
+                    Clear {stockFilters}
+                  </Button>
+                )}
+              </>
+            }
+          />
+        </Panel>
+          </TabsContent>
+          {proposals.length > 0 && (
+            <TabsContent value="replenish">
+          <Panel
+            title="Replenishment needed"
+            description="Locations at or below their reorder point, with the quantity that would bring each back up to its target."
+          >
+            <ul className="divide-y">
+              {proposals.map((p) => (
+                <li key={p.stockId} className="flex flex-wrap items-center gap-3 py-2.5 first:pt-0">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium">
+                      {p.product}{' '}
+                      <span className="font-normal text-muted-foreground">· {p.warehouse}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {p.available} available, reorders at {p.reorderLevel}, target {p.targetLevel}
+                    </div>
+                  </div>
+                  {p.urgent && (
+                    <span className="rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700">
+                      out of stock
+                    </span>
+                  )}
+                  <div className="ml-auto flex items-center gap-3">
+                    <span className="text-sm tabular-nums">
+                      order <strong>{p.suggested}</strong>
+                    </span>
+                    {canAct && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={receive.isPending}
+                        onClick={() => receive.mutate(p.stockId)}
+                      >
+                        <PackagePlus className="size-4" /> Receive
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
     </AppShell>
   )

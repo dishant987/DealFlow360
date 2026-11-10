@@ -14,8 +14,7 @@ import {
   getUpsell,
   addLine,
   updateLine,
-  deleteLine,
-} from '../controllers/quotation.controller.js'
+  deleteLine, quotationBoard } from '../controllers/quotation.controller.js'
 import { listCustomers, listProducts } from '../controllers/catalog.controller.js'
 import { compareQuoteVersions, getVersion, listVersions } from '../controllers/versions.controller.js'
 
@@ -29,6 +28,7 @@ router.get('/customers', listCustomers)
 router.get('/products', listProducts)
 
 // quotations
+router.get('/quotations/board', quotationBoard) // before /quotations/:id
 router.get('/quotations', listQuotations)
 router.post('/quotations', createQuotation)
 router.get('/quotations/:id', getQuotation)
