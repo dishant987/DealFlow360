@@ -235,4 +235,16 @@ test.describe.serial('B7 — hybrid billing, subscriptions and payment', () => {
       }, 0)
     expect(Math.abs(data.summary.mrr - activeMrr)).toBeLessThan(0.02)
   })
+
+  test('an invoice previews inline and emails as a PDF to any address', async () => {
+    const finance = await apiAs('finance')
+    const { invoices } = await (await finance.get('/api/invoices')).json()
+    const inv = invoices[0]
+    const preview = await finance.get(`/api/invoices/${inv.id}/pdf?inline=1`)
+    expect(preview.headers()['content-type']).toContain('application/pdf')
+    expect(preview.headers()['content-disposition']).toMatch(/^inline/)
+    expect((await finance.post(`/api/invoices/${inv.id}/email`, { data: { to: 'nope' } })).status()).toBe(400)
+    const sent = await finance.post(`/api/invoices/${inv.id}/email`, { data: { to: 'accounts@example.com', message: 'Attached.' } })
+    expect(await sent.json()).toEqual({ ok: true, to: 'accounts@example.com' })
+  })
 })

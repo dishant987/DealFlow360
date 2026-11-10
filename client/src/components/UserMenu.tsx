@@ -49,7 +49,7 @@ export default function UserMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Account menu"
-          className="flex items-center gap-2 rounded-full py-0.5 pr-2 pl-0.5 transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="grid place-items-center rounded-full p-0.5 transition-colors outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent"
         >
           <Avatar name={user?.name} className="size-8 bg-primary/10 text-primary" />
           <span className="sr-only">

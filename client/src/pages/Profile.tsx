@@ -147,6 +147,8 @@ export default function Profile() {
               </div>
             </form>
           </section>
+
+          <DevicesCard />
         </div>
 
         {/* side column: role, then the password form */}
@@ -205,7 +207,6 @@ export default function Profile() {
 
           <TwoFactorCard />
 
-          <DevicesCard />
 
           <section className="rounded-xl border bg-background p-5">
             <h2 className="font-heading font-medium">Your role</h2>

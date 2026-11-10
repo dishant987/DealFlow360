@@ -119,6 +119,16 @@ becomes a new version, so the signed terms are always the ones that were agreed.
 **Versions** lists every version, shows the signature, and compares any two (header fields, lines
 added/removed/changed). Rules: `server/src/services/quoteVersion.ts` (unit-tested).
 
+## Invoices
+
+Each invoice has a page with a progress stepper (order confirmed → shipped → invoiced → paid; steps a
+deal passed over show as *skipped*), line items, payments and a summary, plus **Preview** (the real
+PDF, inline), **Email** (PDF attached; the customer's address is filled in and can be changed, with an
+optional message) and **Download PDF**. The PDF follows the usual commercial layout: seller and
+"INVOICE" header with a PAID / OVERDUE stamp, bill-to block (name, attention, billing address, tax ID),
+invoice details (number, dates, payment terms, PO, quote reference), numbered line items, totals with
+any order discount, amount paid and balance due, then notes, payment instructions and terms.
+
 ## Plans and billing
 
 Every new company gets a **14-day free trial of every feature** (no card). After that it needs a
@@ -542,7 +552,7 @@ session cookie.
 | Fulfilment | `GET /quotations/:id/fulfillment/suggestion·allocations`, `POST /:id/fulfillment/accept·consolidate`, `POST /stock/:id/receive` |
 | Billing | `GET·POST /quotations/:id/billing[/generate]`, `POST /:id/billing/subscriptions/:lineId/change·cancel·pause·resume`, `POST /invoices/:id/pay` |
 | Portal *(public)* | `GET /portal/:token`, `POST /portal/:token/negotiate·confirm` (confirm needs `{ signerName, agree: true }`) |
-| Ops | `GET /summary` (tasks, KPIs, charts, setup checklist; scoped per role), `GET /notifications`, `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf]` (manager, finance, admin only) |
+| Ops | `GET /summary` (tasks, KPIs, charts, setup checklist; scoped per role), `GET /notifications`, `GET /invoices·fulfillment-queue·subscriptions`, `GET /invoices/:id[/pdf[?inline=1]]`, `POST /invoices/:id/email` `{ to, message? }` (manager, finance, admin only) |
 | Dashboard | `GET /dashboard`, `POST /dashboard/quotations/:id/nudge·escalate` |
 | Reports | `GET /reports·/filters·/export?format=pdf\|xls` |
 | Config | `GET·POST·PATCH·DELETE /config/{products,categories,customers,variants,price-list,pairings,warehouses,stock,subscription-plans,discount-tiers,category-ceilings,users}`, `GET·PATCH /config/settings`, `GET /config/products/:id/stock·/config/categories-list·/config/audit` |

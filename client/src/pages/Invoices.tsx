@@ -10,7 +10,9 @@ import DataTable, { type Column } from '@/components/DataTable'
 import StatCard from '@/components/StatCard'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
-import { money } from '@/lib/format'
+import { humanize, money } from '@/lib/format'
+import { format } from 'date-fns'
+import { Download } from 'lucide-react'
 
 type Invoice = {
   id: string
@@ -75,7 +77,7 @@ export default function Invoices() {
       ),
     },
     { key: 'customer', label: 'Customer' },
-    { key: 'type', label: 'Type' },
+    { key: 'type', label: 'Type', render: (r) => (r.type === 'onetime' ? 'One-time' : humanize(r.type)) },
     {
       key: 'status',
       label: 'Status',
@@ -94,13 +96,20 @@ export default function Invoices() {
       key: 'issuedAt',
       label: 'Issued',
       value: (r) => new Date(r.issuedAt).getTime(),
-      render: (r) => new Date(r.issuedAt).toLocaleDateString(),
+      render: (r) => format(new Date(r.issuedAt), 'd MMM yyyy'),
     },
     {
       key: 'dueAt',
       label: 'Due',
       value: (r) => (r.dueAt ? new Date(r.dueAt).getTime() : 0),
-      render: (r) => (r.dueAt ? new Date(r.dueAt).toLocaleDateString() : '—'),
+      render: (r) =>
+        r.dueAt ? (
+          <span className={r.overdue && r.status !== 'paid' ? 'font-medium text-red-600 dark:text-red-400' : undefined}>
+            {format(new Date(r.dueAt), 'd MMM yyyy')}
+          </span>
+        ) : (
+          '—'
+        ),
     },
     {
       key: '__dl',
@@ -109,13 +118,14 @@ export default function Invoices() {
       render: (r) => (
         <Button
           size="sm"
-          variant="outline"
+          variant="ghost"
+          aria-label={`Download ${r.invoiceNumber} as PDF`}
           onClick={(e) => {
             e.stopPropagation()
             downloadPdf(r.id, r.invoiceNumber)
           }}
         >
-          PDF
+          <Download className="size-4" /> PDF
         </Button>
       ),
     },

@@ -6,6 +6,7 @@ import {
   listFulfillmentQueue,
   listSubscriptions,
   invoicePdf,
+  emailInvoice,
   getWorkspaceSummary,
 } from '../controllers/ops.controller.js'
 import { receiveStock } from '../controllers/fulfillment.controller.js'
@@ -30,6 +31,7 @@ const crossPipeline = requireRole('manager', 'finance', 'admin')
 router.get('/invoices', crossPipeline, listInvoices)
 router.get('/invoices/:id', crossPipeline, getInvoice)
 router.get('/invoices/:id/pdf', crossPipeline, invoicePdf)
+router.post('/invoices/:id/email', crossPipeline, emailInvoice)
 router.get('/fulfillment-queue', crossPipeline, requireFeature('fulfilment'), listFulfillmentQueue)
 router.get('/subscriptions', crossPipeline, requireFeature('subscriptions'), listSubscriptions)
 

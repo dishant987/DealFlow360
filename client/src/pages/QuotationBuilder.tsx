@@ -23,6 +23,7 @@ import {
 import { humanize, money } from '@/lib/format'
 import QuoteDetails, { type QuoteDetailFields } from '@/components/QuoteDetails'
 import QuoteVersions from '@/components/QuoteVersions'
+import Stepper, { toSteps } from '@/components/Stepper'
 import { Combobox } from '@/components/ui/combobox'
 import { usePlan } from '@/hooks/usePlan'
 
@@ -381,6 +382,11 @@ export default function QuotationBuilder() {
         </div>
       }
     >
+      {status !== 'cancelled' && (
+        <div className="mb-6 rounded-xl border bg-background p-5">
+          <Stepper label="Quote progress" steps={quoteSteps(status)} />
+        </div>
+      )}
       {/* minmax(0,1fr)/min-w-0: on a phone the wide lines table scrolls in its own box instead of widening the page */}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* cart */}
@@ -792,5 +798,28 @@ export default function QuotationBuilder() {
         </aside>
       </div>
     </AppShell>
+  )
+}
+
+// how far a quote has come, from its status (cancelled quotes show only the badge)
+const REACHED: Record<string, number> = {
+  draft: 0, pending_approval: 1, rejected: 1, approved: 2, sent: 3, under_negotiation: 3, confirmed: 4, fulfilled: 5, invoiced: 6,
+}
+const WAITING: Record<string, string> = {
+  draft: 'Add lines, then submit',
+  pending_approval: 'Waiting for approval',
+  rejected: 'Rejected — revise and resubmit',
+  approved: 'Ready to send',
+  sent: 'Waiting for the customer',
+  under_negotiation: 'Customer asked for changes',
+  confirmed: 'Ready to fulfil',
+  fulfilled: 'Ready to invoice',
+}
+function quoteSteps(status: string) {
+  const reached = REACHED[status] ?? 0
+  const labels = ['Draft', 'Approval', 'Sent to customer', 'Signed', 'Fulfilled', 'Invoiced']
+  return toSteps(
+    labels.map((label, i) => ({ key: label, label, done: i < reached, detail: i === reached ? WAITING[status] : undefined })),
+    status === 'rejected',
   )
 }
