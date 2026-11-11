@@ -169,7 +169,10 @@ return, no need to wait for the webhook), switch plans (prorated), and open Stri
 card, invoices and cancelling. Every plan can be paid monthly or yearly; yearly costs 10 months
 (two months free, `ANNUAL_MONTHS` in plan.ts), and the landing page and Plan & billing both show
 the per-month price and the yearly total. Plan & billing also lists the company's payment history
-(Stripe invoices with status and a link to each receipt/PDF). The seat count follows the team. Stripe's webhook keeps the status in
+(Stripe invoices with status and a link to each receipt/PDF). **Update card** and **Cancel plan**
+open Stripe's billing page on just that task, and Stripe sends the admin straight back to Plan &
+billing when it's done (`flow_data` with a redirect). A cancelled plan keeps working until the
+period ends; **Keep my plan** undoes the cancellation in the app. The seat count follows the team. Stripe's webhook keeps the status in
 step afterwards (renewals, failed cards, cancelling). Rules: `server/src/services/plan.ts`
 (unit-tested). The demo company in the seed is a paying Scale customer.
 
@@ -570,7 +573,7 @@ session cookie.
 | Area | Endpoints |
 | --- | --- |
 | Auth | `POST /auth/signup·login·logout·forgot-password·reset-password`, `GET·PATCH /auth/me`, `POST /auth/mfa/setup·enable·disable·verify`, `GET /auth/providers·google·google/callback`, `POST /auth/verify-email[/resend]`, `GET /auth/sessions`, `POST /auth/sessions/revoke-others`, `DELETE /auth/sessions/:id` |
-| Plan | `GET /plan` (any signed-in user), `GET /plan/history`, `POST /plan/checkout` (`{ plan, interval: 'month' \| 'year' }`)`·confirm·portal` (admin), `POST /plan/webhook` *(Stripe, signature-checked)* |
+| Plan | `GET /plan` (any signed-in user), `GET /plan/history`, `POST /plan/checkout` (`{ plan, interval: 'month' \| 'year' }`)`·confirm·portal` (`{ flow?: 'card' \| 'cancel' }`)`·resume` (admin), `POST /plan/webhook` *(Stripe, signature-checked)* |
 | Company | `GET /config/company` (signed-in), `PATCH /config/company` (admin) |
 | Team *(admin)* | `POST /config/users/invite`, `GET /config/users/:id` (devices, owned work), `POST /config/users/:id/sign-out·transfer` |
 | Catalogue | `GET /customers`, `GET /products` |

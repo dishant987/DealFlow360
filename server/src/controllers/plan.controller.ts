@@ -108,13 +108,15 @@ export async function confirmCheckout(req: Request, res: Response) {
 export async function paymentHistory(req: Request, res: Response) {
   const s = stripe()
   const org = await orgRow(req.orgId!)
-  if (!s || !org.stripeCustomerId) return res.json({ interval: null, invoices: [] })
+  if (!s || !org.stripeCustomerId) return res.json({ interval: null, cancelAtPeriodEnd: false, invoices: [] })
   const [list, sub] = await Promise.all([
     s.invoices.list({ customer: org.stripeCustomerId, limit: 24 }),
     org.stripeSubscriptionId ? s.subscriptions.retrieve(org.stripeSubscriptionId).catch(() => null) : null,
   ])
   res.json({
     interval: sub?.items.data[0]?.price.recurring?.interval ?? null,
+    // cancelled in the portal: still active until the period ends, then Stripe ends it (webhook)
+    cancelAtPeriodEnd: !!(sub?.cancel_at_period_end || sub?.cancel_at),
     invoices: list.data.map((i) => ({
       id: i.id,
       number: i.number,
@@ -129,14 +131,40 @@ export async function paymentHistory(req: Request, res: Response) {
   })
 }
 
-/** Stripe's own page for the card, invoices and cancelling. */
+/**
+ * Stripe's own billing page. With `flow` it opens on that one task (new card, or cancel) and
+ * comes straight back here when it's done; without it, the full page (invoices, details).
+ */
 export async function billingPortal(req: Request, res: Response) {
+  const p = z.object({ flow: z.enum(['card', 'cancel']).optional() }).safeParse(req.body ?? {})
+  if (!p.success) return res.status(400).json({ error: 'Unknown billing task.' })
   const s = stripe()
   if (!s) return res.status(503).json({ error: NOT_SET_UP })
   const org = await orgRow(req.orgId!)
   if (!org.stripeCustomerId) return res.status(400).json({ error: 'Choose a plan first.' })
-  const session = await s.billingPortal.sessions.create({ customer: org.stripeCustomerId, return_url: `${CLIENT_URL}/admin?section=billing` })
+  const back = `${CLIENT_URL}/admin?section=billing`
+  const { flow } = p.data
+  if (flow === 'cancel' && !org.stripeSubscriptionId) return res.status(400).json({ error: 'There is no plan to cancel.' })
+  const done = (result: string) => ({ type: 'redirect' as const, redirect: { return_url: `${back}&billing=${result}` } })
+  const session = await s.billingPortal.sessions.create({
+    customer: org.stripeCustomerId,
+    return_url: back,
+    ...(flow === 'card' && { flow_data: { type: 'payment_method_update', after_completion: done('card') } }),
+    ...(flow === 'cancel' && {
+      flow_data: { type: 'subscription_cancel', subscription_cancel: { subscription: org.stripeSubscriptionId! }, after_completion: done('canceled') },
+    }),
+  })
   res.json({ url: session.url })
+}
+
+/** Undo a cancellation before the period ends: no Stripe page needed. */
+export async function resumePlan(req: Request, res: Response) {
+  const s = stripe()
+  if (!s) return res.status(503).json({ error: NOT_SET_UP })
+  const org = await orgRow(req.orgId!)
+  if (!org.stripeSubscriptionId || org.subscriptionStatus === 'canceled') return res.status(400).json({ error: 'This plan has already ended. Choose a plan to start again.' })
+  const sub = await s.subscriptions.update(org.stripeSubscriptionId, { cancel_at_period_end: false })
+  res.json({ cancelAtPeriodEnd: !!(sub.cancel_at_period_end || sub.cancel_at) })
 }
 
 /**
