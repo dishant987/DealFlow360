@@ -29,7 +29,10 @@ try {
   await c.query(`do $$ begin
     if not exists (select from pg_roles where rolname = '${role}') then create role "${role}" login; end if;
   end $$`)
-  await c.query(`alter role "${role}" with login password ${lit} nosuperuser nobypassrls nocreatedb nocreaterole`)
+  // new roles start without superuser/bypassrls; hosted owners (Neon) may not set those flags, so check instead
+  await c.query(`alter role "${role}" with login password ${lit}`)
+  const [r] = (await c.query('select rolsuper, rolbypassrls from pg_roles where rolname = $1', [role])).rows
+  if (r.rolsuper || r.rolbypassrls) throw new Error(`${role} can bypass row-level security; recreate it as a plain login`)
   await c.query(`grant connect on database "${dbName}" to "${role}"`)
   await c.query(`grant usage on schema public to "${role}"`)
   await c.query(`grant select, insert, update, delete on all tables in schema public to "${role}"`)
