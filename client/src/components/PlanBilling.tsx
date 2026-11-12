@@ -45,7 +45,7 @@ export default function PlanBilling() {
   const [params, setParams] = useSearchParams()
   const history = useQuery({
     queryKey: ['plan', 'history'],
-    queryFn: async () => (await api.get('/plan/history')).data as { interval: Interval | null; invoices: Payment[] },
+    queryFn: async () => (await api.get('/plan/history')).data as { interval: Interval | null; cancelAtPeriodEnd: boolean; invoices: Payment[] },
   })
   const [picked, setPicked] = useState<Interval | null>(null)
   const interval: Interval = picked ?? history.data?.interval ?? 'month'
@@ -67,6 +67,16 @@ export default function PlanBilling() {
       .catch((e) => toast.error(errText(e, "Couldn't confirm the payment")))
   }, [checkout, params, setParams, qc])
 
+  // back from a one-task billing page (new card / cancel): Stripe sends us straight here
+  const billing = params.get('billing')
+  useEffect(() => {
+    if (!billing) return
+    params.delete('billing')
+    setParams(params, { replace: true })
+    toast.success(billing === 'canceled' ? 'Your plan is cancelled. You keep every feature until the end of this billing period.' : 'Card updated.', { id: 'billing' })
+    void qc.invalidateQueries({ queryKey: ['plan'] })
+  }, [billing, params, setParams, qc])
+
   const go = (data: { url?: string; switched?: boolean }) => {
     if (data.url) window.location.assign(data.url)
     else {
@@ -80,14 +90,23 @@ export default function PlanBilling() {
     onError: (e) => toast.error(errText(e, "Couldn't start checkout")),
   })
   const portal = useMutation({
-    mutationFn: async () => (await api.post('/plan/portal')).data,
+    mutationFn: async (flow?: 'card' | 'cancel') => (await api.post('/plan/portal', { flow })).data,
     onSuccess: go,
     onError: (e) => toast.error(errText(e, "Couldn't open billing")),
+  })
+  const resume = useMutation({
+    mutationFn: async () => (await api.post('/plan/resume')).data,
+    onSuccess: () => {
+      toast.success('Your plan will renew as usual.')
+      void qc.invalidateQueries({ queryKey: ['plan'] })
+    },
+    onError: (e) => toast.error(errText(e, "Couldn't keep the plan")),
   })
 
   const p = plan.data
   if (!p) return <Skeleton className="h-64 w-full" />
   const current = p.plan === 'trial' ? 'Free trial' : OFFER[p.plan].name
+  const ending = !!history.data?.cancelAtPeriodEnd
 
   return (
     <div className="space-y-6">
@@ -96,9 +115,25 @@ export default function PlanBilling() {
         description={`${p.seats} ${p.seats === 1 ? 'user' : 'users'} — invited people count, blocked ones don't.`}
         action={
           p.hasSubscription && (
-            <Button size="sm" variant="outline" onClick={() => portal.mutate()} disabled={portal.isPending}>
-              Card, invoices and cancelling
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={() => portal.mutate('card')} disabled={portal.isPending}>
+                Update card
+              </Button>
+              {!history.data ? null : ending ? (
+                <Button size="sm" onClick={() => resume.mutate()} disabled={resume.isPending}>
+                  Keep my plan
+                </Button>
+              ) : (
+                p.subscriptionStatus !== 'canceled' && (
+                  <Button size="sm" variant="outline" onClick={() => portal.mutate('cancel')} disabled={portal.isPending}>
+                    Cancel plan
+                  </Button>
+                )
+              )}
+              <Button size="sm" variant="ghost" onClick={() => portal.mutate(undefined)} disabled={portal.isPending}>
+                Billing details
+              </Button>
+            </div>
           )
         }
       >
@@ -116,7 +151,7 @@ export default function PlanBilling() {
               ? 'The trial has ended. Everyone can still sign in and look, but nothing can be created or changed until you choose a plan.'
               : `${p.trialDaysLeft} ${p.trialDaysLeft === 1 ? 'day' : 'days'} left, with every feature. No card needed until you choose.`
             : p.currentPeriodEnd
-              ? `Renews ${format(new Date(p.currentPeriodEnd), 'd MMM yyyy')}.`
+              ? `${ending ? 'Cancelled — ends' : 'Renews'} ${format(new Date(p.currentPeriodEnd), 'd MMM yyyy')}.`
               : ''}
         </p>
         {!p.billingReady && (
